@@ -1,12 +1,34 @@
-// main.dart
 import 'package:flutter/material.dart';
+import 'screens/elderly/login_screen.dart';
 
 void main() {
   runApp(const ElderlyCarApp());
 }
 
 class ElderlyCarApp extends StatelessWidget {
-  const ElderlyCarApp({Key? key}) : super(key: key);
+  const ElderlyCarApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Unified Geriatric Care',
+      theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
+      home: const LoginScreen(),
+      debugShowCheckedModeBanner: false,
+    );
+  }
+}
+
+
+// main.dart
+/*import 'package:flutter/material.dart';
+
+void main() {
+  runApp(const ElderlyCarApp());
+}
+
+class ElderlyCarApp extends StatelessWidget {
+  const ElderlyCarApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -23,7 +45,7 @@ class ElderlyCarApp extends StatelessWidget {
 // LOGIN SCREEN
 // ============================================
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({Key? key}) : super(key: key);
+  const LoginScreen({super.key});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -269,7 +291,7 @@ class _LoginScreenState extends State<LoginScreen> {
 // ELDERLY DASHBOARD
 // ============================================
 class ElderlyDashboard extends StatefulWidget {
-  const ElderlyDashboard({Key? key}) : super(key: key);
+  const ElderlyDashboard({super.key});
 
   @override
   State<ElderlyDashboard> createState() => _ElderlyDashboardState();
@@ -1391,7 +1413,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
 // PILL REMINDER SCREEN
 // ============================================
 class PillReminderScreen extends StatelessWidget {
-  const PillReminderScreen({Key? key}) : super(key: key);
+  const PillReminderScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -1545,7 +1567,7 @@ class PillReminderScreen extends StatelessWidget {
 // LOCATION SCREEN
 // ============================================
 class LocationScreen extends StatelessWidget {
-  const LocationScreen({Key? key}) : super(key: key);
+  const LocationScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -1663,7 +1685,7 @@ class LocationScreen extends StatelessWidget {
 // GAMES SCREEN
 // ============================================
 class GamesScreen extends StatelessWidget {
-  const GamesScreen({Key? key}) : super(key: key);
+  const GamesScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -1760,7 +1782,7 @@ class GamesScreen extends StatelessWidget {
 // CARETAKER DASHBOARD
 // ============================================
 class CaretakerDashboard extends StatefulWidget {
-  const CaretakerDashboard({Key? key}) : super(key: key);
+  const CaretakerDashboard({super.key});
 
   @override
   State<CaretakerDashboard> createState() => _CaretakerDashboardState();
@@ -2059,7 +2081,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
               ),
             ),
             const SizedBox(height: 15),
-
+          /*
             // Vitality Score Card
             Container(
               decoration: BoxDecoration(
@@ -2137,7 +2159,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
                 ],
               ),
             ),
-            const SizedBox(height: 25),
+            const SizedBox(height: 25),   */
 
             // Quick Actions
             const Text(
@@ -2378,7 +2400,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
 // DETAILED REPORTS SCREEN
 // ============================================
 class DetailedReportsScreen extends StatelessWidget {
-  const DetailedReportsScreen({Key? key}) : super(key: key);
+  const DetailedReportsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -2654,3 +2676,4 @@ class DetailedReportsScreen extends StatelessWidget {
     );
   }
 }
+ */
