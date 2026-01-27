@@ -1,7 +1,18 @@
 import 'package:flutter/material.dart';
-import 'screens/elderly/login_screen.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'screens/auth/login_screen.dart';
+import 'games/chill_zone/color_tap/color_tap_game.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // If Firebase not setup yet, comment out these 5 lines:
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    print('Firebase error: $e');
+  }
+
   runApp(const ElderlyCarApp());
 }
 
@@ -15,10 +26,22 @@ class ElderlyCarApp extends StatelessWidget {
       theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
       home: const LoginScreen(),
       debugShowCheckedModeBanner: false,
+
+      // NEW: Add routes
+      routes: {
+        '/color-tap': (context) {
+          final args =
+              ModalRoute.of(context)!.settings.arguments
+                  as Map<String, dynamic>;
+          return ColorTapGame(
+            difficulty: args['difficulty'] ?? 1,
+            userId: args['userId'] ?? 'test',
+          );
+        },
+      },
     );
   }
 }
-
 
 // main.dart
 /*import 'package:flutter/material.dart';

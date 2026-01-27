@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:elderly_care_app/screens/elderly/login_screen.dart';
-import 'detailed_reports_screen.dart';
+import 'package:elderly_care_app/screens/auth/login_screen.dart';
+import '../detailed_reports_screen.dart';
 
 class CaretakerDashboard extends StatefulWidget {
   const CaretakerDashboard({super.key});
