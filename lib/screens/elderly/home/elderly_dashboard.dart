@@ -4,9 +4,11 @@ import '../pill_reminder_screen.dart';
 import '../location_screen.dart';
 import '../games_screen.dart';
 import '../buddy_chat_screen.dart';
+import '../zone_selection_screen.dart';
 
 class ElderlyDashboard extends StatefulWidget {
-  const ElderlyDashboard({super.key});
+  final String? currentUserId;
+  const ElderlyDashboard({super.key, this.currentUserId});
 
   @override
   State<ElderlyDashboard> createState() => _ElderlyDashboardState();
@@ -802,16 +804,16 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
-                            children: const [
+                            children: [
                               Text(
-                                'Hello, Jacob! 👋',
-                                style: TextStyle(
+                                'Hello, ${widget.currentUserId ?? "Friend"}! 👋',
+                                style: const TextStyle(
                                   fontSize: 28,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              Text(
-                                'Age: 84',
+                              const Text(
+                                'Ready to play?',
                                 style: TextStyle(
                                   fontSize: 18,
                                   color: Colors.grey,
@@ -918,7 +920,9 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) => const GamesScreen(),
+                                    builder: (_) => ZoneSelectionScreen(
+                                      userId: widget.currentUserId ?? 'Elderly User',
+                                    ),
                                   ),
                                 );
                               },

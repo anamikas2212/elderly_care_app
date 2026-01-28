@@ -1,468 +1,326 @@
-// FILE LOCATION: lib/games/chill_zone/color_tap/color_tap_game.dart
 
 import 'package:flutter/material.dart';
 import 'dart:async';
-
 import 'dart:math';
+import '../../../services/game_services/session_tracker.dart';
 import 'color_tap_timer.dart';
 import 'color_circle_widget.dart';
-import '../../../models/cognitive/game_session.dart';
-import '../../../services/game_services/session_tracker.dart';
-import '../../../core/constants/game_constants.dart';
+
+// Data class moved to color_circle_widget.dart
 
 class ColorTapGame extends StatefulWidget {
-  final int difficulty; // 1, 2, or 3
+  final int difficultyLevel; // 1, 2, or 3
   final String userId;
 
-  const ColorTapGame({Key? key, required this.difficulty, required this.userId})
-    : super(key: key);
+  const ColorTapGame({
+    super.key,
+    required this.difficultyLevel,
+    required this.userId,
+  });
 
   @override
   State<ColorTapGame> createState() => _ColorTapGameState();
 }
 
 class _ColorTapGameState extends State<ColorTapGame> {
-  late ColorTapTimer _timer;
+  // TRACKING VARIABLES
+  Color currentColor = Colors.grey; 
+  DateTime? colorChangeTime; 
+  bool waitingForTap = false;
+  
+  // METRICS TO TRACK
+  List<double> reactionTimes = []; 
+  int totalColorChanges = 0;
+  int correctTaps = 0;
+  int falseTaps = 0; 
+  int missedTaps = 0; 
+  
+  late ColorTapTimer gameTimer;
+  Timer? colorChangeTimer;
+  
+  // GAME STATE
+  String feedbackMessage = "Wait for color...";
+  Color feedbackColor = Colors.black;
+  bool isGameActive = false;
+  String? tapResult; // 'correct', 'false', or null
+  
   late SessionTracker _sessionTracker;
-
-  int _score = 0;
-  int _totalTaps = 0;
-  int _correctTaps = 0;
-  int _wrongTaps = 0;
-
-  Color? _targetColor;
-  List<ColorCircleData> _circles = [];
-
-  bool _gameStarted = false;
-  bool _gameEnded = false;
-
-  final Random _random = Random();
-
-  // Difficulty-based configurations
-  late int _gameDuration;
-  late int _numberOfCircles;
-  late double _circleSize;
-  late int _colorChangeInterval;
-
-  final List<Color> _availableColors = [
-    Colors.red,
-    Colors.blue,
-    Colors.green,
-    Colors.yellow,
-    Colors.orange,
-    Colors.purple,
-    Colors.pink,
-    Colors.teal,
-  ];
 
   @override
   void initState() {
     super.initState();
-    _initializeDifficulty();
     _sessionTracker = SessionTracker(
       userId: widget.userId,
-      gameName: 'Color Tap',
-      difficulty: widget.difficulty,
+      gameName: 'Color Tap (Reaction)',
+      difficulty: widget.difficultyLevel,
     );
-    _timer = ColorTapTimer(
-      duration: _gameDuration,
-      onTick: _onTimerTick,
-      onComplete: _endGame,
-    );
-  }
-
-  void _initializeDifficulty() {
-    switch (widget.difficulty) {
-      case 1: // Easy
-        _gameDuration = 60;
-        _numberOfCircles = 4;
-        _circleSize = 100.0;
-        _colorChangeInterval = 4000;
-        break;
-      case 2: // Medium
-        _gameDuration = 60;
-        _numberOfCircles = 6;
-        _circleSize = 80.0;
-        _colorChangeInterval = 3000;
-        break;
-      case 3: // Hard
-        _gameDuration = 60;
-        _numberOfCircles = 8;
-        _circleSize = 70.0;
-        _colorChangeInterval = 2000;
-        break;
-      default:
-        _gameDuration = 60;
-        _numberOfCircles = 4;
-        _circleSize = 100.0;
-        _colorChangeInterval = 4000;
-    }
-  }
-
-  void _startGame() {
-    setState(() {
-      _gameStarted = true;
-      _generateTargetColor();
-      _generateCircles();
-    });
-    _timer.start();
     _sessionTracker.startSession();
-    _startColorChangeTimer();
-  }
-
-  void _onTimerTick(int remainingSeconds) {
-    // Optional: Add visual feedback for time running out
-    if (remainingSeconds <= 10) {
-      // Could show warning animation
-    }
-  }
-
-  void _generateTargetColor() {
-    setState(() {
-      _targetColor = _availableColors[_random.nextInt(_availableColors.length)];
-    });
-  }
-
-  void _generateCircles() {
-    List<ColorCircleData> circles = [];
-
-    // At least one circle should be the target color
-    int targetColorIndex = _random.nextInt(_numberOfCircles);
-
-    for (int i = 0; i < _numberOfCircles; i++) {
-      Color color;
-      if (i == targetColorIndex) {
-        color = _targetColor!;
-      } else {
-        // Generate a different color
-        do {
-          color = _availableColors[_random.nextInt(_availableColors.length)];
-        } while (color == _targetColor);
-      }
-
-      circles.add(ColorCircleData(id: i, color: color, size: _circleSize));
-    }
-
-    setState(() {
-      _circles = circles;
-    });
-  }
-
-  void _startColorChangeTimer() {
-    Timer.periodic(Duration(milliseconds: _colorChangeInterval), (timer) {
-      if (!_gameStarted || _gameEnded) {
-        timer.cancel();
-        return;
-      }
-      _generateTargetColor();
-      _generateCircles();
-    });
-  }
-
-  void _onCircleTap(Color tappedColor) {
-    if (!_gameStarted || _gameEnded) return;
-
-    setState(() {
-      _totalTaps++;
-
-      if (tappedColor == _targetColor) {
-        _correctTaps++;
-        _score += 10;
-
-        // Track correct tap
-        _sessionTracker.recordAction('correct_tap', {
-          'color': _targetColor.toString(),
-          'score_gained': 10,
-        });
-
-        // Immediate feedback - generate new colors
-        _generateTargetColor();
-        _generateCircles();
-      } else {
-        _wrongTaps++;
-        _score = max(0, _score - 5);
-
-        // Track wrong tap
-        _sessionTracker.recordAction('wrong_tap', {
-          'expected_color': _targetColor.toString(),
-          'tapped_color': tappedColor.toString(),
-          'score_lost': 5,
-        });
-      }
-    });
-  }
-
-  void _endGame() async {
-    if (_gameEnded) return;
-
-    setState(() {
-      _gameEnded = true;
-    });
-
-    // Calculate metrics
-    double accuracy = _totalTaps > 0 ? (_correctTaps / _totalTaps) * 100 : 0;
-    double avgResponseTime = _gameDuration > 0 ? _totalTaps / _gameDuration : 0;
-
-    // Complete session tracking
-    GameSession session = await _sessionTracker.endSession(
-      finalScore: _score,
-      additionalMetrics: {
-        'total_taps': _totalTaps,
-        'correct_taps': _correctTaps,
-        'wrong_taps': _wrongTaps,
-        'accuracy': accuracy,
-        'avg_taps_per_second': avgResponseTime,
+    
+    // Initialize standard game timer
+    gameTimer = ColorTapTimer(
+      duration: 60,
+      onTick: (seconds) {
+        if (mounted) setState(() {}); // Update UI every second
       },
+      onComplete: endGame,
     );
 
-    // Navigate to results screen
-    // Show dialog instead
-    if (mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder:
-            (context) => AlertDialog(
-              title: Text('Game Complete!', style: TextStyle(fontSize: 24)),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Score: $_score', style: TextStyle(fontSize: 20)),
-                  SizedBox(height: 10),
-                  Text(
-                    'Accuracy: ${accuracy.toStringAsFixed(1)}%',
-                    style: TextStyle(fontSize: 18),
-                  ),
-                  SizedBox(height: 10),
-                  Text(
-                    'Correct: $_correctTaps / $_totalTaps',
-                    style: TextStyle(fontSize: 18),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(context); // Close dialog
-                    Navigator.pop(context); // Go back to login/previous screen
-                  },
-                  child: Text('OK', style: TextStyle(fontSize: 20)),
-                ),
-              ],
-            ),
-      );
+    startGame();
+  }
+  
+  void startGame() {
+    setState(() {
+      isGameActive = true;
+      feedbackMessage = "Get ready...";
+    });
+    
+    gameTimer.start();
+    scheduleColorChange();
+  }
+  
+  void scheduleColorChange() {
+    if (!isGameActive) return;
+
+    // Difficulty Logic (Requested by User)
+    // Level 1: 2.0s
+    // Level 2: 1.8s
+    // Level 3: 1.4s
+    double interval = widget.difficultyLevel == 1 
+        ? 2.0  
+        : widget.difficultyLevel == 2 
+        ? 1.8  
+        : 1.4; 
+    
+    // Add random variation (±0.3s)
+    double randomVariation = Random().nextDouble() * 0.6 - 0.3;
+    double actualInterval = interval + randomVariation;
+    
+    // Reset to neutral
+    setState(() {
+       currentColor = Colors.grey.shade300;
+       waitingForTap = false;
+       feedbackMessage = "Wait...";
+    });
+
+    colorChangeTimer = Timer(Duration(milliseconds: (actualInterval * 1000).toInt()), () {
+      changeColor();
+    });
+  }
+  
+  void changeColor() {
+    if (!isGameActive) return;
+
+    setState(() {
+      List<Color> colors = [Colors.red, Colors.blue, Colors.green, Colors.orange, Colors.purple];
+      currentColor = colors[Random().nextInt(colors.length)];
+      
+      colorChangeTime = DateTime.now();
+      waitingForTap = true;
+      totalColorChanges++;
+      feedbackMessage = "TAP NOW!";
+    });
+    
+    // Auto-mark as missed after 1.5 seconds if not tapped
+    Timer(const Duration(milliseconds: 1500), () {
+      if (waitingForTap && isGameActive) {
+        setState(() {
+          missedTaps++;
+          waitingForTap = false;
+          feedbackMessage = "Missed!";
+          feedbackColor = Colors.red;
+        });
+        scheduleColorChange();
+      }
+    });
+  }
+  
+  void onScreenTapped(Color tappedColor) {
+    if (!isGameActive) return;
+
+    if (waitingForTap && colorChangeTime != null) {
+      // ✅ CORRECT TAP
+      DateTime tapTime = DateTime.now();
+      double reactionTime = tapTime.difference(colorChangeTime!).inMilliseconds / 1000.0;
+      
+      reactionTimes.add(reactionTime);
+      correctTaps++;
+      waitingForTap = false;
+      
+      setState(() {
+        tapResult = 'correct';
+        feedbackMessage = "Nice! ${reactionTime.toStringAsFixed(2)}s";
+        feedbackColor = Colors.green;
+      });
+      
+      _sessionTracker.recordAction('correct_tap', {'reaction_time': reactionTime});
+      
+      // Clear tap result after animation
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) setState(() => tapResult = null);
+      });
+      
+      scheduleColorChange();
+      
+    } else {
+      // ❌ FALSE TAP
+      setState(() {
+         tapResult = 'false';
+         falseTaps++;
+         feedbackMessage = "Too early!";
+         feedbackColor = Colors.orange;
+      });
+      
+      _sessionTracker.recordAction('false_tap', {});
+      
+      // Clear tap result after animation
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) setState(() => tapResult = null);
+      });
     }
   }
+  
+  Future<void> endGame() async {
+    isGameActive = false;
+    colorChangeTimer?.cancel();
+    gameTimer.stop();
+    
+    double averageReactionTime = reactionTimes.isEmpty 
+        ? 0 
+        : reactionTimes.reduce((a, b) => a + b) / reactionTimes.length;
+    
+    double accuracy = totalColorChanges == 0 
+        ? 0 
+        : correctTaps / totalColorChanges;
+        
+    int score = calculateScore();
 
+    // End session with detailed metrics
+    await _sessionTracker.endSession(
+      finalScore: score,
+      additionalMetrics: {
+        'total_color_changes': totalColorChanges,
+        'correct_taps': correctTaps,
+        'false_taps': falseTaps,
+        'missed_taps': missedTaps,
+        'average_reaction_time': averageReactionTime, 
+        'accuracy': accuracy, 
+      },
+      // Note: In a real backend, domain scores (Attention/Processing)
+      // would be calculated server-side or in the Service from these raw metrics.
+    );
+
+    if (mounted) {
+      _showResultsDialog(score, accuracy, averageReactionTime);
+    }
+  }
+  
+  int calculateScore() {
+    int score = correctTaps * 10;
+    for (double rt in reactionTimes) {
+      if (rt < 0.5) score += 5; // Bonus
+    }
+    score -= falseTaps * 5; // Penalty
+    return max(0, score);
+  }
+
+  void _showResultsDialog(int score, double accuracy, double avgTime) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Game Over!', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Score: $score', style: const TextStyle(fontSize: 28, color: Colors.purple, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            _buildResultRow('Avg Reaction:', '${avgTime.toStringAsFixed(2)}s'),
+            _buildResultRow('Accuracy:', '${(accuracy * 100).toStringAsFixed(0)}%'),
+            _buildResultRow('False Taps:', '$falseTaps'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context); // Close Dialog
+              Navigator.pop(context); // Exit Game Screen
+            },
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResultRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.grey)),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+  
   @override
   void dispose() {
-    _timer.dispose();
+    gameTimer.dispose();
+    colorChangeTimer?.cancel();
     super.dispose();
   }
-
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('Color Tap'),
-        backgroundColor: Colors.purple,
-        elevation: 0,
+        title: Text('Reaction Test (Lvl ${widget.difficultyLevel})'),
+        backgroundColor: Colors.teal,
+        foregroundColor: Colors.white,
       ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Colors.purple.shade300, Colors.purple.shade50],
-          ),
-        ),
-        child: SafeArea(
-          child: _gameStarted ? _buildGameArea() : _buildStartScreen(),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStartScreen() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+      body: Column(
         children: [
-          Icon(Icons.touch_app, size: 120, color: Colors.purple.shade700),
-          const SizedBox(height: 30),
-          Text(
-            'Color Tap',
-            style: TextStyle(
-              fontSize: 48,
-              fontWeight: FontWeight.bold,
-              color: Colors.purple.shade900,
-            ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            'Tap circles matching the target color!',
-            style: TextStyle(fontSize: 24, color: Colors.purple.shade700),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'Difficulty: Level ${widget.difficulty}',
-            style: TextStyle(
-              fontSize: 20,
-              color: Colors.purple.shade600,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 50),
-          ElevatedButton(
-            onPressed: _startGame,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.purple.shade600,
-              padding: const EdgeInsets.symmetric(horizontal: 60, vertical: 20),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(30),
-              ),
-            ),
-            child: const Text(
-              'START GAME',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-          ),
+           // Timer Bar
+           LinearProgressIndicator(
+             value: gameTimer.progress,
+             backgroundColor: Colors.grey.shade200,
+             color: Colors.teal,
+             minHeight: 8,
+           ),
+           const SizedBox(height: 10),
+           Text("Time: ${gameTimer.formattedTime}", style: const TextStyle(fontWeight: FontWeight.bold)),
+
+           const SizedBox(height: 40),
+           Text(
+             'Tap the circle when it changes color!', 
+             style: TextStyle(fontSize: 18, color: Colors.grey.shade700),
+           ),
+           const Spacer(),
+           
+           // Using the specialized Widget
+           ColorCircleWidget(
+             data: ColorCircleData(color: currentColor, size: 250, tapResult: tapResult),
+             onTap: onScreenTapped,
+           ),
+           
+           const Spacer(),
+           
+           // Feedback Area
+           Text(
+             feedbackMessage,
+             style: TextStyle(
+               fontSize: 24, 
+               fontWeight: FontWeight.bold, 
+               color: feedbackColor,
+             ),
+           ),
+           const SizedBox(height: 40),
         ],
       ),
     );
   }
-
-  Widget _buildGameArea() {
-    return Column(
-      children: [
-        _buildGameHeader(),
-        const SizedBox(height: 20),
-        _buildTargetColorDisplay(),
-        const SizedBox(height: 30),
-        Expanded(child: _buildCirclesGrid()),
-      ],
-    );
-  }
-
-  Widget _buildGameHeader() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _buildStatCard('Score', _score.toString(), Icons.stars),
-          _buildStatCard('Time', '${_timer.remainingSeconds}s', Icons.timer),
-          _buildStatCard('Taps', _totalTaps.toString(), Icons.touch_app),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatCard(String label, String value, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.purple.shade200,
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: Colors.purple.shade700, size: 28),
-          const SizedBox(height: 5),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.purple.shade900,
-            ),
-          ),
-          Text(
-            label,
-            style: TextStyle(fontSize: 14, color: Colors.purple.shade600),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTargetColorDisplay() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.purple.shade200,
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          const Text(
-            'Tap This Color:',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 15),
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              color: _targetColor,
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.black, width: 3),
-              boxShadow: [
-                BoxShadow(
-                  color: _targetColor?.withOpacity(0.5) ?? Colors.transparent,
-                  blurRadius: 20,
-                  spreadRadius: 5,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCirclesGrid() {
-    return GridView.builder(
-      padding: const EdgeInsets.all(20),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount:
-            widget.difficulty == 1 ? 2 : (widget.difficulty == 2 ? 3 : 4),
-        crossAxisSpacing: 15,
-        mainAxisSpacing: 15,
-      ),
-      itemCount: _circles.length,
-      itemBuilder: (context, index) {
-        return ColorCircleWidget(data: _circles[index], onTap: _onCircleTap);
-      },
-    );
-  }
-}
-
-class ColorCircleData {
-  final int id;
-  final Color color;
-  final double size;
-
-  ColorCircleData({required this.id, required this.color, required this.size});
 }

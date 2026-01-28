@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import '../elderly/home/elderly_dashboard.dart';
 import '../caretaker/dashboard/caretaker_dashboard.dart';
+import 'elderly_initial_login_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -24,7 +25,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (role == 'elderly') {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const ElderlyDashboard()),
+          MaterialPageRoute(builder: (_) => const ElderlyInitialLoginScreen()),
         );
       } else {
         Navigator.pushReplacement(
@@ -191,19 +192,6 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ),
-      ),
-      // ✅ ADD TEST BUTTON HERE - Floating action button for testing the game
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.pushNamed(
-            context,
-            '/color-tap',
-            arguments: {'difficulty': 1, 'userId': 'test_user'},
-          );
-        },
-        icon: const Icon(Icons.gamepad),
-        label: const Text('Test Game'),
-        backgroundColor: Colors.purple,
       ),
     );
   }

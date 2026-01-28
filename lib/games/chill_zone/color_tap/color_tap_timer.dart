@@ -1,7 +1,6 @@
-// FILE LOCATION: lib/games/chill_zone/color_tap/color_tap_timer.dart
 
 import 'dart:async';
-import 'package:flutter/foundation.dart'; // ADD THIS LINE
+import 'package:flutter/foundation.dart';
 
 class ColorTapTimer {
   final int duration;

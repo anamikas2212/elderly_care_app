@@ -68,20 +68,38 @@ class SessionTracker {
 
     // Save to Firestore
     try {
+      print('🎮 Attempting to save game session...');
+      print('   User ID: $userId');
+      print('   Game: $gameName');
+      print('   Score: $finalScore');
+      
+      // Prepare session data with gameType field for dashboard queries
+      final sessionData = session.toMap();
+      sessionData['gameType'] = gameName; // Add gameType field for queries
+      
+      print('   Session ID: ${session.id}');
+      print('   Metrics: ${_metrics.toString()}');
+      
       await FirebaseFirestore.instance
           .collection('users')
           .doc(userId)
           .collection('game_sessions')
           .doc(session.id)
-          .set(session.toMap());
+          .set(sessionData);
 
       // Also save to a general collection for analytics
       await FirebaseFirestore.instance
           .collection('game_sessions')
           .doc(session.id)
-          .set(session.toMap());
+          .set(sessionData);
+          
+      print('✅ Game session saved successfully!');
+      print('   Collection: game_sessions/${session.id}');
     } catch (e) {
-      print('Error saving game session: $e');
+      print('❌ ERROR SAVING GAME SESSION:');
+      print('   Error: $e');
+      print('   This usually means Firebase is not initialized!');
+      print('   Are you running on web? Switch to Windows/Mobile!');
       // Still return the session even if save fails
     }
 

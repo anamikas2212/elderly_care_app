@@ -1,16 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'screens/auth/login_screen.dart';
+import 'screens/auth/elderly_initial_login_screen.dart';
 import 'games/chill_zone/color_tap/color_tap_game.dart';
+import 'screens/elderly/zone_selection_screen.dart';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // If Firebase not setup yet, comment out these 5 lines:
+  // Try to initialize Firebase on all platforms
   try {
     await Firebase.initializeApp();
+    print('✅ Firebase initialized successfully');
   } catch (e) {
-    print('Firebase error: $e');
+    print('⚠️ Firebase initialization failed: $e');
+    print('   App will run with mock data only');
   }
 
   runApp(const ElderlyCarApp());
@@ -29,15 +35,7 @@ class ElderlyCarApp extends StatelessWidget {
 
       // NEW: Add routes
       routes: {
-        '/color-tap': (context) {
-          final args =
-              ModalRoute.of(context)!.settings.arguments
-                  as Map<String, dynamic>;
-          return ColorTapGame(
-            difficulty: args['difficulty'] ?? 1,
-            userId: args['userId'] ?? 'test',
-          );
-        },
+
       },
     );
   }
@@ -87,7 +85,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (role == 'elderly') {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const ElderlyDashboard()),
+          MaterialPageRoute(builder: (_) => const ElderlyInitialLoginScreen()),
         );
       } else {
         Navigator.pushReplacement(
@@ -314,7 +312,8 @@ class _LoginScreenState extends State<LoginScreen> {
 // ELDERLY DASHBOARD
 // ============================================
 class ElderlyDashboard extends StatefulWidget {
-  const ElderlyDashboard({super.key});
+  final String currentUserId;
+  const ElderlyDashboard({super.key, this.currentUserId = 'Elderly User'});
 
   @override
   State<ElderlyDashboard> createState() => _ElderlyDashboardState();
@@ -1237,7 +1236,9 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) => const GamesScreen(),
+                                    builder: (_) => ZoneSelectionScreen(
+                                      userId: widget.currentUserId,
+                                    ),
                                   ),
                                 );
                               },
