@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'screens/auth/login_screen.dart';
+import 'firebase_options.dart';
 import 'screens/auth/elderly_initial_login_screen.dart';
 import 'games/chill_zone/color_tap/color_tap_game.dart';
 import 'screens/elderly/zone_selection_screen.dart';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 
-void main() async {
+/*void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Try to initialize Firebase on all platforms
@@ -19,6 +20,14 @@ void main() async {
     print('   App will run with mock data only');
   }
 
+  runApp(const ElderlyCarApp());
+}*/
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const ElderlyCarApp());
 }
 

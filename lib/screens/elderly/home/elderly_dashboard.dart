@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import '../../auth/login_screen.dart';
-import '../pill_reminder_screen.dart';
+import '../medication/medication_list_screen.dart';
 import '../location_screen.dart';
 import '../games_screen.dart';
 import '../buddy_chat_screen.dart';
 import '../zone_selection_screen.dart';
+
+late String userId;
 
 class ElderlyDashboard extends StatefulWidget {
   final String? currentUserId;
@@ -886,7 +888,11 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) => const PillReminderScreen(),
+                                    builder:
+                                        (_) => MedicationListScreen(
+                                          userId:
+                                              widget.currentUserId ?? 'Unknown',
+                                        ),
                                   ),
                                 );
                               },
@@ -926,7 +932,9 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                                   ),
                                 );
                               },
-                            ), // Buddy Chat Card
+                            ),
+                              // In your Buddy Chat Card onTap
+                              // Buddy Chat Card
                             _buildFeatureCard(
                               icon: Icons.chat,
                               title: 'My\nBuddy',
@@ -940,7 +948,11 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) => const BuddyChatScreen(),
+                                    builder:
+                                        (_) =>  BuddyChatScreen(
+                                          userId:
+                                              widget.currentUserId ?? 'Unknown',
+                                        ),
                                   ),
                                 );
                               }, // ✅ Now it navigates to the chat screen
