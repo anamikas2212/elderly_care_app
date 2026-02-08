@@ -1,167 +1,292 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_core/firebase_core.dart';
 
 class CaretakerDataService {
-  FirebaseFirestore? get _firestore {
-    try {
-      // Check if Firebase is initialized
-      Firebase.app();
-      print('📊 CaretakerDataService: Firebase is available');
-      return FirebaseFirestore.instance;
-    } catch (e) {
-      // Firebase not initialized (e.g., on web without config)
-      print('⚠️ CaretakerDataService: Firebase NOT available - returning mock data');
-      print('   Reason: $e');
-      return null;
-    }
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  
+  // Get user profile
+  Stream<Map<String, dynamic>> getUserProfile(String userId) {
+    return _firestore.collection('users').doc(userId).snapshots().map((doc) {
+      if (!doc.exists) return {};
+      final data = doc.data() ?? {};
+      return {
+        'name': data['name'] ?? userId,
+        'age': data['age'],
+        'gender': data['gender'],
+        'location': data['location'],
+        'lastActive': data['lastActive'],
+        'status': data['status'] ?? 'Active',
+      };
+    });
   }
 
-  // Get Cognitive Health Score (0-100)
-  // Logic: Base 50 + (Accuracy * 50) - (AvgReactionTime * 10)
-  Stream<int> getCognitiveHealthScore(String userId) {
-    if (_firestore == null) return Stream.value(70);
-    
-    return _firestore!
-        .collection('game_sessions')
+  // Calculate cognitive health score from game sessions
+  Stream<Map<String, dynamic>> calculateCognitiveHealthScore(String userId) {
+    return _firestore
+        .collection('colorTapGameSessions')
         .where('userId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
+        .orderBy('createdAt', descending: true)  // ✅ CHANGED
         .limit(10)
         .snapshots()
         .map((snapshot) {
-      if (snapshot.docs.isEmpty) return 70; // Baseline
+          if (snapshot.docs.isEmpty) {
+            return {
+              'healthScore': 0,
+              'totalSessions': 0,
+              'avgAccuracy': 0.0,
+              'avgReactionTime': 0.0,
+            };
+          }
 
-      double totalAccuracy = 0;
-      double totalReactionTime = 0;
-      int count = 0;
+          int totalSessions = snapshot.docs.length;
+          double totalAccuracy = 0;
+          double totalReactionTime = 0;
 
-      for (var doc in snapshot.docs) {
-        final data = doc.data();
-        if (data['metrics'] != null) {
-          totalAccuracy += (data['metrics']['accuracy'] ?? 0.0);
-          totalReactionTime += (data['metrics']['average_reaction_time'] ?? 1.0);
-          count++;
-        }
-      }
+          for (var doc in snapshot.docs) {
+            final data = doc.data();
+            final correctTaps = data['correct_taps'] as int? ?? 0;
+            final falseTaps = data['false_taps'] as int? ?? 0;
+            final totalTaps = correctTaps + falseTaps;
 
-      if (count == 0) return 70;
+            if (totalTaps > 0) {
+              totalAccuracy += (correctTaps / totalTaps * 100);
+            }
 
-      double avgAcc = totalAccuracy / count;
-      double avgTime = totalReactionTime / count;
+            totalReactionTime +=
+                (data['average_reaction_time'] as num?)?.toDouble() ?? 0.0;
+          }
 
-      // Formula: Accuracy contributes up to 50, Speed penalty
-      // Fast reaction (0.5s) -> Penalty 5. Slow (2.0s) -> Penalty 20.
-      double score = 50 + (avgAcc * 50) - (avgTime * 10);
-      return score.clamp(0, 100).toInt();
-    });
-  }
+          double avgAccuracy =
+              totalSessions > 0 ? totalAccuracy / totalSessions : 0;
+          double avgReactionTime =
+              totalSessions > 0 ? totalReactionTime / totalSessions : 0;
 
-  // Get Domain Scores (Map of String -> Double 0-100)
-  // Only Color Tap domains: Attention and Processing Speed
-  Stream<Map<String, double>> getDomainScores(String userId) {
-     // Return mock data if Firebase not available
-     if (_firestore == null) {
-       return Stream.value({
-         'Attention': 75.0,
-         'Processing Speed': 80.0,
-       });
-     }
-     
-     return _firestore!
-        .collection('game_sessions')
-        .where('userId', isEqualTo: userId)
-        .where('gameType', isEqualTo: 'Color Tap (Reaction)') // Only Color Tap
-        .orderBy('createdAt', descending: true)
-        .limit(5)
-        .snapshots()
-        .map((snapshot) {
-           if (snapshot.docs.isEmpty) {
-             return {
-               'Attention': 0.0,
-               'Processing Speed': 0.0,
-             };
-           }
+          double reactionTimeScore = 0;
+          if (avgReactionTime > 0) {
+            reactionTimeScore = ((1.5 - avgReactionTime) / 1.0 * 100).clamp(0, 100);
+          }
 
-           // Use latest session for instant feedback
-           var latest = snapshot.docs.first.data();
-           var metrics = latest['metrics'] ?? {};
+          int healthScore =
+              ((avgAccuracy * 0.5) + (reactionTimeScore * 0.5)).round();
+          healthScore = healthScore.clamp(0, 100);
 
-           // Attention: Based on accuracy (correct taps vs total changes)
-           double accuracy = (metrics['accuracy'] ?? 0.0) * 100;
-           
-           // Processing Speed: Based on reaction time (lower is better)
-           // 0.5s = 100, 2.0s = 0
-           double reactionTime = metrics['average_reaction_time'] ?? 1.0;
-           double processingScore = ((2.0 - reactionTime) / 1.5 * 100).clamp(0.0, 100.0);
-
-           return {
-             'Attention': accuracy.clamp(0.0, 100.0),
-             'Processing Speed': processingScore, 
-           };
+          return {
+            'healthScore': healthScore,
+            'totalSessions': totalSessions,
+            'avgAccuracy': avgAccuracy,
+            'avgReactionTime': avgReactionTime,
+          };
         });
   }
 
-  // Get Recent Game Activity
-  Stream<List<Map<String, dynamic>>> getRecentActivity(String userId) {
-    if (_firestore == null) return Stream.value([]);
-    
-    return _firestore!
-        .collection('game_sessions')
+  // Calculate domain scores based on game metrics
+  Stream<Map<String, dynamic>> calculateDomainScores(String userId) {
+    return _firestore
+        .collection('colorTapGameSessions')
         .where('userId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
-        .limit(5)
+        .orderBy('createdAt', descending: true)  // ✅ CHANGED
+        .limit(10)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        return {
-          'game': data['gameType'] ?? 'Unknown Game',
-          'score': data['score'] ?? 0,
-          'time': (data['createdAt'] as Timestamp).toDate(),
-        };
-      }).toList();
-    });
+          if (snapshot.docs.isEmpty) {
+            return {
+              'attentionScore': 0.0,
+              'processingSpeedScore': 0.0,
+              'sessionsCount': 0,
+            };
+          }
+
+          int totalSessions = snapshot.docs.length;
+          double totalAccuracy = 0;
+          double totalReactionTime = 0;
+          double totalFalseRate = 0;
+
+          for (var doc in snapshot.docs) {
+            final data = doc.data();
+            final correctTaps = data['correct_taps'] as int? ?? 0;
+            final falseTaps = data['false_taps'] as int? ?? 0;
+            final totalTaps = correctTaps + falseTaps;
+
+            if (totalTaps > 0) {
+              totalAccuracy += (correctTaps / totalTaps * 100);
+              totalFalseRate += (falseTaps / totalTaps * 100);
+            }
+
+            totalReactionTime +=
+                (data['average_reaction_time'] as num?)?.toDouble() ?? 0.0;
+          }
+
+          double avgAccuracy =
+              totalSessions > 0 ? totalAccuracy / totalSessions : 0;
+          double avgReactionTime =
+              totalSessions > 0 ? totalReactionTime / totalSessions : 0;
+          double avgFalseRate =
+              totalSessions > 0 ? totalFalseRate / totalSessions : 0;
+
+          double attentionScore =
+              (avgAccuracy * 0.7) + ((100 - avgFalseRate) * 0.3);
+          attentionScore = attentionScore.clamp(0, 100);
+
+          double processingSpeedScore = 0;
+          if (avgReactionTime > 0) {
+            if (avgReactionTime <= 0.5) {
+              processingSpeedScore = 100;
+            } else if (avgReactionTime <= 0.8) {
+              processingSpeedScore = 100 - ((avgReactionTime - 0.5) / 0.3 * 20);
+            } else if (avgReactionTime <= 1.0) {
+              processingSpeedScore = 80 - ((avgReactionTime - 0.8) / 0.2 * 20);
+            } else if (avgReactionTime <= 1.5) {
+              processingSpeedScore = 60 - ((avgReactionTime - 1.0) / 0.5 * 30);
+            } else {
+              processingSpeedScore = 30;
+            }
+          }
+          processingSpeedScore = processingSpeedScore.clamp(0, 100);
+
+          return {
+            'attentionScore': attentionScore,
+            'processingSpeedScore': processingSpeedScore,
+            'sessionsCount': totalSessions,
+          };
+        });
   }
-  
-  // Get Color Tap Game Count
-  Stream<int> getColorTapGameCount(String userId) {
-    if (_firestore == null) return Stream.value(0);
-    
-    return _firestore!
-        .collection('game_sessions')
+
+  // Get detailed game metrics
+  Stream<Map<String, dynamic>> getDetailedGameMetrics(String userId) {
+    return _firestore
+        .collection('colorTapGameSessions')
         .where('userId', isEqualTo: userId)
-        .where('gameType', isEqualTo: 'Color Tap (Reaction)')
         .snapshots()
-        .map((snapshot) => snapshot.docs.length);
+        .map((snapshot) {
+          if (snapshot.docs.isEmpty) {
+            return {
+              'accuracy': 0.0,
+              'avgReactionTime': 0.0,
+              'totalCorrectTaps': 0,
+              'totalFalseTaps': 0,
+              'totalMissedTaps': 0,
+            };
+          }
+
+          int totalCorrectTaps = 0;
+          int totalFalseTaps = 0;
+          int totalMissedTaps = 0;
+          double totalReactionTime = 0;
+          int sessionCount = 0;
+
+          for (var doc in snapshot.docs) {
+            final data = doc.data();
+            totalCorrectTaps += data['correct_taps'] as int? ?? 0;
+            totalFalseTaps += data['false_taps'] as int? ?? 0;
+            totalMissedTaps += data['missed_taps'] as int? ?? 0;
+            totalReactionTime +=
+                (data['average_reaction_time'] as num?)?.toDouble() ?? 0.0;
+            sessionCount++;
+          }
+
+          int totalAttempts = totalCorrectTaps + totalFalseTaps;
+          double accuracy =
+              totalAttempts > 0 ? (totalCorrectTaps / totalAttempts * 100) : 0;
+          double avgReactionTime =
+              sessionCount > 0 ? totalReactionTime / sessionCount : 0;
+
+          return {
+            'accuracy': accuracy,
+            'avgReactionTime': avgReactionTime,
+            'totalCorrectTaps': totalCorrectTaps,
+            'totalFalseTaps': totalFalseTaps,
+            'totalMissedTaps': totalMissedTaps,
+          };
+        });
   }
-  
-  // Get Color Tap Score History for Trend Chart
+
+  // Get recent game sessions
+  Stream<List<Map<String, dynamic>>> getRecentGameSessions(String userId) {
+    return _firestore
+        .collection('colorTapGameSessions')
+        .where('userId', isEqualTo: userId)
+        .orderBy('createdAt', descending: true)  // ✅ CHANGED
+        .limit(10)
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs.map((doc) => doc.data()).toList();
+        });
+  }
+
+  // Get overall statistics
+  Stream<Map<String, dynamic>> getOverallStatistics(String userId) {
+    return _firestore
+        .collection('colorTapGameSessions')
+        .where('userId', isEqualTo: userId)
+        .snapshots()
+        .map((snapshot) {
+          return {
+            'totalGames': snapshot.docs.length,
+            'medicationAdherence': 87,
+          };
+        });
+  }
+
+  // Get active alert
+  Stream<Map<String, dynamic>?> getActiveAlert(String userId) {
+    return _firestore
+        .collection('alerts')
+        .where('userId', isEqualTo: userId)
+        .where('isActive', isEqualTo: true)
+        .limit(1)
+        .snapshots()
+        .map((snapshot) {
+          if (snapshot.docs.isEmpty) return null;
+          return snapshot.docs.first.data();
+        });
+  }
+
+  // Get score history for trend chart
   Stream<List<Map<String, dynamic>>> getColorTapScoreHistory(String userId) {
-    if (_firestore == null) return Stream.value([]);
-    
-    return _firestore!
-        .collection('game_sessions')
+    return _firestore
+        .collection('colorTapGameSessions')
         .where('userId', isEqualTo: userId)
-        .where('gameType', isEqualTo: 'Color Tap (Reaction)')
-        .orderBy('createdAt', descending: false) // Oldest first for chart
-        .limit(10) // Last 10 games
+        .orderBy('createdAt', descending: false)  // ✅ CHANGED - Oldest first for chart
+        .limit(20)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        final metrics = data['metrics'] ?? {};
-        final timestamp = (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
-        
-        // Calculate domain scores
-        double accuracy = (metrics['accuracy'] ?? 0.0) * 100;
-        double reactionTime = metrics['average_reaction_time'] ?? 1.0;
-        double processingScore = ((2.0 - reactionTime) / 1.5 * 100).clamp(0.0, 100.0);
-        
-        return {
-          'timestamp': timestamp,
-          'attention': accuracy.clamp(0.0, 100.0),
-          'processing': processingScore,
-        };
-      }).toList();
-    });
+          return snapshot.docs.map((doc) {
+            final data = doc.data();
+            final correctTaps = data['correct_taps'] as int? ?? 0;
+            final falseTaps = data['false_taps'] as int? ?? 0;
+            final totalTaps = correctTaps + falseTaps;
+            final avgReactionTime =
+                (data['average_reaction_time'] as num?)?.toDouble() ?? 0.0;
+
+            double attentionScore = 0;
+            if (totalTaps > 0) {
+              attentionScore = (correctTaps / totalTaps * 100);
+            }
+
+            double processingSpeedScore = 0;
+            if (avgReactionTime > 0) {
+              if (avgReactionTime <= 0.5) {
+                processingSpeedScore = 100;
+              } else if (avgReactionTime <= 0.8) {
+                processingSpeedScore =
+                    100 - ((avgReactionTime - 0.5) / 0.3 * 20);
+              } else if (avgReactionTime <= 1.0) {
+                processingSpeedScore =
+                    80 - ((avgReactionTime - 0.8) / 0.2 * 20);
+              } else if (avgReactionTime <= 1.5) {
+                processingSpeedScore =
+                    60 - ((avgReactionTime - 1.0) / 0.5 * 30);
+              } else {
+                processingSpeedScore = 30;
+              }
+            }
+            processingSpeedScore = processingSpeedScore.clamp(0, 100);
+
+            return {
+              'attention': attentionScore,
+              'processing': processingSpeedScore,
+              'createdAt': data['createdAt'],  // ✅ CHANGED
+            };
+          }).toList();
+        });
   }
 }

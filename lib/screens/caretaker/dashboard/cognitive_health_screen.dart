@@ -1,46 +1,136 @@
-
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../theme/caretaker_theme.dart';
 import '../../../services/caretaker_data_service.dart';
 
-class CognitiveHealthScreen extends StatelessWidget {
+class CognitiveHealthScreen extends StatefulWidget {
   const CognitiveHealthScreen({Key? key}) : super(key: key);
 
   @override
+  State<CognitiveHealthScreen> createState() => _CognitiveHealthScreenState();
+}
+
+class _CognitiveHealthScreenState extends State<CognitiveHealthScreen> {
+  final CaretakerDataService _dataService = CaretakerDataService();
+  String _elderlyUserId = "";
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadElderlyUserId();
+  }
+
+  Future<void> _loadElderlyUserId() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId =
+          prefs.getString('elderly_user_id') ??
+          prefs.getString('elderly_user_name');
+
+      if (!mounted) return;
+      setState(() {
+        _elderlyUserId = userId ?? "";
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // Determine userId (in real app, passed via constructor or provider)
-    const String userId = "Grandpa Joe"; // Placeholder or use passed ID
-    final CaretakerDataService dataService = CaretakerDataService();
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: CaretakerColors.background,
+        appBar: AppBar(
+          title: const Text(
+            'Cognitive Health',
+            style: CaretakerTextStyles.header,
+          ),
+          backgroundColor: CaretakerColors.cardWhite,
+          iconTheme: const IconThemeData(color: CaretakerColors.textPrimary),
+          elevation: 0,
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_elderlyUserId.isEmpty) {
+      return Scaffold(
+        backgroundColor: CaretakerColors.background,
+        appBar: AppBar(
+          title: const Text(
+            'Cognitive Health',
+            style: CaretakerTextStyles.header,
+          ),
+          backgroundColor: CaretakerColors.cardWhite,
+          iconTheme: const IconThemeData(color: CaretakerColors.textPrimary),
+          elevation: 0,
+        ),
+        body: const Center(child: Text('No user data available')),
+      );
+    }
 
     return Scaffold(
       backgroundColor: CaretakerColors.background,
       appBar: AppBar(
-        title: const Text('Cognitive Health', style: CaretakerTextStyles.header),
+        title: const Text(
+          'Cognitive Health',
+          style: CaretakerTextStyles.header,
+        ),
         backgroundColor: CaretakerColors.cardWhite,
         iconTheme: const IconThemeData(color: CaretakerColors.textPrimary),
         elevation: 0,
       ),
-      body: StreamBuilder<Map<String, double>>(
-        stream: dataService.getDomainScores(userId),
+      body: StreamBuilder<Map<String, dynamic>>(
+        stream: _dataService.calculateDomainScores(_elderlyUserId),
         builder: (context, snapshot) {
-          final scores = snapshot.data ?? {
-            'Attention': 0.0,
-            'Processing Speed': 0.0,
-          };
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final domainData =
+              snapshot.data ??
+              {
+                'attentionScore': 0.0,
+                'processingSpeedScore': 0.0,
+                'sessionsCount': 0,
+              };
+
+          final attentionScore = domainData['attentionScore'] as double;
+          final processingSpeedScore =
+              domainData['processingSpeedScore'] as double;
+          final sessionsCount = domainData['sessionsCount'] as int;
 
           return SingleChildScrollView(
             padding: CaretakerLayout.screenPadding,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildDomainScoresList(scores),
-                const SizedBox(height: 24),
-                _buildTrendsChartCard(dataService, userId),
+                _buildOverviewCard(
+                  attentionScore,
+                  processingSpeedScore,
+                  sessionsCount,
+                ),
+                const SizedBox(height: 20),
+                _buildDomainScoresCard(
+                  attentionScore,
+                  processingSpeedScore,
+                  sessionsCount,
+                ),
+                const SizedBox(height: 20),
+                _buildDetailedMetricsCard(),
+                const SizedBox(height: 20),
+                _buildTrendsChartCard(),
                 const SizedBox(height: 20),
                 _buildReminiscenceCard(),
                 const SizedBox(height: 20),
-                _buildAiRecommendations(),
+                _buildAiRecommendations(attentionScore, processingSpeedScore),
               ],
             ),
           );
@@ -49,151 +139,484 @@ class CognitiveHealthScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildDomainScoresList(Map<String, double> scores) {
+  Widget _buildOverviewCard(
+    double attentionScore,
+    double processingSpeedScore,
+    int sessionsCount,
+  ) {
+    final overallScore = ((attentionScore + processingSpeedScore) / 2).round();
+    final Color scoreColor =
+        overallScore >= 75
+            ? Colors.green
+            : overallScore >= 50
+            ? Colors.orange
+            : Colors.red;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            CaretakerColors.primaryGreen.withOpacity(0.1),
+            CaretakerColors.highlightBlue.withOpacity(0.1),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: CaretakerLayout.cardRadius,
+        border: Border.all(
+          color: CaretakerColors.primaryGreen.withOpacity(0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: scoreColor.withOpacity(0.3),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                Text(
+                  '$overallScore',
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: scoreColor,
+                  ),
+                ),
+                Text(
+                  'Score',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 20),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Overall Cognitive Health',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: CaretakerColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Based on $sessionsCount game sessions',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.videogame_asset,
+                      size: 14,
+                      color: CaretakerColors.primaryGreen,
+                    ),
+                    const SizedBox(width: 6),
+                    const Text(
+                      'Color Tap Game',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: CaretakerColors.primaryGreen,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDomainScoresCard(
+    double attentionScore,
+    double processingSpeedScore,
+    int sessionsCount,
+  ) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: CaretakerColors.cardWhite,
         borderRadius: CaretakerLayout.cardRadius,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Color Tap Game - Cognitive Domains', style: CaretakerTextStyles.sectionTitle),
-          const SizedBox(height: 8),
           const Text(
-            'Scores calculated from latest game session',
-            style: TextStyle(fontSize: 11, color: CaretakerColors.textSecondary, fontStyle: FontStyle.italic),
+            'Cognitive Domains',
+            style: CaretakerTextStyles.sectionTitle,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            sessionsCount > 0
+                ? 'Based on $sessionsCount game sessions'
+                : 'No data available yet',
+            style: const TextStyle(
+              fontSize: 11,
+              color: CaretakerColors.textSecondary,
+              fontStyle: FontStyle.italic,
+            ),
           ),
           const SizedBox(height: 20),
-          
-          // Only show domains if we have data
-          if (scores['Attention'] != null && scores['Attention']! > 0) ...[
+
+          if (sessionsCount > 0) ...[
+            // Attention Domain
             _buildDomainRow(
-              'Attention', 
-              scores['Attention'] ?? 0, 
+              'Attention',
+              'Focus and accuracy in identifying correct targets',
+              attentionScore,
               CaretakerColors.primaryGreen,
-              'Accuracy: ${(scores['Attention'] ?? 0).toInt()}%'
+              Icons.center_focus_strong,
             ),
-            const SizedBox(height: 4),
-            const Padding(
-              padding: EdgeInsets.only(left: 140, bottom: 12),
-              child: Text(
-                'Correct taps ÷ Total color changes',
-                style: TextStyle(fontSize: 10, color: CaretakerColors.textSecondary),
-              ),
-            ),
-          ],
-          
-          if (scores['Processing Speed'] != null && scores['Processing Speed']! > 0) ...[
+            const SizedBox(height: 20),
+
+            // Processing Speed Domain
             _buildDomainRow(
-              'Processing Speed', 
-              scores['Processing Speed'] ?? 0, 
+              'Processing Speed',
+              'Speed of response and reaction time',
+              processingSpeedScore,
               CaretakerColors.highlightBlue,
-              'Reaction: ${_getReactionTimeLabel(scores['Processing Speed'] ?? 0)}'
+              Icons.speed,
             ),
-            const SizedBox(height: 4),
-            const Padding(
-              padding: EdgeInsets.only(left: 140, bottom: 12),
-              child: Text(
-                'Based on average reaction time',
-                style: TextStyle(fontSize: 10, color: CaretakerColors.textSecondary),
-              ),
-            ),
-          ],
-          
-          // Show message if no data
-          if ((scores['Attention'] ?? 0) == 0 && (scores['Processing Speed'] ?? 0) == 0)
+          ] else ...[
             const Center(
               child: Padding(
                 padding: EdgeInsets.all(20),
-                child: Text(
-                  'No game data yet. Play Color Tap to see scores!',
-                  style: TextStyle(color: CaretakerColors.textSecondary, fontStyle: FontStyle.italic),
-                  textAlign: TextAlign.center,
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.videogame_asset_off,
+                      size: 48,
+                      color: Colors.grey,
+                    ),
+                    SizedBox(height: 12),
+                    Text(
+                      'No game data yet. Play Color Tap to see domain scores!',
+                      style: TextStyle(
+                        color: CaretakerColors.textSecondary,
+                        fontStyle: FontStyle.italic,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
               ),
             ),
-        ],
-      ),
-    );
-  }
-  
-  String _getReactionTimeLabel(double score) {
-    // Reverse calculate approximate reaction time from score
-    // score = (2.0 - reactionTime) / 1.5 * 100
-    // reactionTime = 2.0 - (score * 1.5 / 100)
-    double reactionTime = 2.0 - (score * 1.5 / 100);
-    return '${reactionTime.toStringAsFixed(2)}s';
-  }
-
-  Widget _buildDomainRow(String label, double score, Color color, String metricLabel) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
-      child: Row(
-        children: [
-          SizedBox(width: 140, child: Text(label, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13))),
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: score / 100,
-                backgroundColor: CaretakerColors.dividerGrey,
-                color: color,
-                minHeight: 10,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          SizedBox(
-            width: 90,
-            child: Text(
-              metricLabel,
-              style: const TextStyle(
-                color: CaretakerColors.textSecondary,
-                fontSize: 10,
-                fontWeight: FontWeight.w500,
-              ),
-              textAlign: TextAlign.end,
-            ),
-          ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildTrendsChartCard(CaretakerDataService dataService, String userId) {
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: dataService.getColorTapScoreHistory(userId),
+  Widget _buildDomainRow(
+    String label,
+    String description,
+    double score,
+    Color color,
+    IconData icon,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, size: 20, color: color),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    description,
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: color),
+              ),
+              child: Text(
+                '${score.toStringAsFixed(0)}%',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: score / 100,
+            backgroundColor: Colors.grey.shade200,
+            color: color,
+            minHeight: 10,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDetailedMetricsCard() {
+    return StreamBuilder<Map<String, dynamic>>(
+      stream: _dataService.getDetailedGameMetrics(_elderlyUserId),
       builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _buildLoadingCard("Loading metrics...");
+        }
+
+        if (!snapshot.hasData || snapshot.data == null) {
+          return const SizedBox.shrink();
+        }
+
+        final metrics = snapshot.data!;
+        final accuracy = metrics['accuracy'] as double;
+        final avgReactionTime = metrics['avgReactionTime'] as double;
+        final correctTaps = metrics['totalCorrectTaps'] as int;
+        final falseTaps = metrics['totalFalseTaps'] as int;
+        final missedTaps = metrics['totalMissedTaps'] as int;
+
+        if (correctTaps == 0 && falseTaps == 0 && missedTaps == 0) {
+          return const SizedBox.shrink();
+        }
+
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: CaretakerColors.cardWhite,
+            borderRadius: CaretakerLayout.cardRadius,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Performance Metrics',
+                style: CaretakerTextStyles.sectionTitle,
+              ),
+              const SizedBox(height: 20),
+
+              // Accuracy and Reaction Time
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildMetricBox(
+                      'Overall Accuracy',
+                      '${accuracy.toStringAsFixed(1)}%',
+                      Icons.star_rate, // Changed from Icons.target
+                      Colors.purple,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildMetricBox(
+                      'Avg Reaction Time',
+                      '${avgReactionTime.toStringAsFixed(3)}s',
+                      Icons.timer,
+                      Colors.blue,
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 20),
+
+              // Tap Breakdown
+              _buildTapBreakdown(
+                'Correct',
+                correctTaps,
+                Colors.green,
+                Icons.check_circle,
+              ),
+              const SizedBox(height: 12),
+              _buildTapBreakdown('False', falseTaps, Colors.red, Icons.cancel),
+              const SizedBox(height: 12),
+              _buildTapBreakdown(
+                'Missed',
+                missedTaps,
+                Colors.orange,
+                Icons.remove_circle_outline,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMetricBox(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTapBreakdown(
+    String label,
+    int count,
+    Color color,
+    IconData icon,
+  ) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 8),
+        Text(
+          '$label Taps:',
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+        ),
+        const Spacer(),
+        Text(
+          '$count',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTrendsChartCard() {
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _dataService.getColorTapScoreHistory(_elderlyUserId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _buildLoadingCard("Loading trends...");
+        }
+
         final history = snapshot.data ?? [];
-        
+
         if (history.isEmpty) {
           return Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: CaretakerColors.cardWhite,
               borderRadius: CaretakerLayout.cardRadius,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             child: Column(
-              children: const [
-                Text('Score Trends', style: CaretakerTextStyles.sectionTitle),
-                SizedBox(height: 40),
-                Text(
-                  'Play more games to see trend chart',
-                  style: TextStyle(color: CaretakerColors.textSecondary, fontStyle: FontStyle.italic),
+              children: [
+                const Text(
+                  'Score Trends',
+                  style: CaretakerTextStyles.sectionTitle,
                 ),
-                SizedBox(height: 40),
+                const SizedBox(height: 40),
+                Icon(Icons.show_chart, size: 48, color: Colors.grey.shade400),
+                const SizedBox(height: 12),
+                const Text(
+                  'Play more games to see trend chart',
+                  style: TextStyle(
+                    color: CaretakerColors.textSecondary,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+                const SizedBox(height: 40),
               ],
             ),
           );
         }
-        
+
         return Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: CaretakerColors.cardWhite,
             borderRadius: CaretakerLayout.cardRadius,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -201,9 +624,15 @@ class CognitiveHealthScreen extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Score Trends', style: CaretakerTextStyles.sectionTitle),
+                  const Text(
+                    'Score Trends',
+                    style: CaretakerTextStyles.sectionTitle,
+                  ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: CaretakerColors.lightGreen,
                       borderRadius: BorderRadius.circular(20),
@@ -221,7 +650,7 @@ class CognitiveHealthScreen extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               SizedBox(
-                height: 180,
+                height: 200,
                 child: LineChart(
                   LineChartData(
                     gridData: FlGridData(
@@ -244,7 +673,10 @@ class CognitiveHealthScreen extends StatelessWidget {
                           getTitlesWidget: (value, meta) {
                             return Text(
                               value.toInt().toString(),
-                              style: const TextStyle(fontSize: 10, color: CaretakerColors.textSecondary),
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: CaretakerColors.textSecondary,
+                              ),
                             );
                           },
                         ),
@@ -254,18 +686,26 @@ class CognitiveHealthScreen extends StatelessWidget {
                           showTitles: true,
                           reservedSize: 30,
                           getTitlesWidget: (value, meta) {
-                            if (value.toInt() >= 0 && value.toInt() < history.length) {
+                            if (value.toInt() >= 0 &&
+                                value.toInt() < history.length) {
                               return Text(
                                 'G${value.toInt() + 1}',
-                                style: const TextStyle(fontSize: 10, color: CaretakerColors.textSecondary),
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: CaretakerColors.textSecondary,
+                                ),
                               );
                             }
                             return const Text('');
                           },
                         ),
                       ),
-                      rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                      topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
                     ),
                     borderData: FlBorderData(
                       show: true,
@@ -281,24 +721,33 @@ class CognitiveHealthScreen extends StatelessWidget {
                     lineBarsData: [
                       // Attention line
                       LineChartBarData(
-                        spots: history.asMap().entries.map((entry) {
-                          return FlSpot(entry.key.toDouble(), entry.value['attention']);
-                        }).toList(),
+                        spots:
+                            history.asMap().entries.map((entry) {
+                              return FlSpot(
+                                entry.key.toDouble(),
+                                (entry.value['attention'] as double).toDouble(),
+                              );
+                            }).toList(),
                         isCurved: true,
                         color: CaretakerColors.primaryGreen,
                         barWidth: 3,
-                        dotData: FlDotData(show: true),
+                        dotData: const FlDotData(show: true),
                         belowBarData: BarAreaData(show: false),
                       ),
                       // Processing Speed line
                       LineChartBarData(
-                        spots: history.asMap().entries.map((entry) {
-                          return FlSpot(entry.key.toDouble(), entry.value['processing']);
-                        }).toList(),
+                        spots:
+                            history.asMap().entries.map((entry) {
+                              return FlSpot(
+                                entry.key.toDouble(),
+                                (entry.value['processing'] as double)
+                                    .toDouble(),
+                              );
+                            }).toList(),
                         isCurved: true,
                         color: CaretakerColors.highlightBlue,
                         barWidth: 3,
-                        dotData: FlDotData(show: true),
+                        dotData: const FlDotData(show: true),
                         belowBarData: BarAreaData(show: false),
                       ),
                     ],
@@ -311,7 +760,10 @@ class CognitiveHealthScreen extends StatelessWidget {
                 children: [
                   _buildLegendItem('Attention', CaretakerColors.primaryGreen),
                   const SizedBox(width: 20),
-                  _buildLegendItem('Processing Speed', CaretakerColors.highlightBlue),
+                  _buildLegendItem(
+                    'Processing Speed',
+                    CaretakerColors.highlightBlue,
+                  ),
                 ],
               ),
             ],
@@ -320,24 +772,50 @@ class CognitiveHealthScreen extends StatelessWidget {
       },
     );
   }
-  
+
   Widget _buildLegendItem(String label, Color color) {
     return Row(
       children: [
         Container(
-          width: 16,
-          height: 3,
+          width: 20,
+          height: 4,
           decoration: BoxDecoration(
             color: color,
             borderRadius: BorderRadius.circular(2),
           ),
         ),
-        const SizedBox(width: 6),
+        const SizedBox(width: 8),
         Text(
           label,
-          style: const TextStyle(fontSize: 11, color: CaretakerColors.textSecondary),
+          style: const TextStyle(
+            fontSize: 11,
+            color: CaretakerColors.textSecondary,
+            fontWeight: FontWeight.w500,
+          ),
         ),
       ],
+    );
+  }
+
+  Widget _buildLoadingCard(String message) {
+    return Container(
+      padding: const EdgeInsets.all(40),
+      decoration: BoxDecoration(
+        color: CaretakerColors.cardWhite,
+        borderRadius: CaretakerLayout.cardRadius,
+      ),
+      child: Center(
+        child: Column(
+          children: [
+            const CircularProgressIndicator(strokeWidth: 2),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -347,7 +825,9 @@ class CognitiveHealthScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: CaretakerColors.lightGreen,
         borderRadius: CaretakerLayout.cardRadius,
-        border: Border.all(color: CaretakerColors.primaryGreen.withOpacity(0.2)),
+        border: Border.all(
+          color: CaretakerColors.primaryGreen.withOpacity(0.2),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -356,21 +836,28 @@ class CognitiveHealthScreen extends StatelessWidget {
             children: const [
               Icon(Icons.psychology, color: CaretakerColors.primaryGreen),
               SizedBox(width: 8),
-              Text('Reminiscence Therapy Insights', style: TextStyle(fontWeight: FontWeight.bold, color: CaretakerColors.primaryGreen)),
+              Text(
+                'Reminiscence Therapy Insights',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: CaretakerColors.primaryGreen,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
           const Text(
-            'Responds best to photos from the 1970s and music from college years.',
+            'Cognitive activities help maintain mental sharpness. Continue with regular game sessions and varied activities.',
             style: TextStyle(color: CaretakerColors.textPrimary, height: 1.4),
           ),
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
+            runSpacing: 8,
             children: [
-              _buildChip('Family Photos'),
-              _buildChip('Jazz Music'),
-              _buildChip('Cooking Memories'),
+              _buildChip('Daily Activities'),
+              _buildChip('Memory Games'),
+              _buildChip('Social Interaction'),
             ],
           ),
         ],
@@ -380,19 +867,82 @@ class CognitiveHealthScreen extends StatelessWidget {
 
   Widget _buildChip(String label) {
     return Chip(
-      label: Text(label, style: const TextStyle(fontSize: 12, color: CaretakerColors.primaryGreen)),
+      label: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 12,
+          color: CaretakerColors.primaryGreen,
+        ),
+      ),
       backgroundColor: Colors.white,
       side: BorderSide.none,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
     );
   }
 
-  Widget _buildAiRecommendations() {
+  Widget _buildAiRecommendations(
+    double attentionScore,
+    double processingSpeedScore,
+  ) {
+    // Generate dynamic recommendations based on scores
+    List<Map<String, dynamic>> recommendations = [];
+
+    if (attentionScore < 60) {
+      recommendations.add({
+        'text':
+            'Attention score is low. Increase focus-based activities and minimize distractions during games.',
+        'color': CaretakerColors.errorRed,
+      });
+    } else if (attentionScore < 75) {
+      recommendations.add({
+        'text':
+            'Good attention levels! Try increasing game difficulty to further improve focus.',
+        'color': CaretakerColors.warningAmber,
+      });
+    } else {
+      recommendations.add({
+        'text': 'Excellent attention performance! Continue current activities.',
+        'color': CaretakerColors.successGreen,
+      });
+    }
+
+    if (processingSpeedScore < 60) {
+      recommendations.add({
+        'text':
+            'Processing speed needs improvement. Practice regularly to enhance reaction times.',
+        'color': CaretakerColors.errorRed,
+      });
+    } else if (processingSpeedScore < 75) {
+      recommendations.add({
+        'text':
+            'Processing speed is improving. Maintain consistent practice sessions.',
+        'color': CaretakerColors.warningAmber,
+      });
+    } else {
+      recommendations.add({
+        'text': 'Outstanding processing speed! Reaction times are excellent.',
+        'color': CaretakerColors.successGreen,
+      });
+    }
+
+    recommendations.add({
+      'text':
+          'Play Color Tap daily for 10-15 minutes to maintain cognitive health.',
+      'color': CaretakerColors.highlightBlue,
+    });
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: CaretakerColors.cardWhite,
         borderRadius: CaretakerLayout.cardRadius,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -401,13 +951,21 @@ class CognitiveHealthScreen extends StatelessWidget {
             children: const [
               Icon(Icons.smart_toy, color: CaretakerColors.highlightBlue),
               SizedBox(width: 8),
-              Text('AI Recommendations', style: CaretakerTextStyles.sectionTitle),
+              Text(
+                'AI Recommendations',
+                style: CaretakerTextStyles.sectionTitle,
+              ),
             ],
           ),
           const SizedBox(height: 16),
-          _buildRecommendationItem('Increase memory exercises by 10 mins', CaretakerColors.warningAmber),
-          _buildRecommendationItem('Try new puzzles to challenge distinct domains', CaretakerColors.warningAmber),
-          _buildRecommendationItem('Continue language activities, great progress!', CaretakerColors.successGreen),
+          ...recommendations
+              .map(
+                (rec) => _buildRecommendationItem(
+                  rec['text'] as String,
+                  rec['color'] as Color,
+                ),
+              )
+              .toList(),
         ],
       ),
     );

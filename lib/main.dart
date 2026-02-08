@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'screens/auth/login_screen.dart';
+import 'firebase_options.dart';
 import 'screens/auth/elderly_initial_login_screen.dart';
 import 'games/chill_zone/color_tap/color_tap_game.dart';
 import 'screens/elderly/zone_selection_screen.dart';
@@ -9,16 +10,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Try to initialize Firebase on all platforms
-  try {
-    await Firebase.initializeApp();
-    print('✅ Firebase initialized successfully');
-  } catch (e) {
-    print('⚠️ Firebase initialization failed: $e');
-    print('   App will run with mock data only');
-  }
-
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const ElderlyCarApp());
 }
 
@@ -34,9 +26,7 @@ class ElderlyCarApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
 
       // NEW: Add routes
-      routes: {
-
-      },
+      routes: {},
     );
   }
 }

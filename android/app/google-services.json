@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "248030345071",
+    "project_id": "buddy-system-74299",
+    "storage_bucket": "buddy-system-74299.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:248030345071:android:56d2eabcbac941d53a1a9a",
+        "android_client_info": {
+          "package_name": "com.example.elderly_care_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB0A3itpnqCRzuHmn8Lo_paJqao3ENkb4c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
