@@ -1,10 +1,4 @@
 /*
-// pubspec.yaml dependencies needed:
-// http: ^1.1.0
-// cloud_firestore: ^4.13.0
-// firebase_core: ^2.24.0
-// firebase_auth: ^4.15.0  (for user authentication)
-
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -58,22 +52,30 @@ class _BuddyChatScreenState extends State<BuddyChatScreen> {
     // Initialize chat with system prompt including memories
     _chatHistory.add({
       'role': 'system',
-      'content': '''You are "Buddy", a warm, empathetic emotional companion AI.
+      'content': '''You are "Buddy", a warm, empathetic emotional companion AI with a perfect memory.
 
 $_userMemoryContext
 
 Your role is to:
 1. Provide emotional support and companionship
-2. Reference past conversations naturally when relevant
-3. Ask thoughtful follow-up questions about things the user previously mentioned
-4. Help users process their feelings
-5. Offer gentle encouragement and positivity
-6. Use simple, warm language with appropriate emojis
+2. ACTIVELY reference past conversations and specific details you remember
+3. Use the person's name and other details when you know them
+4. Ask thoughtful follow-up questions about things previously mentioned
+5. Help users process their feelings
+6. Offer gentle encouragement and positivity
+7. Show that you genuinely remember and care about their life
+
+IMPORTANT MEMORY USAGE:
+- When the user mentions something you've discussed before, ACKNOWLEDGE it
+- Reference specific names, events, and details from previous conversations
+- If you know someone's name or other personal details, use them naturally
+- Connect current conversations to past memories when relevant
 
 Always start your response with a sentiment tag:
 [SENTIMENT:positive/negative/neutral/anxious/sad/happy/angry]
 
-Keep responses conversational, supportive, and around 2-4 sentences unless more detail is needed.'''
+Keep responses conversational, supportive, and around 2-4 sentences unless more detail is needed.
+BE SPECIFIC when referencing memories - use actual names and details, not generic statements.'''
     });
 
     setState(() {
@@ -148,13 +150,29 @@ Keep responses conversational, supportive, and around 2-4 sentences unless more 
     _messageController.clear();
     _scrollToBottom();
 
-    // Add user message to chat history
-    _chatHistory.add({
-      'role': 'user',
-      'content': userMessage,
-    });
-
     try {
+      // IMPORTANT: Get relevant memories for this specific message
+      final dynamicContext = await _memoryService.buildDynamicContext(
+        userId: widget.userId,
+        currentMessage: userMessage,
+      );
+
+      // Create a temporary message list with dynamic context
+      final messagesWithContext = List<Map<String, dynamic>>.from(_chatHistory);
+      
+      // Add dynamic context to the user message if we have relevant memories
+      if (dynamicContext.isNotEmpty) {
+        messagesWithContext.add({
+          'role': 'user',
+          'content': '$dynamicContext\n\nUser\'s current message: $userMessage',
+        });
+      } else {
+        messagesWithContext.add({
+          'role': 'user',
+          'content': userMessage,
+        });
+      }
+
       // Call Groq API
       final response = await http.post(
         Uri.parse(_baseUrl),
@@ -164,7 +182,7 @@ Keep responses conversational, supportive, and around 2-4 sentences unless more 
         },
         body: jsonEncode({
           'model': _model,
-          'messages': _chatHistory,
+          'messages': messagesWithContext,
           'temperature': 0.9,
           'max_tokens': 1024,
           'top_p': 0.95,
@@ -176,7 +194,12 @@ Keep responses conversational, supportive, and around 2-4 sentences unless more 
         final responseText = data['choices'][0]['message']['content'] ??
             'I\'m here for you. Tell me more about how you\'re feeling.';
 
-        // Add assistant response to history
+        // Add to permanent chat history (without the dynamic context)
+        _chatHistory.add({
+          'role': 'user',
+          'content': userMessage,
+        });
+        
         _chatHistory.add({
           'role': 'assistant',
           'content': responseText,
@@ -205,7 +228,10 @@ Keep responses conversational, supportive, and around 2-4 sentences unless more 
           userId: widget.userId,
           userMessage: userMessage,
           aiResponse: cleanedText,
-        );
+        ).then((_) {
+          // Refresh memory context after saving new memories
+          _refreshMemoryContext();
+        });
 
         // Update emotional profile
         _memoryService.updateEmotionalProfile(
@@ -233,9 +259,46 @@ Keep responses conversational, supportive, and around 2-4 sentences unless more 
     }
   }
 
+  // NEW: Refresh memory context periodically
+  Future<void> _refreshMemoryContext() async {
+    try {
+      final context = await _memoryService.loadUserMemoryContext(widget.userId);
+      
+      // Update the system message with new context
+      if (_chatHistory.isNotEmpty && _chatHistory[0]['role'] == 'system') {
+        _chatHistory[0]['content'] = '''You are "Buddy", a warm, empathetic emotional companion AI with a perfect memory.
+
+$context
+
+Your role is to:
+1. Provide emotional support and companionship
+2. ACTIVELY reference past conversations and specific details you remember
+3. Use the person's name and other details when you know them
+4. Ask thoughtful follow-up questions about things previously mentioned
+5. Help users process their feelings
+6. Offer gentle encouragement and positivity
+7. Show that you genuinely remember and care about their life
+
+IMPORTANT MEMORY USAGE:
+- When the user mentions something you've discussed before, ACKNOWLEDGE it
+- Reference specific names, events, and details from previous conversations
+- If you know someone's name or other personal details, use them naturally
+- Connect current conversations to past memories when relevant
+
+Always start your response with a sentiment tag:
+[SENTIMENT:positive/negative/neutral/anxious/sad/happy/angry]
+
+Keep responses conversational, supportive, and around 2-4 sentences unless more detail is needed.
+BE SPECIFIC when referencing memories - use actual names and details, not generic statements.''';
+      }
+    } catch (e) {
+      print('Error refreshing memory context: $e');
+    }
+  }
+
   List<String> _extractTopics(String message) {
     // Simple topic extraction (you can make this more sophisticated)
-    final keywords = ['work', 'family', 'health', 'stress', 'happy', 'sad', 'anxious'];
+    final keywords = ['work', 'family', 'health', 'stress', 'happy', 'sad', 'anxious', 'son', 'daughter', 'friend'];
     return keywords.where((k) => message.toLowerCase().contains(k)).toList();
   }
 
@@ -823,6 +886,7 @@ Keep responses conversational, supportive, and around 2-4 sentences unless more 
 }
 */
 
+
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -1047,22 +1111,34 @@ BE SPECIFIC when referencing memories - use actual names and details, not generi
         });
         _scrollToBottom();
 
-        // Extract and save memories asynchronously (don't await)
-        _memoryService.extractAndSaveMemories(
-          userId: widget.userId,
-          userMessage: userMessage,
-          aiResponse: cleanedText,
-        ).then((_) {
+        // Extract and save memories - now with proper await and error handling
+        print('🔄 Starting memory extraction process...');
+        try {
+          await _memoryService.extractAndSaveMemories(
+            userId: widget.userId,
+            userMessage: userMessage,
+            aiResponse: cleanedText,
+          );
+          print('✅ Memory extraction completed');
+          
           // Refresh memory context after saving new memories
-          _refreshMemoryContext();
-        });
+          await _refreshMemoryContext();
+          print('✅ Memory context refreshed');
+        } catch (e) {
+          print('❌ Error in memory extraction: $e');
+        }
 
         // Update emotional profile
-        _memoryService.updateEmotionalProfile(
-          userId: widget.userId,
-          sentiment: sentiment,
-          topics: _extractTopics(userMessage),
-        );
+        try {
+          await _memoryService.updateEmotionalProfile(
+            userId: widget.userId,
+            sentiment: sentiment,
+            topics: _extractTopics(userMessage),
+          );
+          print('✅ Emotional profile updated');
+        } catch (e) {
+          print('❌ Error updating emotional profile: $e');
+        }
       } else {
         throw Exception('Failed to get response: ${response.statusCode}');
       }
@@ -1245,12 +1321,20 @@ BE SPECIFIC when referencing memories - use actual names and details, not generi
 
   // Save conversation when closing
   Future<void> _saveConversation() async {
+    print('💾 Attempting to save conversation on close...');
     if (_messages.length > 1) {
-      await _memoryService.saveConversation(
-        userId: widget.userId,
-        messages: _messages,
-        dominantSentiment: _currentMood,
-      );
+      try {
+        await _memoryService.saveConversation(
+          userId: widget.userId,
+          messages: _messages,
+          dominantSentiment: _currentMood,
+        );
+        print('✅ Conversation saved on close');
+      } catch (e) {
+        print('❌ Error saving conversation on close: $e');
+      }
+    } else {
+      print('ℹ️ Not enough messages to save (${_messages.length} messages)');
     }
   }
 
@@ -1320,6 +1404,21 @@ BE SPECIFIC when referencing memories - use actual names and details, not generi
             ],
           ),
           actions: [
+            // Test memory save button (for debugging)
+            IconButton(
+              icon: const Icon(Icons.bug_report, color: Colors.white),
+              onPressed: () async {
+                print('🧪 Testing memory save...');
+                await _memoryService.testSaveMemory(widget.userId);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Test memory save attempted - check console'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              },
+              tooltip: 'Test Memory Save',
+            ),
             // Memory capsule button
             IconButton(
               icon: const Icon(Icons.auto_awesome, color: Colors.white),
