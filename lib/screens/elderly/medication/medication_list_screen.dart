@@ -53,7 +53,7 @@ class _MedicationListScreenState extends State<MedicationListScreen> {
     Medication(
       id: '2',
       name: 'Vitamin D',
-      dosage: '1000 IU',
+      dosage: '1000 mg',
       times: ['09:00 AM'],
       days: ['Mon', 'Wed', 'Fri'],
       notes: 'Take after breakfast',
