@@ -1,6 +1,7 @@
+import 'package:elderly_care_app/screens/elderly/medication/AddMedicationScreen.dart';
 import 'package:flutter/material.dart';
 import '../../auth/login_screen.dart';
-import '../pill_reminder_screen.dart';
+import '../medication/medication_list_screen.dart';
 import '../location_screen.dart';
 import '../games_screen.dart';
 import '../buddy_chat_screen.dart';
@@ -886,7 +887,11 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) => const PillReminderScreen(),
+                                    builder: (_) => MedicationListScreen(
+                                          userId:
+                                              widget.currentUserId ?? 'Unknown',
+                                          role: UserRole.elderly,
+                                        ),
                                   ),
                                 );
                               },

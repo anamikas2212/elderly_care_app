@@ -3,7 +3,34 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class CaretakerDataService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   
-  // Get user profile
+  // ✅ HELPER METHOD: Convert Timestamp to readable string
+  String _formatTimestamp(dynamic value, {String defaultValue = "Unknown"}) {
+    if (value == null) return defaultValue;
+    
+    if (value is String) {
+      return value;
+    } else if (value is Timestamp) {
+      final DateTime dateTime = value.toDate();
+      final now = DateTime.now();
+      final difference = now.difference(dateTime);
+      
+      if (difference.inMinutes < 1) {
+        return 'Just now';
+      } else if (difference.inMinutes < 60) {
+        return '${difference.inMinutes}m ago';
+      } else if (difference.inHours < 24) {
+        return '${difference.inHours}h ago';
+      } else if (difference.inDays < 7) {
+        return '${difference.inDays}d ago';
+      } else {
+        return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+      }
+    }
+    
+    return defaultValue;
+  }
+  
+  // ✅ FIXED: Get user profile with proper Timestamp handling
   Stream<Map<String, dynamic>> getUserProfile(String userId) {
     return _firestore.collection('users').doc(userId).snapshots().map((doc) {
       if (!doc.exists) return {};
@@ -13,7 +40,7 @@ class CaretakerDataService {
         'age': data['age'],
         'gender': data['gender'],
         'location': data['location'],
-        'lastActive': data['lastActive'],
+        'lastActive': _formatTimestamp(data['lastActive'], defaultValue: 'Never'), // ✅ FIXED
         'status': data['status'] ?? 'Active',
       };
     });
@@ -24,7 +51,7 @@ class CaretakerDataService {
     return _firestore
         .collection('colorTapGameSessions')
         .where('userId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)  // ✅ CHANGED
+        .orderBy('createdAt', descending: true)
         .limit(10)
         .snapshots()
         .map((snapshot) {
@@ -83,7 +110,7 @@ class CaretakerDataService {
     return _firestore
         .collection('colorTapGameSessions')
         .where('userId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)  // ✅ CHANGED
+        .orderBy('createdAt', descending: true)
         .limit(10)
         .snapshots()
         .map((snapshot) {
@@ -199,16 +226,25 @@ class CaretakerDataService {
         });
   }
 
-  // Get recent game sessions
+  // ✅ FIXED: Get recent game sessions with proper timestamp conversion
   Stream<List<Map<String, dynamic>>> getRecentGameSessions(String userId) {
     return _firestore
         .collection('colorTapGameSessions')
         .where('userId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)  // ✅ CHANGED
+        .orderBy('createdAt', descending: true)
         .limit(10)
         .snapshots()
         .map((snapshot) {
-          return snapshot.docs.map((doc) => doc.data()).toList();
+          return snapshot.docs.map((doc) {
+            final data = Map<String, dynamic>.from(doc.data());
+            
+            // ✅ Convert Timestamp to milliseconds for dashboard
+            if (data['createdAt'] != null && data['createdAt'] is Timestamp) {
+              data['createdAt'] = (data['createdAt'] as Timestamp).millisecondsSinceEpoch;
+            }
+            
+            return data;
+          }).toList();
         });
   }
 
@@ -240,12 +276,12 @@ class CaretakerDataService {
         });
   }
 
-  // Get score history for trend chart
+  // ✅ FIXED: Get score history with timestamp conversion
   Stream<List<Map<String, dynamic>>> getColorTapScoreHistory(String userId) {
     return _firestore
         .collection('colorTapGameSessions')
         .where('userId', isEqualTo: userId)
-        .orderBy('createdAt', descending: false)  // ✅ CHANGED - Oldest first for chart
+        .orderBy('createdAt', descending: false)
         .limit(20)
         .snapshots()
         .map((snapshot) {
@@ -281,10 +317,16 @@ class CaretakerDataService {
             }
             processingSpeedScore = processingSpeedScore.clamp(0, 100);
 
+            // ✅ Convert Timestamp to milliseconds
+            int createdAtMs = 0;
+            if (data['createdAt'] != null && data['createdAt'] is Timestamp) {
+              createdAtMs = (data['createdAt'] as Timestamp).millisecondsSinceEpoch;
+            }
+
             return {
               'attention': attentionScore,
               'processing': processingSpeedScore,
-              'createdAt': data['createdAt'],  // ✅ CHANGED
+              'createdAt': createdAtMs,
             };
           }).toList();
         });

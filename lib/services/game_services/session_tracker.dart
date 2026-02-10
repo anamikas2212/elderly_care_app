@@ -140,10 +140,11 @@ class SessionTracker {
           .doc(session.id)
           .set(sessionData);
 
-      // UPDATE USER STATS - Using set with merge to create if doesn't exist
-      // ✅ FIXED: Changed from .update() to .set() with merge: true
+      // ✅ UPDATE USER STATS - Now includes lastActive field
       await FirebaseFirestore.instance.collection('users').doc(userId).set({
         'lastGamePlayed': FieldValue.serverTimestamp(),
+        'lastActive':
+            FieldValue.serverTimestamp(), // ✅ ADDED - Dashboard needs this
         'lastGameName': gameName,
         'totalGamesPlayed': FieldValue.increment(1),
       }, SetOptions(merge: true)); // Creates document if it doesn't exist!

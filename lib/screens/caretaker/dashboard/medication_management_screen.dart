@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import '../../../theme/caretaker_theme.dart';
 
@@ -6,21 +5,28 @@ class MedicationManagementScreen extends StatefulWidget {
   const MedicationManagementScreen({Key? key}) : super(key: key);
 
   @override
-  State<MedicationManagementScreen> createState() => _MedicationManagementScreenState();
+  State<MedicationManagementScreen> createState() =>
+      _MedicationManagementScreenState();
 }
 
-class _MedicationManagementScreenState extends State<MedicationManagementScreen> {
+class _MedicationManagementScreenState
+    extends State<MedicationManagementScreen> {
   // Mock Data
   List<Map<String, dynamic>> medicines = [
     {'name': 'Aspirin', 'dose': '81mg', 'time': '8:00 AM', 'days': 'Daily'},
-    {'name': 'Vitamin D', 'dose': '1000IU', 'time': '9:00 AM', 'days': 'Daily'},
-    {'name': 'Atorvastatin', 'dose': '20mg', 'time': '9:00 PM', 'days': 'Mon, Wed, Fri'},
+    {'name': 'Vitamin D', 'dose': '1000mg', 'time': '9:00 AM', 'days': 'Daily'},
+    {
+      'name': 'Atorvastatin',
+      'dose': '20mg',
+      'time': '9:00 PM',
+      'days': 'Mon, Wed, Fri',
+    },
   ];
 
   void _addMedicine() {
     // Determine context before async gap
     final currentContext = context;
-    
+
     showDialog(
       context: currentContext,
       builder: (BuildContext dialogContext) {
@@ -38,11 +44,15 @@ class _MedicationManagementScreenState extends State<MedicationManagementScreen>
                 onChanged: (value) => name = value,
               ),
               TextField(
-                decoration: const InputDecoration(labelText: 'Dosage (e.g., 500mg)'),
+                decoration: const InputDecoration(
+                  labelText: 'Dosage (e.g., 500mg)',
+                ),
                 onChanged: (value) => dose = value,
               ),
               TextField(
-                decoration: const InputDecoration(labelText: 'Time (e.g., 8:00 AM)'),
+                decoration: const InputDecoration(
+                  labelText: 'Time (e.g., 8:00 AM)',
+                ),
                 onChanged: (value) => time = value,
               ),
             ],
@@ -60,16 +70,20 @@ class _MedicationManagementScreenState extends State<MedicationManagementScreen>
                       'name': name,
                       'dose': dose,
                       'time': time.isNotEmpty ? time : 'TBD',
-                      'days': 'Daily'
+                      'days': 'Daily',
                     });
                   });
                   Navigator.pop(dialogContext);
                   ScaffoldMessenger.of(currentContext).showSnackBar(
-                    const SnackBar(content: Text('Medicine Added Successfully')),
+                    const SnackBar(
+                      content: Text('Medicine Added Successfully'),
+                    ),
                   );
                 }
               },
-              style: ElevatedButton.styleFrom(backgroundColor: CaretakerColors.primaryGreen),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: CaretakerColors.primaryGreen,
+              ),
               child: const Text('Add', style: TextStyle(color: Colors.white)),
             ),
           ],
@@ -83,7 +97,10 @@ class _MedicationManagementScreenState extends State<MedicationManagementScreen>
     return Scaffold(
       backgroundColor: CaretakerColors.background,
       appBar: AppBar(
-        title: const Text('Manage Medicines', style: CaretakerTextStyles.header),
+        title: const Text(
+          'Manage Medicines',
+          style: CaretakerTextStyles.header,
+        ),
         backgroundColor: CaretakerColors.cardWhite,
         iconTheme: const IconThemeData(color: CaretakerColors.textPrimary),
         elevation: 0,
@@ -96,7 +113,9 @@ class _MedicationManagementScreenState extends State<MedicationManagementScreen>
           return Card(
             elevation: 0,
             margin: const EdgeInsets.only(bottom: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             child: ListTile(
               leading: Container(
                 padding: const EdgeInsets.all(10),
@@ -104,15 +123,23 @@ class _MedicationManagementScreenState extends State<MedicationManagementScreen>
                   color: CaretakerColors.lightGreen,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.medication, color: CaretakerColors.primaryGreen),
+                child: const Icon(
+                  Icons.medication,
+                  color: CaretakerColors.primaryGreen,
+                ),
               ),
-              title: Text(med['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text('${med['dose']} • ${med['time']} • ${med['days']}'),
+              title: Text(
+                med['name'],
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: Text(
+                '${med['dose']} • ${med['time']} • ${med['days']}',
+              ),
               trailing: IconButton(
                 icon: const Icon(Icons.edit, color: Colors.grey),
                 onPressed: () {
-                   // Edit logic would go here
-                   ScaffoldMessenger.of(context).showSnackBar(
+                  // Edit logic would go here
+                  ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Edit feature coming soon')),
                   );
                 },
@@ -125,7 +152,10 @@ class _MedicationManagementScreenState extends State<MedicationManagementScreen>
         onPressed: _addMedicine,
         backgroundColor: CaretakerColors.primaryGreen,
         icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('Add Medicine', style: TextStyle(color: Colors.white)),
+        label: const Text(
+          'Add Medicine',
+          style: TextStyle(color: Colors.white),
+        ),
       ),
     );
   }

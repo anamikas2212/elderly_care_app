@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import '../../../theme/caretaker_theme.dart';
 
@@ -45,7 +44,13 @@ class MedicationScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: const [
               Text('Today\'s Progress', style: CaretakerTextStyles.cardTitle),
-              Text('3 of 5 taken', style: TextStyle(color: CaretakerColors.primaryGreen, fontWeight: FontWeight.bold)),
+              Text(
+                '3 of 5 taken',
+                style: TextStyle(
+                  color: CaretakerColors.primaryGreen,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -77,8 +82,17 @@ class MedicationScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: const [
-                Text('Missed Dose: Atorvastatin', style: TextStyle(fontWeight: FontWeight.bold, color: CaretakerColors.errorRed)),
-                Text('Overdue by 2 hours', style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+                Text(
+                  'Missed Dose: Atorvastatin',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: CaretakerColors.errorRed,
+                  ),
+                ),
+                Text(
+                  'Overdue by 2 hours',
+                  style: TextStyle(color: Colors.redAccent, fontSize: 12),
+                ),
               ],
             ),
           ),
@@ -86,7 +100,9 @@ class MedicationScreen extends StatelessWidget {
             onPressed: () {},
             style: ElevatedButton.styleFrom(
               backgroundColor: CaretakerColors.errorRed,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             child: const Text('Remind', style: TextStyle(color: Colors.white)),
           ),
@@ -105,7 +121,10 @@ class MedicationScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Today\'s Schedule', style: CaretakerTextStyles.sectionTitle),
+          const Text(
+            'Today\'s Schedule',
+            style: CaretakerTextStyles.sectionTitle,
+          ),
           const SizedBox(height: 16),
           _buildMedItem('Aspirin 81mg', '8:00 AM', true, false),
           const Divider(),
@@ -125,8 +144,13 @@ class MedicationScreen extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            taken ? Icons.check_circle : (missed ? Icons.cancel : Icons.circle_outlined),
-            color: taken ? CaretakerColors.successGreen : (missed ? CaretakerColors.errorRed : Colors.grey),
+            taken
+                ? Icons.check_circle
+                : (missed ? Icons.cancel : Icons.circle_outlined),
+            color:
+                taken
+                    ? CaretakerColors.successGreen
+                    : (missed ? CaretakerColors.errorRed : Colors.grey),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -141,7 +165,10 @@ class MedicationScreen extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: taken ? CaretakerColors.lightGreen : (missed ? Colors.red.shade50 : Colors.grey.shade100),
+              color:
+                  taken
+                      ? CaretakerColors.lightGreen
+                      : (missed ? Colors.red.shade50 : Colors.grey.shade100),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
@@ -149,7 +176,10 @@ class MedicationScreen extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
-                color: taken ? CaretakerColors.successGreen : (missed ? CaretakerColors.errorRed : Colors.grey),
+                color:
+                    taken
+                        ? CaretakerColors.successGreen
+                        : (missed ? CaretakerColors.errorRed : Colors.grey),
               ),
             ),
           ),
@@ -168,9 +198,18 @@ class MedicationScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Weekly Adherence', style: CaretakerTextStyles.sectionTitle),
+          const Text(
+            'Weekly Adherence',
+            style: CaretakerTextStyles.sectionTitle,
+          ),
           const SizedBox(height: 8),
-          const Text('Weekly Average: 87%', style: TextStyle(color: CaretakerColors.primaryGreen, fontWeight: FontWeight.bold)),
+          const Text(
+            'Weekly Average: 87%',
+            style: TextStyle(
+              color: CaretakerColors.primaryGreen,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           const SizedBox(height: 20),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -190,16 +229,24 @@ class MedicationScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildBar(String day, double heightPct, {bool isLow = false, bool isEmpty = false}) {
+  Widget _buildBar(
+    String day,
+    double heightPct, {
+    bool isLow = false,
+    bool isEmpty = false,
+  }) {
     return Column(
       children: [
         Container(
           height: 100 * heightPct,
           width: 12,
           decoration: BoxDecoration(
-            color: isEmpty 
-               ? Colors.grey.shade200 
-               : (isLow ? CaretakerColors.warningAmber : CaretakerColors.primaryGreen),
+            color:
+                isEmpty
+                    ? Colors.grey.shade200
+                    : (isLow
+                        ? CaretakerColors.warningAmber
+                        : CaretakerColors.primaryGreen),
             borderRadius: BorderRadius.circular(6),
           ),
         ),
