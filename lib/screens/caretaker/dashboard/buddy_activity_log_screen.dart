@@ -1,4 +1,4 @@
-
+/*
 import 'package:flutter/material.dart';
 import '../../../theme/caretaker_theme.dart';
 
@@ -122,4 +122,83 @@ class BuddyActivityLogScreen extends StatelessWidget {
       ),
     );
   }
+}*/
+
+import 'enhanced_buddy_activity_screen.dart';
+import 'package:flutter/material.dart';
+
+/*// Add navigation:
+Navigator.push(
+  context,
+  MaterialPageRoute(
+    builder: (context) => EnhancedBuddyActivityScreen(
+      caretakerId: currentCaretakerId,
+      elderlyId: elderlyUserId,
+      elderlyName: elderlyUserName,
+    ),
+  ),
+);*/
+
+class YourScreen extends StatelessWidget {
+  final String currentCaretakerId;
+  final String elderlyUserId;
+  final String elderlyUserName;
+
+  const YourScreen({
+    super.key,
+    required this.currentCaretakerId,
+    required this.elderlyUserId,
+    required this.elderlyUserName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Dashboard')),
+      body: Center(
+        child: ElevatedButton(
+          onPressed: () {
+            // NOW Navigator.push is inside a function
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => EnhancedBuddyActivityScreen(
+                  caretakerId: currentCaretakerId,
+                  elderlyId: elderlyUserId,
+                  elderlyName: elderlyUserName,
+                ),
+              ),
+            );
+          },
+          child: const Text('View Buddy Activity'),
+        ),
+      ),
+    );
+  }
 }
+
+
+/*## 🔔 Notification Triggers
+
+The system automatically sends notifications when it detects:
+
+✅ **Missing someone** - "I miss mom", "wish dad would visit"  
+✅ **Loneliness** - "feeling lonely", "no one to talk to"  
+✅ **Health concerns** - "not feeling well", "pain in my chest"  
+✅ **Sadness/Depression** - persistent sad sentiment  
+✅ **Anxiety** - "worried", "scared", "anxious"
+
+## 📊 Weekly Reports Include:
+
+- Emotional wellness score (0-100)
+- Sentiment breakdown (% happy, sad, anxious, etc.)
+- Concerning patterns detected
+- AI-generated summary with recommendations
+- Total conversation count
+
+## 🧪 Testing
+
+Test with these messages in the elderly buddy chat:
+```
+"I really miss my daughter. I wish she would visit more often."
+*/

@@ -10,6 +10,7 @@ import 'medication_management_screen.dart';
 import 'buddy_activity_log_screen.dart';
 import 'connect_screens.dart';
 import '../../auth/login_screen.dart';
+import 'enhanced_buddy_activity_screen.dart';
 
 class CaretakerDashboard extends StatefulWidget {
   const CaretakerDashboard({Key? key}) : super(key: key);
@@ -408,11 +409,46 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
         _buildNavCard(context, "Safety Monitor", Icons.security, Colors.red.shade100, Colors.red, const SafetyMonitorScreen()),
         _buildNavCard(context, "Medication", Icons.medical_services, Colors.blue.shade100, Colors.blue, const MedicationScreen()),
         _buildNavCard(context, "Care Connect", Icons.people, Colors.purple.shade100, Colors.purple, const VisionGuardianScreen()),
-        _buildNavCard(context, "Activity Log", Icons.history, Colors.orange.shade100, Colors.orange, const BuddyActivityLogScreen()),
-      ],
+        _buildNavCard(
+  context, 
+  "Activity Log", 
+  Icons.history, 
+  Colors.orange.shade100, 
+  Colors.orange, 
+  _buildEnhancedBuddyScreen(context), // ← Changed
+),],
     );
   }
+Widget _buildEnhancedBuddyScreen(BuildContext context) {
+  // Get current user IDs from SharedPreferences
+  return FutureBuilder<Map<String, String>>(
+    future: _getElderlyInfo(),
+    builder: (context, snapshot) {
+      if (!snapshot.hasData) {
+        return const Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        );
+      }
+      
+      final info = snapshot.data!;
+      return EnhancedBuddyActivityScreen(
+        caretakerId: info['caretakerId'] ?? '',
+        elderlyId: info['elderlyId'] ?? '',
+        elderlyName: info['elderlyName'] ?? 'Patient',
+      );
+    },
+  );
+}
 
+Future<Map<String, String>> _getElderlyInfo() async {
+  final prefs = await SharedPreferences.getInstance();
+  // Standardized keys: caretaker_id and elderly_user_id
+  return {
+    'caretakerId': prefs.getString('caretaker_id') ?? 'caretaker_demo_id',
+    'elderlyId': prefs.getString('elderly_user_id') ?? 'elderly_demo_id',
+    'elderlyName': prefs.getString('elderly_user_name') ?? 'Patient',
+  };
+}
   Widget _buildNavCard(BuildContext context, String title, IconData icon, Color bg, Color iconColor, Widget screen) {
     return GestureDetector(
       onTap: () {
@@ -442,3 +478,5 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
     );
   }
 }
+
+

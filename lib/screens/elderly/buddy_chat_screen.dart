@@ -890,7 +890,7 @@ BE SPECIFIC when referencing memories - use actual names and details, not generi
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'memory_service.dart';
+import '../../services/enhanced_memory_service.dart';
 import 'chat_message.dart';
 
 class BuddyChatScreen extends StatefulWidget {
@@ -920,8 +920,8 @@ class _BuddyChatScreenState extends State<BuddyChatScreen> {
   static const String _baseUrl = 'https://api.groq.com/openai/v1/chat/completions';
   static const String _model = 'llama-3.3-70b-versatile';
 
-  // Memory service
-  late MemoryService _memoryService;
+  // Memory service (EnhancedMemoryService notifies caretakers automatically)
+  late EnhancedMemoryService _memoryService;
   String _userMemoryContext = '';
   List<String> _personalizedQuestions = [];
   bool _isLoadingMemories = true;
@@ -929,7 +929,7 @@ class _BuddyChatScreenState extends State<BuddyChatScreen> {
   @override
   void initState() {
     super.initState();
-    _memoryService = MemoryService(groqApiKey: _apiKey);
+    _memoryService = EnhancedMemoryService(groqApiKey: _apiKey);
     _initializeChat();
   }
 
@@ -1111,11 +1111,12 @@ BE SPECIFIC when referencing memories - use actual names and details, not generi
         });
         _scrollToBottom();
 
-        // Extract and save memories - now with proper await and error handling
+        // Extract and save memories — EnhancedMemoryService also notifies caretaker
         print('🔄 Starting memory extraction process...');
         try {
           await _memoryService.extractAndSaveMemories(
             userId: widget.userId,
+            elderlyId: widget.userId,
             userMessage: userMessage,
             aiResponse: cleanedText,
           );
@@ -1404,21 +1405,6 @@ BE SPECIFIC when referencing memories - use actual names and details, not generi
             ],
           ),
           actions: [
-            // Test memory save button (for debugging)
-            IconButton(
-              icon: const Icon(Icons.bug_report, color: Colors.white),
-              onPressed: () async {
-                print('🧪 Testing memory save...');
-                await _memoryService.testSaveMemory(widget.userId);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Test memory save attempted - check console'),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              },
-              tooltip: 'Test Memory Save',
-            ),
             // Memory capsule button
             IconButton(
               icon: const Icon(Icons.auto_awesome, color: Colors.white),
@@ -1806,4 +1792,5 @@ BE SPECIFIC when referencing memories - use actual names and details, not generi
     final period = timestamp.hour >= 12 ? 'PM' : 'AM';
     return '$hour:$minute $period';
   }
+
 }
