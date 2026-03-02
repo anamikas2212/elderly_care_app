@@ -1,6 +1,7 @@
 //used...
 import 'package:flutter/material.dart';
 import '../../games/chill_zone/color_tap/color_tap_game.dart';
+import '../../games/chill_zone/flip_card_match/flip_card_game.dart';
 
 class ChillZoneScreen extends StatelessWidget {
   final String userId;
@@ -34,17 +35,16 @@ class ChillZoneScreen extends StatelessWidget {
               description: 'Match colors and test your reflexes!',
               icon: Icons.palette,
               color: Colors.purple,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ColorTapGame(
-                      difficultyLevel: 1, // Defaulting to Easy for now
-                      userId: userId,
-                    ),
-                  ),
-                );
-              },
+              onTap: () => _showColorTapDifficultyDialog(context),
+            ),
+            const SizedBox(height: 15),
+            _buildGameCard(
+              context,
+              title: 'Flip Card Match',
+              description: 'Test your memory by matching card pairs!',
+              icon: Icons.psychology,
+              color: Colors.deepPurple,
+              onTap: () => _showFlipCardDifficultyDialog(context),
             ),
             const SizedBox(height: 15),
             _buildGameCard(
@@ -61,6 +61,214 @@ class ChillZoneScreen extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showColorTapDifficultyDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text(
+            'Choose Difficulty',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildDifficultyButton(
+                context,
+                'Easy',
+                'Slower pace - 2.0s intervals',
+                1,
+                Colors.green,
+                Icons.sentiment_satisfied,
+              ),
+              const SizedBox(height: 12),
+              _buildDifficultyButton(
+                context,
+                'Medium',
+                'Moderate pace - 1.8s intervals',
+                2,
+                Colors.orange,
+                Icons.sentiment_neutral,
+              ),
+              const SizedBox(height: 12),
+              _buildDifficultyButton(
+                context,
+                'Hard',
+                'Fast pace - 1.4s intervals',
+                3,
+                Colors.red,
+                Icons.sentiment_very_dissatisfied,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showFlipCardDifficultyDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text(
+            'Choose Difficulty',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildFlipCardDifficultyButton(
+                context,
+                'Easy',
+                '6 pairs - 5 seconds preview',
+                1,
+                Colors.green,
+                Icons.sentiment_satisfied,
+              ),
+              const SizedBox(height: 12),
+              _buildFlipCardDifficultyButton(
+                context,
+                'Medium',
+                '8 pairs - 4 seconds preview',
+                2,
+                Colors.orange,
+                Icons.sentiment_neutral,
+              ),
+              const SizedBox(height: 12),
+              _buildFlipCardDifficultyButton(
+                context,
+                'Hard',
+                '10 pairs - 3 seconds preview',
+                3,
+                Colors.red,
+                Icons.sentiment_very_dissatisfied,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDifficultyButton(
+    BuildContext context,
+    String level,
+    String description,
+    int difficultyLevel,
+    Color color,
+    IconData icon,
+  ) {
+    return ElevatedButton(
+      onPressed: () {
+        Navigator.pop(context); // Close dialog
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ColorTapGame(
+              difficultyLevel: difficultyLevel,
+              userId: userId,
+            ),
+          ),
+        );
+      },
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color.withOpacity(0.1),
+        foregroundColor: color,
+        padding: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 32),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  level,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+                Text(
+                  description,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: color.withOpacity(0.8),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFlipCardDifficultyButton(
+    BuildContext context,
+    String level,
+    String description,
+    int difficultyLevel,
+    Color color,
+    IconData icon,
+  ) {
+    return ElevatedButton(
+      onPressed: () {
+        Navigator.pop(context); // Close dialog
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => FlipCardGame(
+              difficultyLevel: difficultyLevel,
+              userId: userId,
+            ),
+          ),
+        );
+      },
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color.withOpacity(0.1),
+        foregroundColor: color,
+        padding: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 32),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  level,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+                Text(
+                  description,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: color.withOpacity(0.8),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

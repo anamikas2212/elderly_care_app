@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../theme/caretaker_theme.dart';
@@ -10,6 +10,12 @@ import 'medication_management_screen.dart';
 import 'buddy_activity_log_screen.dart';
 import 'connect_screens.dart';
 import '../../auth/login_screen.dart';
+import '../analytics/flip_card_analytics_screen.dart';
+import '../analytics/color_tap_analytics_screen.dart';
+import '../analytics/city_atlas_analytics_screen.dart';
+import '../analytics/event_ordering_analytics_screen.dart';
+import '../analytics/daily_routine_analytics_screen.dart';
+import '../analytics/monument_recall_analytics_screen.dart';
 
 class CaretakerDashboard extends StatefulWidget {
   const CaretakerDashboard({Key? key}) : super(key: key);
@@ -20,9 +26,14 @@ class CaretakerDashboard extends StatefulWidget {
 
 class _CaretakerDashboardState extends State<CaretakerDashboard> {
   final CaretakerDataService _dataService = CaretakerDataService();
-  String elderlyUserId = "";
+  String elderlyUserId = "";      // Firebase UID used for Firestore queries
+  String elderlyUserName = "";    // Display name from SharedPreferences
+  String elderlyUserAge = "--";   // Age from SharedPreferences
+  String elderlyUserGender = "--"; // Gender from SharedPreferences
   bool _isLoading = true;
   String? _errorMessage;
+  // Cached future so cognitive score doesn't reset on every rebuild/navigation
+  Future<Map<String, dynamic>>? _cognitiveHealthFuture;
 
   @override
   void initState() {
@@ -33,11 +44,15 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
   Future<void> _loadElderlyUserId() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final userId =
-          prefs.getString('elderly_user_id') ??
-          prefs.getString('elderly_user_name');
+      // Try to get Firebase UID first (set after our fix), fall back to name
+      final uid = prefs.getString('elderly_user_uid') ??
+                  prefs.getString('elderly_user_id') ??
+                  prefs.getString('elderly_user_name');
+      final name = prefs.getString('elderly_user_name') ?? uid ?? '';
+      final age = prefs.getString('elderly_user_age') ?? '--';
+      final gender = prefs.getString('elderly_user_gender') ?? '--';
 
-      if (userId == null || userId.isEmpty) {
+      if (uid == null || uid.isEmpty) {
         setState(() {
           _errorMessage = "No elderly user linked. Please set up a connection.";
           _isLoading = false;
@@ -47,9 +62,15 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
 
       if (!mounted) return;
       setState(() {
-        elderlyUserId = userId;
+        elderlyUserId = uid;
+        elderlyUserName = name;
+        elderlyUserAge = age;
+        elderlyUserGender = gender;
+        // Cache the future once so it persists across rebuilds
+        _cognitiveHealthFuture = _dataService.getCognitiveHealthFuture(uid);
         _isLoading = false;
       });
+
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -59,7 +80,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
     }
   }
 
-  // ✅ NEW: Create a test medication alert
+  // âœ… NEW: Create a test medication alert
   Future<void> _createTestMedicationAlert() async {
     if (elderlyUserId.isEmpty) {
       ScaffoldMessenger.of(
@@ -82,7 +103,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('✅ Test medication alert created'),
+          content: Text('âœ… Test medication alert created'),
           backgroundColor: Colors.green,
         ),
       );
@@ -90,14 +111,14 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('❌ Error creating alert: $e'),
+          content: Text('âŒ Error creating alert: $e'),
           backgroundColor: Colors.red,
         ),
       );
     }
   }
 
-  // ✅ NEW: Dismiss an alert
+  // âœ… NEW: Dismiss an alert
   Future<void> _dismissAlert(String alertId) async {
     try {
       await FirebaseFirestore.instance.collection('alerts').doc(alertId).update(
@@ -174,16 +195,12 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
                 _buildPatientHeaderCard(context),
                 const SizedBox(height: 16),
 
-                // ✅ Alert Banner - Shows medication reminders and other alerts
+                // âœ… Alert Banner - Shows medication reminders and other alerts
                 _buildAlertBanner(context),
                 const SizedBox(height: 16),
 
                 // Cognitive Health Score Card
                 _buildCognitiveHealthCard(),
-                const SizedBox(height: 16),
-
-                // Domain Scores Card (Attention & Processing Speed)
-                _buildDomainScoresCard(),
                 const SizedBox(height: 16),
 
                 // Game Metrics Card
@@ -210,53 +227,22 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
 
   // ✅ Cognitive Health Score Card
   Widget _buildCognitiveHealthCard() {
-    return StreamBuilder<Map<String, dynamic>>(
-      stream: _dataService.calculateCognitiveHealthScore(elderlyUserId),
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _cognitiveHealthFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return _buildLoadingCard("Calculating cognitive health...");
         }
 
         if (snapshot.hasError) {
-          return _buildErrorCard(
-            "Error calculating cognitive health: ${snapshot.error}",
-          );
+          return _buildErrorCard("Error: ${snapshot.error}");
         }
 
-        if (!snapshot.hasData ||
-            snapshot.data == null ||
-            snapshot.data!['totalSessions'] == 0) {
-          return _buildEmptyCard(
-            "No game data available yet. Play games to see cognitive health score.",
-          );
-        }
-
-        final data = snapshot.data!;
-        final score = data['healthScore'] as int;
-        final totalSessions = data['totalSessions'] as int;
-        final avgAccuracy = data['avgAccuracy'] as double;
-        final avgReactionTime = data['avgReactionTime'] as double;
-
-        final Color scoreColor =
-            score >= 75
-                ? Colors.green
-                : score >= 50
-                ? Colors.orange
-                : Colors.red;
-
-        final String statusEmoji =
-            score >= 75
-                ? '🟢'
-                : score >= 50
-                ? '🟡'
-                : '🔴';
-
-        final String status =
-            score >= 75
-                ? 'Excellent'
-                : score >= 50
-                ? 'Good'
-                : 'Needs Attention';
+        final data = snapshot.data ?? {};
+        final score = data['overallScore'] as int? ?? 0;
+        
+        final Color scoreColor = score >= 75 ? Colors.green : score >= 50 ? Colors.orange : Colors.red;
+        final String status = score >= 75 ? 'Excellent' : score >= 50 ? 'Good' : 'Needs Attention';
 
         return Container(
           padding: const EdgeInsets.all(20),
@@ -267,102 +253,55 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'Cognitive Health Score',
-                    style: CaretakerTextStyles.cardTitle,
-                  ),
+                  const Text('Cognitive Health Score', style: CaretakerTextStyles.cardTitle),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: scoreColor.withOpacity(0.1),
+                      color: scoreColor.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(color: scoreColor),
                     ),
-                    child: Text(
-                      '$statusEmoji $status',
-                      style: TextStyle(
-                        color: scoreColor,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
+                    child: Text(status, style: TextStyle(color: scoreColor, fontWeight: FontWeight.bold, fontSize: 12)),
                   ),
                 ],
               ),
               const SizedBox(height: 20),
-
-              // Circular Progress Indicator
+              
+              // Score Circle
               Center(
-                child: Stack(
-                  alignment: Alignment.center,
+                child: Column(
                   children: [
-                    SizedBox(
-                      height: 120,
-                      width: 120,
-                      child: CircularProgressIndicator(
-                        value: score / 100,
-                        strokeWidth: 12,
-                        backgroundColor: Colors.grey.shade200,
-                        color: scoreColor,
-                      ),
-                    ),
-                    Column(
+                     Stack(
+                      alignment: Alignment.center,
                       children: [
-                        Text(
-                          '$score',
-                          style: TextStyle(
-                            fontSize: 36,
-                            fontWeight: FontWeight.bold,
+                        SizedBox(
+                          height: 120, width: 120,
+                          child: CircularProgressIndicator(
+                            value: score / 100,
+                            strokeWidth: 12,
+                            backgroundColor: Colors.grey.shade200,
                             color: scoreColor,
                           ),
                         ),
-                        Text(
-                          'out of 100',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
+                        Text('$score', style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: scoreColor)),
                       ],
                     ),
+                    const SizedBox(height: 8),
+                    const Text('Overall Score', style: TextStyle(color: Colors.grey)),
                   ],
                 ),
               ),
-
-              const SizedBox(height: 20),
-
-              // Metrics Summary
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  children: [
-                    _buildMetricRow(
-                      'Accuracy',
-                      '${avgAccuracy.toStringAsFixed(1)}%',
-                      Icons.check_circle_outline,
-                    ),
-                    const Divider(height: 16),
-                    _buildMetricRow(
-                      'Avg Reaction Time',
-                      '${avgReactionTime.toStringAsFixed(3)}s',
-                      Icons.timer_outlined,
-                    ),
-                    const Divider(height: 16),
-                    _buildMetricRow(
-                      'Sessions Analyzed',
-                      '$totalSessions',
-                      Icons.analytics_outlined,
-                    ),
-                  ],
-                ),
-              ),
+              
+              const SizedBox(height: 24),
+              const Text('Domain Breakdown', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              
+              // 5 Domains
+              _buildDomainBar("Memory", data['memory'] ?? 0, Colors.purple),
+              _buildDomainBar("Attention", data['attention'] ?? 0, Colors.blue),
+              _buildDomainBar("Processing Speed", data['processingSpeed'] ?? 0, Colors.orange),
+              _buildDomainBar("Executive Function", data['executiveFunction'] ?? 0, Colors.teal),
+              _buildDomainBar("Language", data['language'] ?? 0, Colors.pink),
             ],
           ),
         );
@@ -370,51 +309,144 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
     );
   }
 
-  Widget _buildMetricRow(String label, String value, IconData icon) {
-    return Row(
-      children: [
-        Icon(icon, size: 18, color: Colors.grey.shade600),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            label,
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+  
+  Widget _buildDomainBar(String label, int score, Color color) {
+      return Padding(
+          padding: const EdgeInsets.only(bottom: 8.0),
+          child: Row(
+              children: [
+                  SizedBox(width: 110, child: Text(label, style: const TextStyle(fontSize: 13))),
+                  Expanded(
+                      child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                              value: score / 100,
+                              backgroundColor: Colors.grey.shade100,
+                              color: color,
+                              minHeight: 8,
+                          ),
+                      ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text('$score', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color)),
+              ],
           ),
-        ),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.bold,
-            color: CaretakerColors.textPrimary,
-          ),
-        ),
-      ],
-    );
+      );
   }
 
-  // ✅ NEW: Domain Scores Card - Attention & Processing Speed
-  Widget _buildDomainScoresCard() {
-    return StreamBuilder<Map<String, dynamic>>(
-      stream: _dataService.calculateDomainScores(elderlyUserId),
+  // âœ… Game Analytics Cards
+  Widget _buildGameMetricsCard() {
+    return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+            const Text('Game Analytics', style: CaretakerTextStyles.sectionTitle),
+            const SizedBox(height: 12),
+            SizedBox(
+                height: 160,
+                child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    children: [
+                        _buildGameCard(
+                            'Color Tap', 
+                            'Focus & Speed', 
+                            Icons.touch_app, 
+                            Colors.blue,
+                            () => Navigator.push(context, MaterialPageRoute(builder: (_) => ColorTapAnalyticsScreen(userId: elderlyUserId))),
+                        ),
+                        _buildGameCard(
+                            'Flip Card', 
+                            'Memory & Focus', 
+                            Icons.flip, 
+                            Colors.purple,
+                            () => Navigator.push(context, MaterialPageRoute(builder: (_) => FlipCardAnalyticsScreen(userId: elderlyUserId))),
+                        ),
+                        _buildGameCard(
+                            'City Atlas', 
+                            'Geography & Logic', 
+                            Icons.map, 
+                            Colors.teal,
+                            () => Navigator.push(context, MaterialPageRoute(builder: (_) => CityAtlasAnalyticsScreen(userId: elderlyUserId))),
+                        ),
+                        _buildGameCard(
+                            'Event Order', 
+                            'History & Sequencing', 
+                            Icons.history_edu, 
+                            Colors.orange,
+                            () => Navigator.push(context, MaterialPageRoute(builder: (_) => EventOrderingAnalyticsScreen(userId: elderlyUserId))),
+                        ),
+                        _buildGameCard(
+                            'Routine Recall', 
+                            'Daily Memory', 
+                            Icons.schedule, 
+                            Colors.green,
+                            () => Navigator.push(context, MaterialPageRoute(builder: (_) => DailyRoutineAnalyticsScreen(userId: elderlyUserId))),
+                        ),
+                        _buildGameCard(
+                            'Monuments', 
+                            'Visual Memory', 
+                            Icons.account_balance, 
+                            Colors.indigo,
+                            () => Navigator.push(context, MaterialPageRoute(builder: (_) => MonumentRecallAnalyticsScreen(userId: elderlyUserId))),
+                        ),
+                    ],
+                ),
+            ),
+        ],
+    );
+  }
+  
+  Widget _buildGameCard(String title, String subtitle, IconData icon, Color color, VoidCallback onTap) {
+      return Container(
+          width: 140,
+          margin: const EdgeInsets.only(right: 12),
+          child: GestureDetector(
+              onTap: onTap,
+              child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
+                      ],
+                      border: Border.all(color: Colors.grey.shade100),
+                  ),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                          Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                  color: color.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                  ),
+                              child: Icon(icon, color: color, size: 24),
+                          ),
+                          const Spacer(),
+                          Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                          const SizedBox(height: 4),
+                          Text(subtitle, style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                      ],
+                  ),
+              ),
+          ),
+      );
+  }
+  
+  // ✅ Recent Activity Card — shows ALL game types
+  Widget _buildRecentActivityCard() {
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _dataService.getGameSessionHistory(elderlyUserId),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return _buildLoadingCard("Calculating domain scores...");
+          return _buildLoadingCard("Loading activity...");
+        }
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return _buildEmptyCard("No recent activity");
         }
 
-        if (snapshot.hasError) {
-          return _buildErrorCard("Error loading domains: ${snapshot.error}");
-        }
-
-        if (!snapshot.hasData || snapshot.data == null) {
-          return _buildEmptyCard("No domain data available");
-        }
-
-        final data = snapshot.data!;
-        final attentionScore = data['attentionScore'] as double;
-        final processingSpeedScore = data['processingSpeedScore'] as double;
-        final sessionsCount = data['sessionsCount'] as int;
-
+        final sessions = snapshot.data!;
         return Container(
           padding: const EdgeInsets.all(20),
           decoration: _buildCardDecoration(),
@@ -424,55 +456,13 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'Cognitive Domains',
-                    style: CaretakerTextStyles.cardTitle,
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: CaretakerColors.lightGreen,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      'Color Tap Game',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: CaretakerColors.primaryGreen,
-                      ),
-                    ),
-                  ),
+                  const Text('Recent Activity', style: CaretakerTextStyles.cardTitle),
+                  Text('${sessions.length} sessions',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                 ],
               ),
-              const SizedBox(height: 4),
-              Text(
-                'Based on $sessionsCount game sessions',
-                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-              ),
-              const SizedBox(height: 20),
-
-              // Attention Domain
-              _buildDomainRow(
-                'Attention',
-                'Measures focus and correct tap accuracy',
-                attentionScore,
-                CaretakerColors.highlightBlue,
-                Icons.center_focus_strong,
-              ),
               const SizedBox(height: 16),
-
-              // Processing Speed Domain
-              _buildDomainRow(
-                'Processing Speed',
-                'Measures reaction time and response speed',
-                processingSpeedScore,
-                CaretakerColors.successGreen,
-                Icons.speed,
-              ),
+              ...sessions.take(5).map((session) => _buildActivityItem(session)),
             ],
           ),
         );
@@ -480,499 +470,117 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
     );
   }
 
-  Widget _buildDomainRow(
-    String label,
-    String description,
-    double score,
-    Color color,
-    IconData icon,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+  Widget _buildActivityItem(Map<String, dynamic> session) {
+    final gameType = session['gameType'] as String? ?? 'Game';
+    final score = session['score'] as int? ?? 0;
+    final timestamp = session['createdAt'] as int? ?? 0;
+    final timeAgo = _getTimeAgo(timestamp);
+
+    // Pick icon + color based on game type
+    IconData icon;
+    Color color;
+    String subtitle;
+
+    switch (gameType) {
+      case 'Color Tap':
+        icon = Icons.touch_app;
+        color = Colors.blue;
+        final correct = session['correct_taps'] as int? ?? 0;
+        final wrong = session['false_taps'] as int? ?? 0;
+        final denom = correct + wrong;
+        final acc = denom > 0 ? (correct / denom * 100).toInt() : 0;
+        subtitle = 'Accuracy: $acc%  •  Reaction: ${((session['average_reaction_time'] as double? ?? 0.0)).toStringAsFixed(2)}s';
+        break;
+      case 'Flip Card':
+        icon = Icons.flip;
+        color = Colors.purple;
+        final eff = ((session['efficiency'] as double? ?? 0.0) * 100).toInt();
+        subtitle = 'Efficiency: $eff%';
+        break;
+      case 'City Atlas':
+        icon = Icons.map;
+        color = Colors.teal;
+        final cognitive = session['cognitive_contributions'] as Map<String, dynamic>? ?? {};
+        subtitle = 'Exec: ${cognitive['executive_function'] ?? '-'}  •  Mem: ${cognitive['memory'] ?? '-'}';
+        break;
+      case 'Event Ordering':
+        icon = Icons.history_edu;
+        color = Colors.orange;
+        final metrics = session['metrics'] as Map<String, dynamic>? ?? {};
+        final seqAcc = ((metrics['sequence_accuracy'] as num? ?? 0) * 100).toInt();
+        subtitle = 'Sequence Accuracy: $seqAcc%';
+        break;
+      case 'Routine Recall':
+        icon = Icons.schedule;
+        color = Colors.green;
+        final metrics = session['metrics'] as Map<String, dynamic>? ?? {};
+        final comp = ((metrics['completeness'] as num? ?? 0) * 100).toInt();
+        subtitle = 'Completeness: $comp%';
+        break;
+      case 'Monument Recall':
+        icon = Icons.account_balance;
+        color = Colors.indigo;
+        final cognitive = session['cognitive_contributions'] as Map<String, dynamic>? ?? {};
+        subtitle = 'Memory: ${cognitive['memory'] ?? '-'}  •  Language: ${cognitive['language'] ?? '-'}';
+        break;
+      default:
+        icon = Icons.sports_esports;
+        color = Colors.grey;
+        subtitle = 'Score: $score';
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(6),
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(6),
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(icon, size: 16, color: color),
+              child: Icon(icon, size: 20, color: color),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Text(
-                    description,
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                  ),
+                  Text(gameType,
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Text(subtitle,
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                  Text(timeAgo,
+                      style: TextStyle(fontSize: 10, color: Colors.grey.shade400)),
                 ],
               ),
             ),
-            Text(
-              '${score.toStringAsFixed(0)}%',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: color,
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
               ),
+              child: Text('$score pts',
+                  style: TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.bold, color: color)),
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            value: score / 100,
-            backgroundColor: Colors.grey.shade200,
-            color: color,
-            minHeight: 8,
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ✅ NEW: Game Metrics Card - Shows detailed game metrics
-  Widget _buildGameMetricsCard() {
-    return StreamBuilder<Map<String, dynamic>>(
-      stream: _dataService.getDetailedGameMetrics(elderlyUserId),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return _buildLoadingCard("Loading game metrics...");
-        }
-
-        if (snapshot.hasError) {
-          return _buildErrorCard("Error loading metrics: ${snapshot.error}");
-        }
-
-        if (!snapshot.hasData || snapshot.data == null) {
-          return _buildEmptyCard("No game metrics available");
-        }
-
-        final data = snapshot.data!;
-        final accuracy = data['accuracy'] as double;
-        final avgReactionTime = data['avgReactionTime'] as double;
-        final correctTaps = data['totalCorrectTaps'] as int;
-        final falseTaps = data['totalFalseTaps'] as int;
-        final missedTaps = data['totalMissedTaps'] as int;
-        final totalTaps = correctTaps + falseTaps + missedTaps;
-
-        return Container(
-          padding: const EdgeInsets.all(20),
-          decoration: _buildCardDecoration(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Game Performance Metrics',
-                style: CaretakerTextStyles.cardTitle,
-              ),
-              const SizedBox(height: 20),
-
-              // Main Metrics
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildMetricBox(
-                      'Accuracy',
-                      '${accuracy.toStringAsFixed(1)}%',
-                      Icons.stars,
-                      Colors.purple,
-                      'Correct taps / Total taps',
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildMetricBox(
-                      'Reaction Time',
-                      '${avgReactionTime.toStringAsFixed(3)}s',
-                      Icons.timer,
-                      Colors.blue,
-                      'Average response speed',
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 20),
-
-              // Tap Breakdown
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Tap Breakdown (Total: $totalTaps)',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade700,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Correct Taps
-                    _buildTapBreakdownRow(
-                      'Correct Taps',
-                      correctTaps,
-                      totalTaps > 0 ? (correctTaps / totalTaps * 100) : 0,
-                      Colors.green,
-                      Icons.check_circle,
-                    ),
-                    const SizedBox(height: 8),
-
-                    // False Taps
-                    _buildTapBreakdownRow(
-                      'False Taps',
-                      falseTaps,
-                      totalTaps > 0 ? (falseTaps / totalTaps * 100) : 0,
-                      Colors.red,
-                      Icons.cancel,
-                    ),
-                    const SizedBox(height: 8),
-
-                    // Missed Taps
-                    _buildTapBreakdownRow(
-                      'Missed Taps',
-                      missedTaps,
-                      totalTaps > 0 ? (missedTaps / totalTaps * 100) : 0,
-                      Colors.orange,
-                      Icons.remove_circle_outline,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildMetricBox(
-    String label,
-    String value,
-    IconData icon,
-    Color color,
-    String description,
-  ) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 16, color: color),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            description,
-            style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
-          ),
-        ],
       ),
     );
   }
 
-  Widget _buildTapBreakdownRow(
-    String label,
-    int count,
-    double percentage,
-    Color color,
-    IconData icon,
-  ) {
-    return Row(
-      children: [
-        Icon(icon, size: 14, color: color),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            label,
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-          ),
-        ),
-        Text(
-          '$count',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          '(${percentage.toStringAsFixed(1)}%)',
-          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-        ),
-      ],
-    );
-  }
 
-  // ✅ Recent Activity Card - WITH IMPROVED TIMESTAMP HANDLING
-  Widget _buildRecentActivityCard() {
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _dataService.getRecentGameSessions(elderlyUserId),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return _buildLoadingCard("Loading recent activity...");
-        }
 
-        if (snapshot.hasError) {
-          return _buildErrorCard("Error loading activity: ${snapshot.error}");
-        }
-
-        if (!snapshot.hasData ||
-            snapshot.data == null ||
-            snapshot.data!.isEmpty) {
-          return Container(
-            padding: const EdgeInsets.all(20),
-            decoration: _buildCardDecoration(),
-            child: Column(
-              children: [
-                Icon(
-                  Icons.inbox_outlined,
-                  size: 48,
-                  color: Colors.grey.shade400,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'No recent activity',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Activity will appear here once games are played',
-                  style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          );
-        }
-
-        final sessions = snapshot.data!;
-
-        return Container(
-          padding: const EdgeInsets.all(20),
-          decoration: _buildCardDecoration(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Recent Activity',
-                    style: CaretakerTextStyles.cardTitle,
-                  ),
-                  Text(
-                    '${sessions.length} sessions',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              ...sessions.take(5).map((session) {
-                final score = session['score'] as int? ?? 0;
-                final correctTaps = session['correct_taps'] as int? ?? 0;
-                final falseTaps = session['false_taps'] as int? ?? 0;
-                final missedTaps = session['missed_taps'] as int? ?? 0;
-                final avgReactionTime =
-                    session['average_reaction_time'] as double? ?? 0.0;
-
-                // ✅ TIMESTAMP HANDLING (already converted in CaretakerDataService)
-                int timestamp = session['createdAt'] as int? ?? 0;
-                final timeAgo = _getTimeAgo(timestamp);
-
-                // Calculate accuracy
-                final totalAttempts = correctTaps + falseTaps;
-                final accuracy =
-                    totalAttempts > 0
-                        ? (correctTaps / totalAttempts * 100).toInt()
-                        : 0;
-
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.grey.shade200),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: CaretakerColors.lightGreen,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(
-                                Icons.touch_app,
-                                size: 20,
-                                color: CaretakerColors.primaryGreen,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Color Tap Game',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  Text(
-                                    timeAgo,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey.shade500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: CaretakerColors.primaryGreen
-                                        .withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    '$score pts',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: CaretakerColors.primaryGreen,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '$accuracy% acc',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600,
-                                    color:
-                                        accuracy >= 80
-                                            ? Colors.green
-                                            : accuracy >= 60
-                                            ? Colors.orange
-                                            : Colors.red,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        // Metrics Row
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
-                          children: [
-                            _buildSessionMetric(
-                              '✓',
-                              '$correctTaps',
-                              Colors.green,
-                            ),
-                            _buildSessionMetric('✗', '$falseTaps', Colors.red),
-                            _buildSessionMetric(
-                              '○',
-                              '$missedTaps',
-                              Colors.orange,
-                            ),
-                            _buildSessionMetric(
-                              '⚡',
-                              '${avgReactionTime.toStringAsFixed(2)}s',
-                              Colors.blue,
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildSessionMetric(String icon, String value, Color color) {
-    return Row(
-      children: [
-        Text(icon, style: TextStyle(fontSize: 12, color: color)),
-        const SizedBox(width: 4),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: color,
-          ),
-        ),
-      ],
-    );
-  }
 
   String _getTimeAgo(int timestamp) {
     if (timestamp == 0) return 'Unknown';
@@ -991,112 +599,85 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
     }
   }
 
-  // ✅ Patient Header Card
+  // ✅ Patient Header Card — reads from SharedPreferences state (no Firestore query needed)
   Widget _buildPatientHeaderCard(BuildContext context) {
-    return StreamBuilder<Map<String, dynamic>>(
-      stream: _dataService.getUserProfile(elderlyUserId),
-      builder: (context, snapshot) {
-        String name = elderlyUserId;
-        String age = "--";
-        String gender = "--";
-        String location = "Unknown";
-        String lastActive = "Unknown";
-        String status = "Active";
+    final name = elderlyUserName.isNotEmpty ? elderlyUserName : elderlyUserId;
+    final age = elderlyUserAge;
+    final gender = elderlyUserGender;
+    const status = 'Active';
+    final statusColor = _getStatusColor(status);
 
-        if (snapshot.hasData && snapshot.data != null) {
-          final profile = snapshot.data!;
-          name = profile['name'] as String? ?? elderlyUserId;
-          age = profile['age']?.toString() ?? "--";
-          gender = profile['gender'] as String? ?? "--";
-          location = profile['location'] as String? ?? "Unknown";
-          lastActive = profile['lastActive'] as String? ?? "Unknown";
-          status = profile['status'] as String? ?? "Active";
-        }
-
-        final statusColor = _getStatusColor(status);
-
-        return Container(
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [CaretakerColors.primaryGreen, Color(0xFF2DBE91)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: CaretakerLayout.cardRadius,
-          ),
-          padding: const EdgeInsets.all(20),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [CaretakerColors.primaryGreen, Color(0xFF2DBE91)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: CaretakerLayout.cardRadius,
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Age $age • $gender',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.white.withValues(alpha: 0.9),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
                   children: [
+                    const Icon(Icons.home, size: 14, color: Colors.white),
+                    const SizedBox(width: 4),
                     Text(
-                      name,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      "Age $age • $gender",
+                      'Home',
                       style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.white.withOpacity(0.9),
+                        fontSize: 12,
+                        color: Colors.white.withValues(alpha: 0.9),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.location_on,
-                          size: 14,
-                          color: Colors.white,
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            "$location • $lastActive",
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.white.withOpacity(0.9),
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
                     ),
                   ],
                 ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white, width: 1.5),
-                ),
-                child: Text(
-                  status,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
-        );
-      },
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.white, width: 1.5),
+            ),
+            child: const Text(
+              status,
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
+
 
   Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {
@@ -1109,10 +690,10 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
         return CaretakerColors.warningAmber;
       default:
         return Colors.grey;
-    }
+      }
   }
 
-  // ✅ ENHANCED: Alert Banner - Now supports medication reminders and dismissal
+  // âœ… ENHANCED: Alert Banner - Now supports medication reminders and dismissal
   Widget _buildAlertBanner(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
       stream:
@@ -1161,52 +742,32 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
                               Text(
                                 title,
                                 style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: alertColor.withOpacity(0.9),
-                                  fontSize: 14,
-                                  fontFamily: 'Inter',
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: alertColor,
                                 ),
                               ),
-                              if (message.isNotEmpty) ...[
-                                const SizedBox(height: 2),
-                                Text(
-                                  message,
-                                  style: TextStyle(
-                                    color: alertColor.withOpacity(0.7),
-                                    fontSize: 12,
-                                  ),
+                              const SizedBox(height: 4),
+                              Text(
+                                message,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey.shade700,
                                 ),
-                              ],
+                              ),
                             ],
                           ),
                         ),
-                        // Action Button
-                        OutlinedButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder:
-                                    (_) => const MedicationManagementScreen(),
-                              ),
-                            );
-                          },
-                          style: OutlinedButton.styleFrom(
+                        TextButton(
+                          onPressed: () => _dismissAlert(alertId),
+                          style: TextButton.styleFrom(
+                            backgroundColor: Colors.white,
                             foregroundColor: alertColor,
-                            side: BorderSide(color: alertColor),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(20),
                             ),
                           ),
                           child: Text(actionText),
-                        ),
-                        const SizedBox(width: 8),
-                        // Dismiss Button
-                        IconButton(
-                          icon: Icon(Icons.close, color: alertColor, size: 20),
-                          onPressed: () => _dismissAlert(alertId),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
                         ),
                       ],
                     ),
@@ -1219,87 +780,151 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
   }
 
   IconData _getAlertIcon(String type) {
-    switch (type.toLowerCase()) {
+    switch (type) {
       case 'critical':
-        return Icons.error;
-      case 'warning':
         return Icons.warning_amber_rounded;
       case 'info':
         return Icons.info_outline;
       default:
-        return Icons.notifications;
+        return Icons.error_outline;
     }
   }
 
   Color _getAlertColor(String type) {
-    switch (type.toLowerCase()) {
+    switch (type) {
       case 'critical':
         return CaretakerColors.errorRed;
-      case 'warning':
-        return const Color(0xFF5D4037);
       case 'info':
-        return CaretakerColors.highlightBlue;
+        return CaretakerColors.primaryGreen;
       default:
-        return Colors.grey;
+        return CaretakerColors.warningAmber;
     }
   }
 
   Color _getAlertBackgroundColor(String type) {
-    switch (type.toLowerCase()) {
-      case 'critical':
-        return const Color(0xFFFFEBEE);
-      case 'warning':
-        return const Color(0xFFFFF4E5);
-      case 'info':
-        return const Color(0xFFE3F2FD);
-      default:
-        return Colors.grey.shade100;
-    }
+    return _getAlertColor(type).withValues(alpha: 0.1);
   }
 
-  // ✅ Stats Cards Row
+  // âœ… Quick Access Grid
+  Widget _buildQuickAccessGrid(BuildContext context) {
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 2,
+      childAspectRatio: 1.5,
+      mainAxisSpacing: 16,
+      crossAxisSpacing: 16,
+      children: [
+        _buildQuickAccessCard(
+          context,
+          'Safety Monitor',
+          Icons.security,
+          Colors.red,
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const SafetyMonitorScreen(),
+            ),
+          ),
+        ),
+        _buildQuickAccessCard(
+          context,
+          'Medication',
+          Icons.medication,
+          Colors.blue,
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const MedicationManagementScreen(),
+            ),
+          ),
+        ),
+        _buildQuickAccessCard(
+          context,
+          'Buddy Logs',
+          Icons.chat_bubble,
+          Colors.green,
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const BuddyActivityLogScreen(),
+            ),
+          ),
+        ),
+        // Test Alert Button (For Demo)
+        _buildQuickAccessCard(
+          context,
+          'Test Alert',
+          Icons.notification_important,
+          Colors.orange,
+          _createTestMedicationAlert,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildQuickAccessCard(
+    BuildContext context,
+    String title,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: CaretakerLayout.cardRadius,
+          boxShadow: CaretakerLayout.cardShadow,
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 32, color: color),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: CaretakerColors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // âœ… Stats Cards Row (Total Games & Adherence)
   Widget _buildStatsCardsRow(BuildContext context) {
     return StreamBuilder<Map<String, dynamic>>(
       stream: _dataService.getOverallStatistics(elderlyUserId),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Row(
-            children: [
-              Expanded(child: _buildLoadingCard("Loading...")),
-              const SizedBox(width: 12),
-              Expanded(child: _buildLoadingCard("Loading...")),
-            ],
-          );
-        }
-
-        int totalGames = 0;
-        int medicationAdherence = 87;
-
-        if (snapshot.hasData && snapshot.data != null) {
-          final stats = snapshot.data!;
-          totalGames = stats['totalGames'] as int? ?? 0;
-          medicationAdherence = stats['medicationAdherence'] as int? ?? 87;
-        }
+        final stats = snapshot.data ?? {};
+        final totalGames = stats['totalGames'] as int? ?? 0;
+        final adherence = stats['medicationAdherence'] as int? ?? 0;
 
         return Row(
           children: [
             Expanded(
-              child: _buildSmallStatCard(
-                title: "Games Played",
-                value: "$totalGames",
-                subtext: "Total sessions",
-                icon: Icons.videogame_asset,
-                color: CaretakerColors.highlightBlue,
+              child: _buildStatCard(
+                context,
+                'Total Games',
+                '$totalGames',
+                Icons.games,
+                Colors.purple,
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 16),
             Expanded(
-              child: _buildSmallStatCard(
-                title: "Medication",
-                value: "$medicationAdherence%",
-                subtext: "Adherence",
-                icon: Icons.medication,
-                color: CaretakerColors.successGreen,
+              child: _buildStatCard(
+                context,
+                'Medication',
+                '$adherence%',
+                Icons.medical_services,
+                Colors.blue,
               ),
             ),
           ],
@@ -1308,264 +933,143 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
     );
   }
 
-  Widget _buildSmallStatCard({
-    required String title,
-    required String value,
-    required String subtext,
-    required IconData icon,
-    required Color color,
-  }) {
+  Widget _buildStatCard(
+    BuildContext context,
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: _buildCardDecoration(),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: CaretakerLayout.cardRadius,
+        boxShadow: CaretakerLayout.cardShadow,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: CaretakerTextStyles.caption,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Icon(icon, color: color, size: 20),
-            ],
-          ),
-          const SizedBox(height: 8),
+          Icon(icon, color: color),
+          const SizedBox(height: 12),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: CaretakerColors.textPrimary,
+              color: color,
             ),
           ),
           Text(
-            subtext,
-            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+            title,
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
           ),
         ],
       ),
     );
   }
 
-  // Utility widgets
-  Widget _buildLoadingCard(String message) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: _buildCardDecoration(),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(
-              height: 20,
-              width: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              message,
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildErrorCard(String message) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: _buildCardDecoration(),
-      child: Row(
+  SliverAppBar _buildAppBar(BuildContext context) {
+    return SliverAppBar(
+      backgroundColor: CaretakerColors.background,
+      elevation: 0,
+      floating: true,
+      title: const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.error_outline, color: CaretakerColors.errorRed, size: 20),
-          const SizedBox(width: 12),
-          Expanded(child: Text(message, style: const TextStyle(fontSize: 12))),
+          Text(
+            'Caretaker Dashboard',
+            style: TextStyle(
+              color: CaretakerColors.textPrimary,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            'Monitoring & Care',
+            style: TextStyle(color: CaretakerColors.textSecondary, fontSize: 13),
+          ),
         ],
       ),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.notifications_outlined, color: Colors.black),
+          onPressed: () {},
+        ),
+        IconButton(
+          icon: const Icon(Icons.logout, color: Colors.red),
+          // Sign out
+          onPressed: () {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const LoginScreen()),
+            );
+          },
+        ),
+      ],
     );
   }
 
-  Widget _buildEmptyCard(String message) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: _buildCardDecoration(),
-      child: Center(
-        child: Text(
-          message,
-          style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-          textAlign: TextAlign.center,
-        ),
+  Widget _buildSectionTitle(String title) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.bold,
+        color: CaretakerColors.textPrimary,
       ),
     );
   }
 
   BoxDecoration _buildCardDecoration() {
     return BoxDecoration(
-      color: CaretakerColors.cardWhite,
+      color: Colors.white,
       borderRadius: CaretakerLayout.cardRadius,
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.05),
-          blurRadius: 10,
-          offset: const Offset(0, 2),
-        ),
-      ],
+      boxShadow: CaretakerLayout.cardShadow,
     );
   }
 
-  SliverAppBar _buildAppBar(BuildContext context) {
-    return SliverAppBar(
-      backgroundColor: CaretakerColors.cardWhite,
-      floating: true,
-      pinned: true,
-      elevation: 0,
-      centerTitle: false,
-      titleSpacing: 0,
-      leading: Container(
-        margin: const EdgeInsets.all(8),
-        decoration: const BoxDecoration(
-          color: CaretakerColors.lightGreen,
-          shape: BoxShape.circle,
-        ),
-        child: const Center(
-          child: Text(
-            "EC",
-            style: TextStyle(
-              color: CaretakerColors.primaryGreen,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-      ),
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text("Overview", style: CaretakerTextStyles.header),
-          Text(
-            "Caretaker Dashboard",
-            style: CaretakerTextStyles.caption.copyWith(fontSize: 12),
-          ),
-        ],
-      ),
-      actions: [
-        IconButton(
-          icon: const Icon(
-            Icons.notifications_none,
-            color: CaretakerColors.textPrimary,
-          ),
-          onPressed: () {},
-        ),
-        // ✅ NEW: Test Alert Button (for development/testing)
-        IconButton(
-          icon: const Icon(
-            Icons.add_alert,
-            color: CaretakerColors.warningAmber,
-          ),
-          onPressed: _createTestMedicationAlert,
-          tooltip: 'Create Test Alert',
-        ),
-        IconButton(
-          icon: const Icon(Icons.logout, color: CaretakerColors.errorRed),
-          onPressed: () async {
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.clear();
-            if (!mounted) return;
-            Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(builder: (_) => const LoginScreen()),
-              (route) => false,
-            );
-          },
-        ),
-        const SizedBox(width: 8),
-      ],
-    );
-  }
-
-  Widget _buildSectionTitle(String title) {
-    return Text(title, style: CaretakerTextStyles.sectionTitle);
-  }
-
-  Widget _buildQuickAccessGrid(BuildContext context) {
-    return GridView.count(
-      shrinkWrap: true,
-      crossAxisCount: 2,
-      crossAxisSpacing: 12,
-      mainAxisSpacing: 12,
-      physics: const NeverScrollableScrollPhysics(),
-      childAspectRatio: 1.5,
-      children: [
-        _buildNavCard(
-          context,
-          "Safety Monitor",
-          Icons.security,
-          Colors.red.shade100,
-          Colors.red,
-          const SafetyMonitorScreen(),
-        ),
-        _buildNavCard(
-          context,
-          "Medication",
-          Icons.medical_services,
-          Colors.blue.shade100,
-          Colors.blue,
-          const MedicationScreen(),
-        ),
-        _buildNavCard(
-          context,
-          "Care Connect",
-          Icons.people,
-          Colors.purple.shade100,
-          Colors.purple,
-          const VisionGuardianScreen(),
-        ),
-        _buildNavCard(
-          context,
-          "Activity Log",
-          Icons.history,
-          Colors.orange.shade100,
-          Colors.orange,
-          const BuddyActivityLogScreen(),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNavCard(
-    BuildContext context,
-    String title,
-    IconData icon,
-    Color bg,
-    Color iconColor,
-    Widget screen,
-  ) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          color: CaretakerColors.cardWhite,
-          borderRadius: CaretakerLayout.cardRadius,
-        ),
+  Widget _buildLoadingCard(String message) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: _buildCardDecoration(),
+      child: Center(
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
-              child: Icon(icon, color: iconColor),
-            ),
-            const SizedBox(height: 8),
-            Text(title, style: CaretakerTextStyles.cardTitle),
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(message),
           ],
         ),
       ),
     );
   }
+
+  Widget _buildErrorCard(String error) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: _buildCardDecoration(),
+      child: Center(
+        child: Text(error, style: const TextStyle(color: Colors.red)),
+      ),
+    );
+  }
+
+  Widget _buildEmptyCard(String message) {
+      return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: _buildCardDecoration(),
+          width: double.infinity,
+          child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                  Icon(Icons.inbox, size: 40, color: Colors.grey.shade300),
+                  const SizedBox(height: 10),
+                  Text(message, style: TextStyle(color: Colors.grey.shade500)),
+              ],
+          ),
+      );
+  }
 }
+
+

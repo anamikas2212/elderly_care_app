@@ -1,6 +1,7 @@
 
 import 'package:flutter/material.dart';
 import 'chill_zone_screen.dart';
+import 'daily_engagement_screen.dart';
 
 class ZoneSelectionScreen extends StatelessWidget {
   final String userId;
@@ -8,6 +9,7 @@ class ZoneSelectionScreen extends StatelessWidget {
   const ZoneSelectionScreen({Key? key, required this.userId}) : super(key: key);
 
   @override
+
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -72,9 +74,11 @@ class ZoneSelectionScreen extends StatelessWidget {
               icon: Icons.psychology,
               color: Colors.orange,
               onTap: () {
-                // TODO: Implement Daily Engagement Zone
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Coming Soon!')),
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => DailyEngagementScreen(userId: userId),
+                  ),
                 );
               },
             ),

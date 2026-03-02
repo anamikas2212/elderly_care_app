@@ -1,5 +1,5 @@
 // FILE LOCATION: lib/services/game_services/session_tracker.dart
-// CORRECTED VERSION - Fixed collection names to match caretaker dashboard
+// UPDATED VERSION - Supports both Color Tap and Flip Card Match games
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/cognitive/game_session.dart';
@@ -8,7 +8,6 @@ class SessionTracker {
   final String userId;
   final String gameName;
   final int difficulty;
-
   late DateTime _startTime;
   final List<Map<String, dynamic>> _actions = [];
   final Map<String, dynamic> _metrics = {};
@@ -41,11 +40,11 @@ class SessionTracker {
     _metrics[key] = value;
   }
 
-  // End session and save to Firestore (AUTOMATIC - NO MANUAL DATA ENTRY!)
+  // End session and save to Firestore
   Future<GameSession> endSession({
     required int finalScore,
     Map<String, dynamic>? additionalMetrics,
-    Map<String, dynamic>? cognitiveScores,
+    Map<String, int>? cognitiveScores,
   }) async {
     final endTime = DateTime.now();
 
@@ -57,13 +56,6 @@ class SessionTracker {
     // Add action history to metrics
     _metrics['actions'] = _actions;
     _metrics['totalActions'] = _actions.length;
-
-    // Calculate and add average_reaction_time for caretaker dashboard
-    final avgResponseTime = getAverageResponseTime();
-    if (avgResponseTime > 0) {
-      _metrics['average_reaction_time'] =
-          avgResponseTime / 1000; // Convert ms to seconds
-    }
 
     // Create game session
     final session = GameSession.create(
@@ -77,7 +69,7 @@ class SessionTracker {
       cognitiveScores: cognitiveScores,
     );
 
-    // Save to Firestore AUTOMATICALLY
+    // Save to Firestore
     try {
       print('🎮 Saving game session...');
       print('   User: $userId');
@@ -87,94 +79,107 @@ class SessionTracker {
 
       final sessionData = session.toMap();
 
-      // CRITICAL: Add gameType field for caretaker queries
+      // Add fields expected by caretaker dashboard
       sessionData['gameType'] = gameName;
-
-      // Add timestamp field that caretaker dashboard expects
       sessionData['timestamp'] = FieldValue.serverTimestamp();
 
-      // Ensure createdAt is set (caretaker dashboard needs this)
       if (!sessionData.containsKey('createdAt')) {
         sessionData['createdAt'] = FieldValue.serverTimestamp();
       }
 
-      // ✅ CRITICAL FIX: Flatten metrics to document root level
-      // CaretakerDataService expects these fields at the top level, not nested in metrics
+      // Flatten metrics to document root level
       if (sessionData.containsKey('metrics') && sessionData['metrics'] is Map) {
-        final metrics = sessionData['metrics'] as Map<String, dynamic>;
+        final metrics = sessionData['metrics'] as Map;
 
-        // Extract key metrics to document root for easy querying
-        if (metrics.containsKey('correct_taps')) {
-          sessionData['correct_taps'] = metrics['correct_taps'];
+        // For Color Tap game
+        if (gameName == 'Color Tap (Reaction)') {
+          if (metrics.containsKey('correct_taps')) {
+            sessionData['correct_taps'] = metrics['correct_taps'];
+          }
+          if (metrics.containsKey('false_taps')) {
+            sessionData['false_taps'] = metrics['false_taps'];
+          }
+          if (metrics.containsKey('missed_taps')) {
+            sessionData['missed_taps'] = metrics['missed_taps'];
+          }
+          if (metrics.containsKey('average_reaction_time')) {
+            sessionData['average_reaction_time'] =
+                metrics['average_reaction_time'];
+          }
+          if (metrics.containsKey('accuracy')) {
+            sessionData['accuracy'] = metrics['accuracy'];
+          }
         }
-        if (metrics.containsKey('false_taps')) {
-          sessionData['false_taps'] = metrics['false_taps'];
-        }
-        if (metrics.containsKey('missed_taps')) {
-          sessionData['missed_taps'] = metrics['missed_taps'];
-        }
-        if (metrics.containsKey('average_reaction_time')) {
-          sessionData['average_reaction_time'] =
-              metrics['average_reaction_time'];
-        }
-        if (metrics.containsKey('accuracy')) {
-          sessionData['accuracy'] = metrics['accuracy'];
-        }
-        if (metrics.containsKey('total_color_changes')) {
-          sessionData['total_color_changes'] = metrics['total_color_changes'];
+
+        // For Flip Card Match game
+        if (gameName == 'Flip Card Match') {
+          if (metrics.containsKey('total_pairs')) {
+            sessionData['total_pairs'] = metrics['total_pairs'];
+          }
+          if (metrics.containsKey('pairs_matched')) {
+            sessionData['pairs_matched'] = metrics['pairs_matched'];
+          }
+          if (metrics.containsKey('total_attempts')) {
+            sessionData['total_attempts'] = metrics['total_attempts'];
+          }
+          if (metrics.containsKey('wrong_attempts')) {
+            sessionData['wrong_attempts'] = metrics['wrong_attempts'];
+          }
+          if (metrics.containsKey('average_time_per_pair')) {
+            sessionData['average_time_per_pair'] =
+                metrics['average_time_per_pair'];
+          }
+          if (metrics.containsKey('total_time')) {
+            sessionData['total_time'] = metrics['total_time'];
+          }
+          if (metrics.containsKey('efficiency')) {
+            sessionData['efficiency'] = metrics['efficiency'];
+          }
+          if (metrics.containsKey('time_per_pair')) {
+            sessionData['time_per_pair'] = metrics['time_per_pair'];
+          }
         }
       }
 
-      // ✅ FIXED: Changed to colorTapGameSessions to match caretaker queries
-      // MAIN COLLECTION - Caretaker dashboard reads from here
+      // Determine collection name based on game
+      String collectionName;
+      if (gameName == 'Color Tap (Reaction)') {
+        collectionName = 'colorTapGameSessions';
+      } else if (gameName == 'Flip Card Match') {
+        collectionName = 'flipCardGameSessions';
+      } else {
+        collectionName = 'game_sessions';
+      }
+
+      // Save to main collection
       await FirebaseFirestore.instance
-          .collection('colorTapGameSessions') // ✅ Changed from 'game_sessions'
+          .collection(collectionName)
           .doc(session.id)
           .set(sessionData);
 
-      // USER'S PERSONAL COLLECTION - For user-specific queries
+      // Save to user's personal collection
       await FirebaseFirestore.instance
           .collection('users')
           .doc(userId)
-          .collection('colorTapGameSessions') // ✅ Changed from 'game_sessions'
+          .collection(collectionName)
           .doc(session.id)
           .set(sessionData);
 
-      // ✅ UPDATE USER STATS - Now includes lastActive field
+      // Update user stats
       await FirebaseFirestore.instance.collection('users').doc(userId).set({
         'lastGamePlayed': FieldValue.serverTimestamp(),
-        'lastActive':
-            FieldValue.serverTimestamp(), // ✅ ADDED - Dashboard needs this
+        'lastActive': FieldValue.serverTimestamp(),
         'lastGameName': gameName,
         'totalGamesPlayed': FieldValue.increment(1),
-      }, SetOptions(merge: true)); // Creates document if it doesn't exist!
+      }, SetOptions(merge: true));
 
       print('✅ Session saved successfully!');
-      print('   Main collection: colorTapGameSessions/${session.id}');
-      print(
-        '   User collection: users/$userId/colorTapGameSessions/${session.id}',
-      );
+      print('   Main collection: $collectionName/${session.id}');
+      print('   User collection: users/$userId/$collectionName/${session.id}');
       print('   🎯 Caretaker dashboard will update in real-time!');
     } catch (e, stackTrace) {
       print('❌ ERROR SAVING SESSION: $e');
       print('Stack trace: $stackTrace');
-
-      // Check common issues
-      if (e.toString().contains('permission-denied')) {
-        print('⚠️  PERMISSION DENIED - Check Firestore Rules!');
-        print(
-          '   Go to: https://console.firebase.google.com/project/buddy-system-74299/firestore/rules',
-        );
-        print('   Make sure rules allow write access.');
-      } else if (e.toString().contains('not initialized')) {
-        print('⚠️  Firebase not initialized properly!');
-        print('   Check if Firebase.initializeApp() was called in main.dart');
-      } else if (e.toString().contains('FAILED_PRECONDITION')) {
-        print('⚠️  Missing index! Firebase needs to create an index.');
-        print('   Click the link in the error above to auto-create it.');
-      }
-
-      // Re-throw to let caller handle
       rethrow;
     }
 
@@ -213,19 +218,16 @@ class SessionTracker {
     return times.reduce((a, b) => a + b) / times.length;
   }
 
-  // Quick test method - call this from a button to verify Firebase works
+  // Quick test method
   static Future<void> testFirebaseConnection(String userId) async {
     try {
       print('🧪 Testing Firebase connection...');
-
       await FirebaseFirestore.instance.collection('test').add({
         'message': 'Test from SessionTracker',
         'userId': userId,
         'timestamp': FieldValue.serverTimestamp(),
       });
-
       print('✅ Firebase connection works!');
-      print('   Check Firebase Console → Firestore → test collection');
     } catch (e) {
       print('❌ Firebase test failed: $e');
     }

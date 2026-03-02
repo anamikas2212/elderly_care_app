@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../theme/caretaker_theme.dart';
@@ -15,6 +15,8 @@ class _CognitiveHealthScreenState extends State<CognitiveHealthScreen> {
   final CaretakerDataService _dataService = CaretakerDataService();
   String _elderlyUserId = "";
   bool _isLoading = true;
+  int? _selectedDifficulty; // null = all levels, 1 = easy, 2 = medium, 3 = hard
+
 
   @override
   void initState() {
@@ -88,7 +90,10 @@ class _CognitiveHealthScreenState extends State<CognitiveHealthScreen> {
         elevation: 0,
       ),
       body: StreamBuilder<Map<String, dynamic>>(
-        stream: _dataService.calculateDomainScores(_elderlyUserId),
+        stream: _dataService.calculateDomainScoresByDifficulty(
+          _elderlyUserId,
+          _selectedDifficulty,
+        ),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -112,6 +117,66 @@ class _CognitiveHealthScreenState extends State<CognitiveHealthScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Difficulty Filter Dropdown
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: CaretakerColors.cardWhite,
+                    borderRadius: CaretakerLayout.cardRadius,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.filter_list,
+                        color: CaretakerColors.primaryGreen,
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Difficulty Level:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: DropdownButton<int?>(
+                          value: _selectedDifficulty,
+                          isExpanded: true,
+                          items: const [
+                            DropdownMenuItem(
+                              value: null,
+                              child: Text('All Levels'),
+                            ),
+                            DropdownMenuItem(
+                              value: 1,
+                              child: Text('Easy (2.0s intervals)'),
+                            ),
+                            DropdownMenuItem(
+                              value: 2,
+                              child: Text('Medium (1.8s intervals)'),
+                            ),
+                            DropdownMenuItem(
+                              value: 3,
+                              child: Text('Hard (1.4s intervals)'),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            setState(() => _selectedDifficulty = value);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
                 _buildOverviewCard(
                   attentionScore,
                   processingSpeedScore,
@@ -157,15 +222,15 @@ class _CognitiveHealthScreenState extends State<CognitiveHealthScreen> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            CaretakerColors.primaryGreen.withOpacity(0.1),
-            CaretakerColors.highlightBlue.withOpacity(0.1),
+            CaretakerColors.primaryGreen.withValues(alpha: 0.1),
+            CaretakerColors.highlightBlue.withValues(alpha: 0.1),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: CaretakerLayout.cardRadius,
         border: Border.all(
-          color: CaretakerColors.primaryGreen.withOpacity(0.3),
+          color: CaretakerColors.primaryGreen.withValues(alpha: 0.3),
         ),
       ),
       child: Row(
@@ -177,7 +242,7 @@ class _CognitiveHealthScreenState extends State<CognitiveHealthScreen> {
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: scoreColor.withOpacity(0.3),
+                  color: scoreColor.withValues(alpha: 0.3),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -257,7 +322,7 @@ class _CognitiveHealthScreenState extends State<CognitiveHealthScreen> {
         borderRadius: CaretakerLayout.cardRadius,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -347,7 +412,7 @@ class _CognitiveHealthScreenState extends State<CognitiveHealthScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: color.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(icon, size: 20, color: color),
@@ -374,7 +439,7 @@ class _CognitiveHealthScreenState extends State<CognitiveHealthScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: color.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: color),
               ),
@@ -433,7 +498,7 @@ class _CognitiveHealthScreenState extends State<CognitiveHealthScreen> {
             borderRadius: CaretakerLayout.cardRadius,
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: Colors.black.withValues(alpha: 0.05),
                 blurRadius: 10,
                 offset: const Offset(0, 2),
               ),
@@ -505,9 +570,9 @@ class _CognitiveHealthScreenState extends State<CognitiveHealthScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
         children: [
@@ -577,7 +642,7 @@ class _CognitiveHealthScreenState extends State<CognitiveHealthScreen> {
               borderRadius: CaretakerLayout.cardRadius,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 10,
                   offset: const Offset(0, 2),
                 ),
@@ -612,7 +677,7 @@ class _CognitiveHealthScreenState extends State<CognitiveHealthScreen> {
             borderRadius: CaretakerLayout.cardRadius,
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: Colors.black.withValues(alpha: 0.05),
                 blurRadius: 10,
                 offset: const Offset(0, 2),
               ),
@@ -826,7 +891,7 @@ class _CognitiveHealthScreenState extends State<CognitiveHealthScreen> {
         color: CaretakerColors.lightGreen,
         borderRadius: CaretakerLayout.cardRadius,
         border: Border.all(
-          color: CaretakerColors.primaryGreen.withOpacity(0.2),
+          color: CaretakerColors.primaryGreen.withValues(alpha: 0.2),
         ),
       ),
       child: Column(
@@ -938,7 +1003,7 @@ class _CognitiveHealthScreenState extends State<CognitiveHealthScreen> {
         borderRadius: CaretakerLayout.cardRadius,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -988,3 +1053,4 @@ class _CognitiveHealthScreenState extends State<CognitiveHealthScreen> {
     );
   }
 }
+

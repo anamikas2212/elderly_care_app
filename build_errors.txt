@@ -1,0 +1,46 @@
+﻿Building Windows application...                                 
+flutter : CMake Error at C
+:/elderly_app/elderly_care
+_app/build/windows/x64/ext
+racted/firebase_cpp_sdk_wi
+ndows/CMakeLists.txt:17 
+(cmake_minimum_required):
+At line:1 char:1
++ flutter build windows 
+--debug 2>&1 | Out-File 
+-FilePath build_errors. 
+...
++ ~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~
+    + CategoryInfo        
+      : NotSpecified: (C  
+  Make Error at ...imum   
+ _required)::String) [    
+], RemoteException
+    + FullyQualifiedError 
+   Id : NativeCommandErr  
+  or
+ 
+  Compatibility with 
+CMake < 3.5 has been 
+removed from CMake.
+
+  Update the VERSION 
+argument <min> value.  
+Or, use the <min>...<max> 
+syntax
+  to tell CMake that the 
+project requires at least 
+<min> but has been updated
+  to work with policies 
+introduced by <max> or 
+earlier.
+
+  Or, add -DCMAKE_POLICY_V
+ERSION_MINIMUM=3.5 to try 
+configuring anyway.
+
+
+Building Windows application...                                    926ms
+Unable to generate build 
+files

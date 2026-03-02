@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../elderly/home/elderly_dashboard.dart';
+
 
 class ElderlyInitialLoginScreen extends StatefulWidget {
   const ElderlyInitialLoginScreen({super.key});
@@ -32,8 +34,25 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
       _isAnimating = true;
     });
 
+    // Sign in anonymously to get a Firebase UID for Firestore queries
+    String uid = '';
+    try {
+      final existingUser = FirebaseAuth.instance.currentUser;
+      if (existingUser != null) {
+        uid = existingUser.uid;
+      } else {
+        final credential = await FirebaseAuth.instance.signInAnonymously();
+        uid = credential.user?.uid ?? '';
+      }
+    } catch (e) {
+      // Firebase not available — fall back to name-based ID
+      uid = _nameController.text.trim();
+    }
+
     // Save details locally
     final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('elderly_user_uid', uid);   // Firebase UID for Firestore
+    await prefs.setString('elderly_user_id', uid);    // Keep backwards compat
     await prefs.setString('elderly_user_name', _nameController.text.trim());
     await prefs.setString('elderly_user_age', _ageController.text.trim());
     await prefs.setString('elderly_user_gender', _genderController.text.trim());

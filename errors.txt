@@ -1,0 +1,238 @@
+﻿Analyzing elderly_care_app...                                   
+
+   info - The constant name 'DIFFICULTY_EASY' isn't a lowerCamelCase identifier - lib\core\constants\game_constants.dart:5:20 - constant_identifier_names
+   info - The constant name 'DIFFICULTY_MEDIUM' isn't a lowerCamelCase identifier - lib\core\constants\game_constants.dart:6:20 - constant_identifier_names
+   info - The constant name 'DIFFICULTY_HARD' isn't a lowerCamelCase identifier - lib\core\constants\game_constants.dart:7:20 - constant_identifier_names
+   info - The constant name 'ANALYTICS_BATCH_SIZE' isn't a lowerCamelCase identifier - lib\core\constants\game_constants.dart:46:20 - constant_identifier_names
+   info - The constant name 'MIN_SESSIONS_FOR_SCORING' isn't a lowerCamelCase identifier - lib\core\constants\game_constants.dart:49:20 - constant_identifier_names
+   info - The constant name 'ATTENTION' isn't a lowerCamelCase identifier - lib\core\constants\game_constants.dart:88:23 - constant_identifier_names
+   info - The constant name 'MEMORY' isn't a lowerCamelCase identifier - lib\core\constants\game_constants.dart:89:23 - constant_identifier_names
+   info - The constant name 'EXECUTIVE' isn't a lowerCamelCase identifier - lib\core\constants\game_constants.dart:90:23 - constant_identifier_names
+   info - The constant name 'PROCESSING_SPEED' isn't a lowerCamelCase identifier - lib\core\constants\game_constants.dart:91:23 - constant_identifier_names
+   info - The constant name 'LANGUAGE' isn't a lowerCamelCase identifier - lib\core\constants\game_constants.dart:92:23 - constant_identifier_names
+   info - Parameter 'key' could be a super parameter - lib\games\chill_zone\color_tap\color_circle_widget.dart:16:9 - use_super_parameters
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\games\chill_zone\color_tap\color_circle_widget.dart:91:42 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\games\chill_zone\color_tap\color_circle_widget.dart:96:37 - deprecated_member_use
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\color_tap\color_tap_game.dart:194:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\color_tap\color_tap_game.dart:214:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\color_tap\color_tap_game.dart:215:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\color_tap\color_tap_game.dart:216:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\color_tap\color_tap_game.dart:217:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\color_tap\color_tap_game.dart:221:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\color_tap\color_tap_game.dart:237:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\color_tap\color_tap_game.dart:254:15 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\color_tap\color_tap_game.dart:264:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\color_tap\color_tap_game.dart:266:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\color_tap\color_tap_game.dart:267:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\color_tap\color_tap_game.dart:268:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\flip_card_match\flip_card_game.dart:208:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\flip_card_match\flip_card_game.dart:225:11 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\flip_card_match\flip_card_game.dart:227:13 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\flip_card_match\flip_card_game.dart:267:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\flip_card_match\flip_card_game.dart:290:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\flip_card_match\flip_card_game.dart:291:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\flip_card_match\flip_card_game.dart:292:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\flip_card_match\flip_card_game.dart:293:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\flip_card_match\flip_card_game.dart:294:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\flip_card_match\flip_card_game.dart:295:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\flip_card_match\flip_card_game.dart:296:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\flip_card_match\flip_card_game.dart:297:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\flip_card_match\flip_card_game.dart:390:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\flip_card_match\flip_card_game.dart:411:15 - avoid_print
+warning - 'Future.value' shouldn't be called with a 'null' argument for the non-nullable type argument 'GameSession' - lib\games\chill_zone\flip_card_match\flip_card_game.dart:412:22 - null_argument_to_non_null_type
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\flip_card_match\flip_card_game.dart:415:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\chill_zone\flip_card_match\flip_card_game.dart:417:7 - avoid_print
+   info - Parameter 'key' could be a super parameter - lib\games\chill_zone\flip_card_match\flip_card_widget.dart:26:9 - use_super_parameters
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\games\chill_zone\flip_card_match\flip_card_widget.dart:112:41 - deprecated_member_use
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:114:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:115:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:116:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:117:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:144:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:147:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:301:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:337:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:343:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:414:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:415:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:481:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:482:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:483:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:484:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:485:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:486:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:495:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:598:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:607:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:608:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:620:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:782:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:794:9 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:821:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:822:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:823:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:826:7 - avoid_print
+   info - The parameter name 'sum' matches a visible type name - lib\games\daily_engagement\city_atlas\city_atlas_game.dart:838:47 - avoid_types_as_parameter_names
+warning - Unused import: 'dart:math' - lib\games\daily_engagement\daily_routine_recall\daily_routine_recall_game.dart:3:8 - unused_import
+warning - Unused import: 'package:firebase_auth/firebase_auth.dart' - lib\games\daily_engagement\daily_routine_recall\daily_routine_recall_game.dart:5:8 - unused_import
+   info - Statements in an if should be enclosed in a block - lib\games\daily_engagement\event_ordering\event_ordering_game.dart:208:36 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\games\daily_engagement\event_ordering\event_ordering_game.dart:209:42 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\games\daily_engagement\event_ordering\event_ordering_game.dart:210:42 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\games\daily_engagement\event_ordering\event_ordering_game.dart:211:12 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\games\daily_engagement\event_ordering\event_ordering_game.dart:221:29 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\games\daily_engagement\event_ordering\event_ordering_game.dart:222:34 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\games\daily_engagement\event_ordering\event_ordering_game.dart:223:34 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\games\daily_engagement\event_ordering\event_ordering_game.dart:224:12 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\games\daily_engagement\event_ordering\event_ordering_game.dart:245:33 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\games\daily_engagement\event_ordering\event_ordering_game.dart:246:38 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\games\daily_engagement\event_ordering\event_ordering_game.dart:247:38 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\games\daily_engagement\event_ordering\event_ordering_game.dart:248:12 - curly_braces_in_flow_control_structures
+   info - Don't invoke 'print' in production code - lib\games\daily_engagement\event_ordering\event_ordering_game.dart:290:11 - avoid_print
+warning - The value of the local variable 'ref' isn't used - lib\games\daily_engagement\event_ordering\event_ordering_game.dart:297:30 - unused_local_variable
+   info - Empty catch block - lib\games\daily_engagement\event_ordering\event_ordering_game.dart:302:20 - empty_catches
+warning - Unused import: 'dart:math' - lib\games\daily_engagement\monument_recall\monument_recall_game.dart:3:8 - unused_import
+warning - The value of the local variable 'imageQTotal' isn't used - lib\games\daily_engagement\monument_recall\monument_recall_game.dart:109:11 - unused_local_variable
+warning - The value of the local variable 'imageQCorrect' isn't used - lib\games\daily_engagement\monument_recall\monument_recall_game.dart:113:11 - unused_local_variable
+warning - The value of the local variable 'visualAccuracy' isn't used - lib\games\daily_engagement\monument_recall\monument_recall_game.dart:116:14 - unused_local_variable
+   info - Statements in an if should be enclosed in a block - lib\games\daily_engagement\monument_recall\monument_recall_game.dart:158:24 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\games\daily_engagement\monument_recall\monument_recall_game.dart:159:30 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\games\daily_engagement\monument_recall\monument_recall_game.dart:174:24 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\games\daily_engagement\monument_recall\monument_recall_game.dart:175:29 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\games\daily_engagement\monument_recall\monument_recall_game.dart:176:30 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block - lib\games\daily_engagement\monument_recall\monument_recall_game.dart:177:12 - curly_braces_in_flow_control_structures
+warning - Unused import: 'screens/auth/elderly_initial_login_screen.dart' - lib\main.dart:5:8 - unused_import
+warning - Unused import: 'games/chill_zone/color_tap/color_tap_game.dart' - lib\main.dart:6:8 - unused_import
+warning - Unused import: 'screens/elderly/zone_selection_screen.dart' - lib\main.dart:7:8 - unused_import
+warning - Unused import: 'package:flutter/foundation.dart' - lib\main.dart:9:8 - unused_import
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\auth\elderly_initial_login_screen.dart:82:48 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\auth\elderly_initial_login_screen.dart:124:47 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\auth\elderly_initial_login_screen.dart:151:47 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\auth\elderly_initial_login_screen.dart:179:47 - deprecated_member_use
+warning - Unused import: '../elderly/home/elderly_dashboard.dart' - lib\screens\auth\login_screen.dart:5:8 - unused_import
+   info - Don't use 'BuildContext's across async gaps - lib\screens\auth\login_screen.dart:27:11 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\auth\login_screen.dart:32:11 - use_build_context_synchronously
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\analytics\city_atlas_analytics_screen.dart:126:22 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\analytics\color_tap_analytics_screen.dart:114:22 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\analytics\daily_routine_analytics_screen.dart:115:22 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\analytics\event_ordering_analytics_screen.dart:115:22 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\analytics\flip_card_analytics_screen.dart:114:22 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\analytics\monument_recall_analytics_screen.dart:115:22 - deprecated_member_use
+   info - Parameter 'key' could be a super parameter - lib\screens\caretaker\dashboard\buddy_activity_log_screen.dart:6:9 - use_super_parameters
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\buddy_activity_log_screen.dart:77:49 - deprecated_member_use
+warning - Unused import: 'cognitive_health_screen.dart' - lib\screens\caretaker\dashboard\caretaker_dashboard.dart:6:8 - unused_import
+warning - Unused import: 'medication_screen.dart' - lib\screens\caretaker\dashboard\caretaker_dashboard.dart:8:8 - unused_import
+warning - Unused import: 'connect_screens.dart' - lib\screens\caretaker\dashboard\caretaker_dashboard.dart:11:8 - unused_import
+   info - Parameter 'key' could be a super parameter - lib\screens\caretaker\dashboard\caretaker_dashboard.dart:21:9 - use_super_parameters
+   info - Don't invoke 'print' in production code - lib\screens\caretaker\dashboard\caretaker_dashboard.dart:121:7 - avoid_print
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\caretaker_dashboard.dart:245:41 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\caretaker_dashboard.dart:394:57 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\caretaker_dashboard.dart:405:48 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\caretaker_dashboard.dart:528:42 - deprecated_member_use
+   info - Unnecessary use of 'toList' in a spread - lib\screens\caretaker\dashboard\caretaker_dashboard.dart:585:18 - unnecessary_to_list_in_spreads
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\caretaker_dashboard.dart:681:45 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\caretaker_dashboard.dart:698:51 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\caretaker_dashboard.dart:714:38 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\caretaker_dashboard.dart:857:33 - deprecated_member_use
+   info - Parameter 'key' could be a super parameter - lib\screens\caretaker\dashboard\cognitive_health_screen.dart:8:9 - use_super_parameters
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\cognitive_health_screen.dart:128:45 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\cognitive_health_screen.dart:225:42 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\cognitive_health_screen.dart:226:43 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\cognitive_health_screen.dart:233:47 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\cognitive_health_screen.dart:245:37 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\cognitive_health_screen.dart:325:33 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\cognitive_health_screen.dart:415:30 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\cognitive_health_screen.dart:442:30 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\cognitive_health_screen.dart:501:37 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\cognitive_health_screen.dart:573:22 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\cognitive_health_screen.dart:575:41 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\cognitive_health_screen.dart:645:39 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\cognitive_health_screen.dart:680:37 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\cognitive_health_screen.dart:894:47 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\cognitive_health_screen.dart:1006:33 - deprecated_member_use
+   info - Unnecessary use of 'toList' in a spread - lib\screens\caretaker\dashboard\cognitive_health_screen.dart:1033:16 - unnecessary_to_list_in_spreads
+   info - Parameter 'key' could be a super parameter - lib\screens\caretaker\dashboard\connect_screens.dart:6:9 - use_super_parameters
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\connect_screens.dart:68:53 - deprecated_member_use
+   info - Parameter 'key' could be a super parameter - lib\screens\caretaker\dashboard\connect_screens.dart:80:9 - use_super_parameters
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\connect_screens.dart:115:64 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\connect_screens.dart:133:60 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\connect_screens.dart:195:42 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\connect_screens.dart:201:61 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\connect_screens.dart:265:74 - deprecated_member_use
+   info - Parameter 'key' could be a super parameter - lib\screens\caretaker\dashboard\medication_management_screen.dart:5:9 - use_super_parameters
+   info - Parameter 'key' could be a super parameter - lib\screens\caretaker\dashboard\medication_screen.dart:5:9 - use_super_parameters
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\medication_screen.dart:75:60 - deprecated_member_use
+   info - Parameter 'key' could be a super parameter - lib\screens\caretaker\dashboard\safety_monitor_screen.dart:6:9 - use_super_parameters
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\safety_monitor_screen.dart:42:31 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\safety_monitor_screen.dart:58:51 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\caretaker\dashboard\safety_monitor_screen.dart:88:64 - deprecated_member_use
+   info - Don't invoke 'print' in production code - lib\screens\elderly\buddy_chat_screen.dart:127:1 - avoid_print
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\elderly\buddy_chat_screen.dart:565:29 - deprecated_member_use
+   info - Parameter 'key' could be a super parameter - lib\screens\elderly\chill_zone_screen.dart:9:9 - use_super_parameters
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\elderly\chill_zone_screen.dart:182:32 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\elderly\chill_zone_screen.dart:207:34 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\elderly\chill_zone_screen.dart:240:32 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\elderly\chill_zone_screen.dart:265:34 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\elderly\chill_zone_screen.dart:304:28 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\elderly\chill_zone_screen.dart:315:30 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\elderly\chill_zone_screen.dart:344:65 - deprecated_member_use
+   info - Parameter 'key' could be a super parameter - lib\screens\elderly\daily_engagement_screen.dart:11:9 - use_super_parameters
+   info - Don't invoke 'print' in production code - lib\screens\elderly\daily_engagement_screen.dart:43:7 - avoid_print
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\elderly\daily_engagement_screen.dart:211:32 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\elderly\daily_engagement_screen.dart:243:34 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\elderly\daily_engagement_screen.dart:283:28 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\elderly\daily_engagement_screen.dart:294:30 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\elderly\daily_engagement_screen.dart:323:65 - deprecated_member_use
+warning - Unused import: 'package:elderly_care_app/screens/elderly/medication/AddMedicationScreen.dart' - lib\screens\elderly\home\elderly_dashboard.dart:1:8 - unused_import
+warning - Unused import: '../games_screen.dart' - lib\screens\elderly\home\elderly_dashboard.dart:6:8 - unused_import
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\elderly\location_screen.dart:127:42 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\elderly\location_screen.dart:160:51 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\elderly\location_screen.dart:181:59 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\elderly\location_screen.dart:360:51 - deprecated_member_use
+   info - The file name 'AddMedicationScreen.dart' isn't a lower_case_with_underscores identifier - lib\screens\elderly\medication\AddMedicationScreen.dart:1:1 - file_names
+   info - Parameter 'key' could be a super parameter - lib\screens\elderly\medication\AddMedicationScreen.dart:6:9 - use_super_parameters
+warning - Unused import: 'medication_history_screen.dart' - lib\screens\elderly\medication\medication_list_screen.dart:5:8 - unused_import
+   info - Parameter 'key' could be a super parameter - lib\screens\elderly\medication\medication_list_screen.dart:14:9 - use_super_parameters
+warning - The operand can't be 'null', so the condition is always 'true' - lib\screens\elderly\medication\medication_list_screen.dart:224:36 - unnecessary_null_comparison
+warning - The '!' will have no effect because the receiver can't be null - lib\screens\elderly\medication\medication_list_screen.dart:224:63 - unnecessary_non_null_assertion
+warning - The '!' will have no effect because the receiver can't be null - lib\screens\elderly\medication\medication_list_screen.dart:229:42 - unnecessary_non_null_assertion
+   info - Don't use 'BuildContext's across async gaps - lib\screens\elderly\medication\medication_list_screen.dart:328:28 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\elderly\medication\medication_list_screen.dart:361:28 - use_build_context_synchronously
+   info - Parameter 'key' could be a super parameter - lib\screens\elderly\zone_selection_screen.dart:9:9 - use_super_parameters
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\elderly\zone_selection_screen.dart:109:28 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\elderly\zone_selection_screen.dart:114:43 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\elderly\zone_selection_screen.dart:121:30 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\elderly\zone_selection_screen.dart:137:36 - deprecated_member_use
+   info - Don't invoke 'print' in production code - lib\services\game_services\session_tracker.dart:26:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\game_services\session_tracker.dart:74:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\game_services\session_tracker.dart:75:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\game_services\session_tracker.dart:76:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\game_services\session_tracker.dart:77:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\game_services\session_tracker.dart:78:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\game_services\session_tracker.dart:172:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\game_services\session_tracker.dart:173:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\game_services\session_tracker.dart:174:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\game_services\session_tracker.dart:175:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\game_services\session_tracker.dart:177:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\game_services\session_tracker.dart:178:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\game_services\session_tracker.dart:220:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\game_services\session_tracker.dart:226:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\services\game_services\session_tracker.dart:228:7 - avoid_print
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\theme\caretaker_theme.dart:66:27 - deprecated_member_use
+
+flutter : 218 issues 
+found. (ran in 1.8s)
+At line:1 char:1
++ flutter analyze 2>&1 | 
+Out-File -FilePath 
+errors.txt -Encoding 
+utf8;  ...
++ ~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo        
+      : NotSpecified: (2  
+  18 issues found. (ran   
+  in 1.8s):String) [],    
+ RemoteException
+    + FullyQualifiedError 
+   Id : NativeCommandErr  
+  or
+ 

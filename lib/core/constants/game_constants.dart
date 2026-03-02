@@ -85,10 +85,10 @@ enum GameZone { chillZone, dailyEngagement }
 
 // Game Categories for Cognitive Mapping
 class GameCategory {
-  static const String ATTENTION = 'attention';
+  static const String ATTENTION = 'attention'; //color tap
   static const String MEMORY = 'memory';
   static const String EXECUTIVE = 'executive';
-  static const String PROCESSING_SPEED = 'processing_speed';
+  static const String PROCESSING_SPEED = 'processing_speed'; //color tap
   static const String LANGUAGE = 'language';
 }
 

@@ -7,6 +7,8 @@ import '../games_screen.dart';
 import '../buddy_chat_screen.dart';
 import '../zone_selection_screen.dart';
 
+late String userId;
+
 class ElderlyDashboard extends StatefulWidget {
   final String? currentUserId;
   const ElderlyDashboard({super.key, this.currentUserId});
@@ -822,7 +824,8 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                               ),
                             ],
                           ),
-                        ), // Zoom Controls
+                        ),
+                        // Zoom Controls
                         Container(
                           decoration: BoxDecoration(
                             color: Colors.white,
@@ -856,7 +859,8 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                     ),
                   ],
                 ),
-              ), // Main Content with Zoom
+              ),
+              // Main Content with Zoom
               Expanded(
                 child: Transform.scale(
                   scale: zoomLevel,
@@ -864,7 +868,8 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Column(
                       children: [
-                        const SizedBox(height: 20), // Feature Grid
+                        const SizedBox(height: 20),
+                        // Feature Grid
                         GridView.count(
                           crossAxisCount: 2,
                           shrinkWrap: true,
@@ -887,7 +892,8 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) => MedicationListScreen(
+                                    builder:
+                                        (_) => MedicationListScreen(
                                           userId:
                                               widget.currentUserId ?? 'Unknown',
                                           role: UserRole.elderly,
@@ -895,7 +901,8 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                                   ),
                                 );
                               },
-                            ), // Location Card
+                            ),
+                            // Location Card
                             _buildFeatureCard(
                               icon: Icons.location_on,
                               title: 'My\nLocation',
@@ -913,7 +920,8 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                                   ),
                                 );
                               },
-                            ), // Brain Games Card
+                            ),
+                            // Brain Games Card
                             _buildFeatureCard(
                               icon: Icons.psychology,
                               title: 'Brain\nGames',
@@ -925,13 +933,17 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) => ZoneSelectionScreen(
-                                      userId: widget.currentUserId ?? 'Elderly User',
-                                    ),
+                                    builder:
+                                        (_) => ZoneSelectionScreen(
+                                          userId:
+                                              widget.currentUserId ??
+                                              'Elderly User',
+                                        ),
                                   ),
                                 );
                               },
-                            ), // Buddy Chat Card
+                            ),
+                            // Buddy Chat Card
                             _buildFeatureCard(
                               icon: Icons.chat,
                               title: 'My\nBuddy',
@@ -948,7 +960,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                                     builder: (_) => const BuddyChatScreen(),
                                   ),
                                 );
-                              }, // ✅ Now it navigates to the chat screen
+                              },
                             ),
                           ],
                         ),
@@ -961,7 +973,8 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
             ],
           ),
         ),
-      ), // Bottom Navigation
+      ),
+      // Bottom Navigation
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -996,7 +1009,8 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                 ],
               ),
             ),
-          ), // Navigation Bar
+          ),
+          // Navigation Bar
           Container(
             decoration: BoxDecoration(
               color: Colors.white,
