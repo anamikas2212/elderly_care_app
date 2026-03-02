@@ -45,5 +45,14 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>We need your location to show you on the map and track if you're in the safe zone</string>
+	
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>We need your location to continuously monitor your safety</string>
+	
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>We need your location to keep you safe and notify your family</string>
 </dict>
 </plist>
