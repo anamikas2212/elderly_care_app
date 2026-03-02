@@ -1,11 +1,18 @@
 import 'package:elderly_care_app/screens/elderly/medication/AddMedicationScreen.dart';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../auth/login_screen.dart';
 import '../medication/medication_list_screen.dart';
 import '../location_screen.dart';
 import '../games_screen.dart';
 import '../buddy_chat_screen.dart';
 import '../zone_selection_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+// ✅ CORRECTED IMPORT PATH
+import '../visionguardian/vision_guardian_screen.dart'; // Changed from package: to relative path
+
+final _firestore = FirebaseFirestore.instance;
+final _auth = FirebaseAuth.instance;
 
 class ElderlyDashboard extends StatefulWidget {
   final String? currentUserId;
@@ -31,6 +38,21 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
     });
   }
 
+  // ✅ Check for active alerts
+  Future<int> _getActiveAlertCount() async {
+    try {
+      final snapshot =
+          await FirebaseFirestore.instance
+              .collection('alerts')
+              .where('userId', isEqualTo: widget.currentUserId ?? '')
+              .where('isActive', isEqualTo: true)
+              .get();
+      return snapshot.docs.length;
+    } catch (e) {
+      return 0;
+    }
+  }
+
   void _showDemoOverlay() {
     showDialog(
       context: context,
@@ -49,7 +71,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                 ),
 
                 // Highlight specific feature based on step
-                if (demoStep >= 1 && demoStep <= 4)
+                if (demoStep >= 1 && demoStep <= 5)
                   Positioned(
                     top: _getHighlightTop(demoStep),
                     left: _getHighlightLeft(demoStep),
@@ -73,7 +95,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                   ),
 
                 // Arrow pointing to feature
-                if (demoStep >= 1 && demoStep <= 4)
+                if (demoStep >= 1 && demoStep <= 5)
                   Positioned(
                     top: _getArrowTop(demoStep),
                     left: _getArrowLeft(demoStep),
@@ -114,7 +136,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                                 ),
                               ),
                               child: Text(
-                                'Step ${demoStep + 1} of 5',
+                                'Step ${demoStep + 1} of 6',
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 20,
@@ -249,7 +271,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                               flex: 2,
                               child: ElevatedButton.icon(
                                 onPressed: () {
-                                  if (demoStep < 4) {
+                                  if (demoStep < 5) {
                                     setDialogState(() {
                                       demoStep++;
                                     });
@@ -261,13 +283,13 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                                   }
                                 },
                                 icon: Icon(
-                                  demoStep < 4
+                                  demoStep < 5
                                       ? Icons.arrow_forward
                                       : Icons.check,
                                   size: 28,
                                 ),
                                 label: Text(
-                                  demoStep < 4 ? 'Next' : 'Got It!',
+                                  demoStep < 5 ? 'Next' : 'Got It!',
                                   style: const TextStyle(
                                     fontSize: 24,
                                     fontWeight: FontWeight.bold,
@@ -293,7 +315,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                       // Page indicators
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(5, (index) {
+                        children: List.generate(6, (index) {
                           return Container(
                             margin: const EdgeInsets.symmetric(horizontal: 5),
                             width: index == demoStep ? 35 : 12,
@@ -421,6 +443,8 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
       case 3:
         return 470;
       case 4:
+        return 470;
+      case 5:
         return 640;
       default:
         return 0;
@@ -436,6 +460,8 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
       case 3:
         return 16;
       case 4:
+        return MediaQuery.of(context).size.width / 2 + 8;
+      case 5:
         return 16;
       default:
         return 0;
@@ -447,8 +473,9 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
       case 1:
       case 2:
       case 3:
-        return MediaQuery.of(context).size.width / 2 - 24;
       case 4:
+        return MediaQuery.of(context).size.width / 2 - 24;
+      case 5:
         return MediaQuery.of(context).size.width - 32;
       default:
         return 0;
@@ -460,8 +487,9 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
       case 1:
       case 2:
       case 3:
-        return 220;
       case 4:
+        return 220;
+      case 5:
         return 80;
       default:
         return 0;
@@ -477,6 +505,8 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
       case 3:
         return 410;
       case 4:
+        return 410;
+      case 5:
         return 580;
       default:
         return 0;
@@ -492,6 +522,8 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
       case 3:
         return MediaQuery.of(context).size.width / 4 - 30;
       case 4:
+        return MediaQuery.of(context).size.width * 3 / 4 - 30;
+      case 5:
         return MediaQuery.of(context).size.width / 2 - 30;
       default:
         return 0;
@@ -509,6 +541,8 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
       case 3:
         return Icons.psychology;
       case 4:
+        return Icons.visibility;
+      case 5:
         return Icons.warning;
       default:
         return Icons.info;
@@ -526,6 +560,8 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
       case 3:
         return Colors.purple;
       case 4:
+        return Colors.teal;
+      case 5:
         return Colors.red;
       default:
         return Colors.blue;
@@ -543,6 +579,8 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
       case 3:
         return 'Keep Your Mind Sharp';
       case 4:
+        return 'Medicine Scanner';
+      case 5:
         return 'Emergency SOS Button';
       default:
         return '';
@@ -560,6 +598,8 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
       case 3:
         return 'Tap this PURPLE card to play fun games that keep your mind sharp!';
       case 4:
+        return 'Tap this TEAL card to scan your medicine and verify it\'s the right one!';
+      case 5:
         return 'Press this BIG RED BUTTON in any emergency. Or shake your phone hard. Help comes fast!';
       default:
         return '';
@@ -814,7 +854,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                                 ),
                               ),
                               const Text(
-                                'Ready to play?',
+                                'Ready to go?',
                                 style: TextStyle(
                                   fontSize: 18,
                                   color: Colors.grey,
@@ -873,29 +913,39 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                           mainAxisSpacing: 16,
                           childAspectRatio: 0.9,
                           children: [
-                            // Pill Reminder Card
-                            _buildFeatureCard(
-                              icon: Icons.medication,
-                              title: 'Pill\nReminder',
-                              gradient: [
-                                Colors.green.shade400,
-                                Colors.green.shade600,
-                              ],
-                              badge: '1 NOW',
-                              badgeColor: Colors.red,
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => MedicationListScreen(
-                                          userId:
-                                              widget.currentUserId ?? 'Unknown',
-                                          role: UserRole.elderly,
-                                        ),
-                                  ),
+                            // ✅ Pill Reminder Card
+                            FutureBuilder<int>(
+                              future: _getActiveAlertCount(),
+                              builder: (context, snapshot) {
+                                final alertCount = snapshot.data ?? 0;
+                                return _buildFeatureCard(
+                                  icon: Icons.medication,
+                                  title: 'Pill\nReminder',
+                                  gradient: [
+                                    Colors.green.shade400,
+                                    Colors.green.shade600,
+                                  ],
+                                  badge:
+                                      alertCount > 0 ? '$alertCount NOW' : null,
+                                  badgeColor: Colors.red,
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder:
+                                            (_) => MedicationListScreen(
+                                              userId:
+                                                  widget.currentUserId ??
+                                                  'Unknown',
+                                              role: UserRole.elderly,
+                                            ),
+                                      ),
+                                    );
+                                  },
                                 );
                               },
-                            ), // Location Card
+                            ),
+                            // Location Card
                             _buildFeatureCard(
                               icon: Icons.location_on,
                               title: 'My\nLocation',
@@ -913,7 +963,8 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                                   ),
                                 );
                               },
-                            ), // Brain Games Card
+                            ),
+                            // Brain Games Card
                             _buildFeatureCard(
                               icon: Icons.psychology,
                               title: 'Brain\nGames',
@@ -925,13 +976,40 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) => ZoneSelectionScreen(
-                                      userId: widget.currentUserId ?? 'Elderly User',
-                                    ),
+                                    builder:
+                                        (_) => ZoneSelectionScreen(
+                                          userId:
+                                              widget.currentUserId ??
+                                              'Elderly User',
+                                        ),
                                   ),
                                 );
                               },
-                            ), // Buddy Chat Card
+                            ),
+                            // ✅ Vision Guardian Card - UPDATED!
+                            _buildFeatureCard(
+                              icon: Icons.visibility,
+                              title: 'Medicine\nScanner',
+                              gradient: [
+                                Colors.teal.shade400,
+                                Colors.teal.shade600,
+                              ],
+                              badge: '👁️',
+                              badgeColor: Colors.blue.shade700,
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder:
+                                        (_) => VisionGuardianScreen(
+                                          userId:
+                                              widget.currentUserId ?? 'Unknown',
+                                        ),
+                                  ),
+                                );
+                              },
+                            ),
+                            // Buddy Chat Card
                             _buildFeatureCard(
                               icon: Icons.chat,
                               title: 'My\nBuddy',
@@ -948,7 +1026,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                                     builder: (_) => const BuddyChatScreen(),
                                   ),
                                 );
-                              }, // ✅ Now it navigates to the chat screen
+                              },
                             ),
                           ],
                         ),

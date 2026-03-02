@@ -5,7 +5,7 @@ import '../../../theme/caretaker_theme.dart';
 import '../../../services/caretaker_data_service.dart';
 import 'cognitive_health_screen.dart';
 import 'safety_monitor_screen.dart';
-import 'medication_screen.dart';
+//import 'medication_screen.dart';
 import 'medication_management_screen.dart';
 import 'buddy_activity_log_screen.dart';
 import 'connect_screens.dart';
@@ -56,63 +56,6 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
         _errorMessage = "Failed to load user data: ${e.toString()}";
         _isLoading = false;
       });
-    }
-  }
-
-  // ✅ NEW: Create a test medication alert
-  Future<void> _createTestMedicationAlert() async {
-    if (elderlyUserId.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('No user ID loaded yet')));
-      return;
-    }
-
-    try {
-      await FirebaseFirestore.instance.collection('alerts').add({
-        'userId': elderlyUserId,
-        'isActive': true,
-        'type': 'warning', // Options: 'critical', 'warning', 'info'
-        'title': 'Missed Evening Medication',
-        'message': 'Blood pressure pill overdue by 2 hours',
-        'actionText': 'View',
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ Test medication alert created'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ Error creating alert: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  // ✅ NEW: Dismiss an alert
-  Future<void> _dismissAlert(String alertId) async {
-    try {
-      await FirebaseFirestore.instance.collection('alerts').doc(alertId).update(
-        {'isActive': false},
-      );
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Alert dismissed'),
-          duration: Duration(seconds: 1),
-        ),
-      );
-    } catch (e) {
-      print('Error dismissing alert: $e');
     }
   }
 
@@ -172,10 +115,6 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
             sliver: SliverList(
               delegate: SliverChildListDelegate([
                 _buildPatientHeaderCard(context),
-                const SizedBox(height: 16),
-
-                // ✅ Alert Banner - Shows medication reminders and other alerts
-                _buildAlertBanner(context),
                 const SizedBox(height: 16),
 
                 // Cognitive Health Score Card
@@ -751,7 +690,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
     );
   }
 
-  // ✅ Recent Activity Card - WITH IMPROVED TIMESTAMP HANDLING
+  // ✅ Recent Activity Card
   Widget _buildRecentActivityCard() {
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _dataService.getRecentGameSessions(elderlyUserId),
@@ -823,11 +762,9 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
                 final avgReactionTime =
                     session['average_reaction_time'] as double? ?? 0.0;
 
-                // ✅ TIMESTAMP HANDLING (already converted in CaretakerDataService)
                 int timestamp = session['createdAt'] as int? ?? 0;
                 final timeAgo = _getTimeAgo(timestamp);
 
-                // Calculate accuracy
                 final totalAttempts = correctTaps + falseTaps;
                 final accuracy =
                     totalAttempts > 0
@@ -923,7 +860,6 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
                           ],
                         ),
                         const SizedBox(height: 12),
-                        // Metrics Row
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                           children: [
@@ -991,7 +927,6 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
     }
   }
 
-  // ✅ Patient Header Card
   Widget _buildPatientHeaderCard(BuildContext context) {
     return StreamBuilder<Map<String, dynamic>>(
       stream: _dataService.getUserProfile(elderlyUserId),
@@ -1112,152 +1047,6 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
     }
   }
 
-  // ✅ ENHANCED: Alert Banner - Now supports medication reminders and dismissal
-  Widget _buildAlertBanner(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream:
-          FirebaseFirestore.instance
-              .collection('alerts')
-              .where('userId', isEqualTo: elderlyUserId)
-              .where('isActive', isEqualTo: true)
-              .orderBy('createdAt', descending: true)
-              .limit(3) // Show up to 3 alerts
-              .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const SizedBox.shrink();
-        }
-
-        // Show all active alerts
-        return Column(
-          children:
-              snapshot.data!.docs.map((doc) {
-                final alert = doc.data() as Map<String, dynamic>;
-                final alertId = doc.id;
-                final title = alert['title'] as String? ?? 'Alert';
-                final message = alert['message'] as String? ?? '';
-                final type = alert['type'] as String? ?? 'warning';
-                final actionText = alert['actionText'] as String? ?? 'View';
-
-                final alertColor = _getAlertColor(type);
-                final alertBgColor = _getAlertBackgroundColor(type);
-
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: alertBgColor,
-                      borderRadius: CaretakerLayout.cardRadius,
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(_getAlertIcon(type), color: alertColor, size: 28),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                title,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: alertColor.withOpacity(0.9),
-                                  fontSize: 14,
-                                  fontFamily: 'Inter',
-                                ),
-                              ),
-                              if (message.isNotEmpty) ...[
-                                const SizedBox(height: 2),
-                                Text(
-                                  message,
-                                  style: TextStyle(
-                                    color: alertColor.withOpacity(0.7),
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        // Action Button
-                        OutlinedButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder:
-                                    (_) => const MedicationManagementScreen(),
-                              ),
-                            );
-                          },
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: alertColor,
-                            side: BorderSide(color: alertColor),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          child: Text(actionText),
-                        ),
-                        const SizedBox(width: 8),
-                        // Dismiss Button
-                        IconButton(
-                          icon: Icon(Icons.close, color: alertColor, size: 20),
-                          onPressed: () => _dismissAlert(alertId),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-        );
-      },
-    );
-  }
-
-  IconData _getAlertIcon(String type) {
-    switch (type.toLowerCase()) {
-      case 'critical':
-        return Icons.error;
-      case 'warning':
-        return Icons.warning_amber_rounded;
-      case 'info':
-        return Icons.info_outline;
-      default:
-        return Icons.notifications;
-    }
-  }
-
-  Color _getAlertColor(String type) {
-    switch (type.toLowerCase()) {
-      case 'critical':
-        return CaretakerColors.errorRed;
-      case 'warning':
-        return const Color(0xFF5D4037);
-      case 'info':
-        return CaretakerColors.highlightBlue;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  Color _getAlertBackgroundColor(String type) {
-    switch (type.toLowerCase()) {
-      case 'critical':
-        return const Color(0xFFFFEBEE);
-      case 'warning':
-        return const Color(0xFFFFF4E5);
-      case 'info':
-        return const Color(0xFFE3F2FD);
-      default:
-        return Colors.grey.shade100;
-    }
-  }
-
-  // ✅ Stats Cards Row
   Widget _buildStatsCardsRow(BuildContext context) {
     return StreamBuilder<Map<String, dynamic>>(
       stream: _dataService.getOverallStatistics(elderlyUserId),
@@ -1352,7 +1141,6 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
     );
   }
 
-  // Utility widgets
   Widget _buildLoadingCard(String message) {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1461,15 +1249,6 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
           ),
           onPressed: () {},
         ),
-        // ✅ NEW: Test Alert Button (for development/testing)
-        IconButton(
-          icon: const Icon(
-            Icons.add_alert,
-            color: CaretakerColors.warningAmber,
-          ),
-          onPressed: _createTestMedicationAlert,
-          tooltip: 'Create Test Alert',
-        ),
         IconButton(
           icon: const Icon(Icons.logout, color: CaretakerColors.errorRed),
           onPressed: () async {
@@ -1508,13 +1287,14 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
           Colors.red,
           const SafetyMonitorScreen(),
         ),
+        // ✅ FIXED: Pass elderlyUserId to MedicationManagementScreen
         _buildNavCard(
           context,
           "Medication",
           Icons.medical_services,
           Colors.blue.shade100,
           Colors.blue,
-          const MedicationScreen(),
+          MedicationManagementScreen(userId: elderlyUserId), // ✅ Pass userId here
         ),
         _buildNavCard(
           context,
