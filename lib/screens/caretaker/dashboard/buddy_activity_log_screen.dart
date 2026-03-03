@@ -1,6 +1,6 @@
-/*
 import 'package:flutter/material.dart';
 import '../../../theme/caretaker_theme.dart';
+import 'enhanced_buddy_activity_screen.dart';
 
 class BuddyActivityLogScreen extends StatelessWidget {
   const BuddyActivityLogScreen({Key? key}) : super(key: key);
@@ -122,10 +122,8 @@ class BuddyActivityLogScreen extends StatelessWidget {
       ),
     );
   }
-}*/
+}
 
-import 'enhanced_buddy_activity_screen.dart';
-import 'package:flutter/material.dart';
 
 /*// Add navigation:
 Navigator.push(
