@@ -5,6 +5,46 @@ import 'firebase_options.dart';
 import 'screens/auth/elderly_initial_login_screen.dart';
 import 'games/chill_zone/color_tap/color_tap_game.dart';
 import 'screens/elderly/zone_selection_screen.dart';
+import 'package:elderly_care_app/services/report_scheduler_service.dart'; // Added
+import 'package:flutter/foundation.dart' show kIsWeb;
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Added: initialize report scheduler
+  final scheduler = ReportSchedulerService();
+  scheduler.initializeScheduler(
+    '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',
+  );
+
+  runApp(const ElderlyCarApp());
+}
+
+class ElderlyCarApp extends StatelessWidget {
+  const ElderlyCarApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Unified Geriatric Care',
+      theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
+      home: const LoginScreen(),
+      debugShowCheckedModeBanner: false,
+      routes: {},
+    );
+  }
+}
+
+/*
+
+import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'screens/auth/login_screen.dart';
+import 'firebase_options.dart';
+import 'screens/auth/elderly_initial_login_screen.dart';
+import 'games/chill_zone/color_tap/color_tap_game.dart';
+import 'screens/elderly/zone_selection_screen.dart';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 
@@ -30,6 +70,9 @@ class ElderlyCarApp extends StatelessWidget {
     );
   }
 }
+
+
+*/
 
 // main.dart
 /*import 'package:flutter/material.dart';
@@ -1576,7 +1619,7 @@ class PillReminderScreen extends StatelessWidget {
     );
   }
 }
-
+/*
 // ============================================
 // LOCATION SCREEN
 // ============================================
@@ -1694,7 +1737,7 @@ class LocationScreen extends StatelessWidget {
     );
   }
 }
-
+*/
 // ============================================
 // GAMES SCREEN
 // ============================================
