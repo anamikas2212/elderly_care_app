@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+final _firestore = FirebaseFirestore.instance;
+final _auth = FirebaseAuth.instance;
 
 class MedicationHistoryScreen extends StatelessWidget {
   const MedicationHistoryScreen({super.key});
