@@ -42,23 +42,6 @@ class _LocationScreenState extends State<LocationScreen> {
     _requestLocationPermission();
   }
 
-  // Location permission & loading state
-  bool _locationPermissionGranted = false;
-  bool _isLoadingLocation = true;
-
-  // Stream subscription for location updates
-  StreamSubscription<Position>? _positionStreamSubscription;
-
-  // Distance & safe zone
-  double? _distanceFromHome;
-  bool _isInsideSafeZone = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _requestLocationPermission();
-  }
-
   @override
   void dispose() {
     _positionStreamSubscription?.cancel();
