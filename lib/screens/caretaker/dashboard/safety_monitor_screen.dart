@@ -1,169 +1,470 @@
+// lib/screens/caretaker/dashboard/safety_monitor_screen.dart
 
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../../services/sos_service.dart';
 import '../../../theme/caretaker_theme.dart';
 
-class SafetyMonitorScreen extends StatelessWidget {
-  const SafetyMonitorScreen({Key? key}) : super(key: key);
+class SafetyMonitorScreen extends StatefulWidget {
+  const SafetyMonitorScreen({super.key});
+
+  @override
+  State<SafetyMonitorScreen> createState() => _SafetyMonitorScreenState();
+}
+
+class _SafetyMonitorScreenState extends State<SafetyMonitorScreen> {
+  final SOSService _sosService = SOSService();
+  String elderlyUserId = "";
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadElderlyUserId();
+  }
+
+  Future<void> _loadElderlyUserId() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final uid = prefs.getString('elderly_user_uid') ??
+          prefs.getString('elderly_user_id') ??
+          prefs.getString('elderly_user_name') ??
+          '';
+
+      if (!mounted) return;
+      setState(() {
+        elderlyUserId = uid;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _acknowledgeSOS(String alertId) async {
+    try {
+      await _sosService.acknowledgeSOS(alertId, 'caretaker_id');
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('SOS alert acknowledged'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _resolveSOS(String alertId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Resolve SOS Alert'),
+        content: const Text('Are you sure the emergency has been resolved?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            child: const Text('Yes, Resolve'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await _sosService.resolveSOS(alertId, 'caretaker_id');
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('SOS alert resolved'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (elderlyUserId.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Safety Monitor')),
+        body: const Center(
+          child: Text('No elderly user linked'),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: CaretakerColors.background,
       appBar: AppBar(
-        title: const Text('Safety Monitor', style: CaretakerTextStyles.header),
-        backgroundColor: CaretakerColors.cardWhite,
-        iconTheme: const IconThemeData(color: CaretakerColors.textPrimary),
+        backgroundColor: CaretakerColors.background,
         elevation: 0,
+        title: const Text(
+          'Safety Monitor',
+          style: TextStyle(color: CaretakerColors.textPrimary),
+        ),
+        iconTheme: const IconThemeData(color: CaretakerColors.textPrimary),
       ),
       body: SingleChildScrollView(
-        padding: CaretakerLayout.screenPadding,
+        padding: const EdgeInsets.all(16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSosPanel(),
-            const SizedBox(height: 20),
-            _buildStatusCard(),
-            const SizedBox(height: 20),
-            _buildSosLogsList(),
+            // Active SOS Alerts
+            const Text(
+              'Active Alerts',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: CaretakerColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _buildActiveAlertsSection(),
+
+            const SizedBox(height: 24),
+
+            // SOS Logs
+            const Text(
+              'SOS History',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: CaretakerColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _buildSOSLogsSection(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSosPanel() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(30),
-      decoration: BoxDecoration(
-        color: CaretakerColors.cardWhite,
-        borderRadius: CaretakerLayout.cardRadius,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.red.withOpacity(0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Container(
-            height: 120,
-            width: 120,
+  Widget _buildActiveAlertsSection() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _sosService.getActiveSOSAlerts(elderlyUserId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: CaretakerColors.errorRed,
-              shape: BoxShape.circle,
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: CaretakerColors.errorRed.withOpacity(0.3),
-                  blurRadius: 15,
-                  spreadRadius: 5,
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
-            child: const Icon(Icons.phone_in_talk, size: 50, color: Colors.white),
-          ),
-          const SizedBox(height: 20),
-          const Text(
-            'Emergency Call',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: CaretakerColors.errorRed),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Tap above to immediately call emergency contacts',
-            style: CaretakerTextStyles.caption,
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
+            child: Row(
+              children: [
+                Icon(Icons.check_circle, size: 48, color: Colors.green),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      Text(
+                        'All Clear',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'No active emergencies',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
 
-  Widget _buildStatusCard() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: CaretakerColors.lightGreen,
-        borderRadius: CaretakerLayout.cardRadius,
-        border: Border.all(color: CaretakerColors.primaryGreen.withOpacity(0.2)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: const [
-              Icon(Icons.check_circle, color: CaretakerColors.successGreen, size: 30),
-              SizedBox(width: 16),
-              Column(
+        return Column(
+          children: snapshot.data!.docs.map((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final alertId = doc.id;
+            final elderlyName = data['elderlyUserName'] ?? 'Unknown';
+            final status = data['status'] ?? 'active';
+            final triggeredAt = (data['triggeredAt'] as Timestamp?)?.toDate();
+            final location = data['location'] as Map<String, dynamic>?;
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.red, width: 2),
+              ),
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('All Clear', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: CaretakerColors.primaryGreen)),
-                  Text('No active alerts', style: TextStyle(color: CaretakerColors.primaryGreen)),
+                  Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded,
+                          size: 32, color: Colors.red),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'EMERGENCY ALERT',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.red,
+                              ),
+                            ),
+                            Text(
+                              elderlyName,
+                              style: const TextStyle(fontSize: 16),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: status == 'acknowledged'
+                              ? Colors.orange
+                              : Colors.red,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          status.toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (triggeredAt != null)
+                    Text(
+                      'Triggered: ${_formatDateTime(triggeredAt)}',
+                      style: TextStyle(color: Colors.grey.shade700),
+                    ),
+                  if (location != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Location: ${location['latitude']?.toStringAsFixed(4)}, ${location['longitude']?.toStringAsFixed(4)}',
+                      style: TextStyle(color: Colors.grey.shade700),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      if (status == 'active')
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => _acknowledgeSOS(alertId),
+                            icon: const Icon(Icons.check),
+                            label: const Text('Acknowledge'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange,
+                            ),
+                          ),
+                        ),
+                      if (status == 'active') const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => _resolveSOS(alertId),
+                          icon: const Icon(Icons.check_circle),
+                          label: const Text('Resolve'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
-            ],
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            );
+          }).toList(),
+        );
+      },
+    );
+  }
+
+  Widget _buildSOSLogsSection() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _sosService.getSOSLogs(elderlyUserId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: CaretakerColors.successGreen,
-              borderRadius: BorderRadius.circular(20),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
             ),
-            child: const Text('Safe', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
+            child: const Center(
+              child: Text('No SOS history'),
+            ),
+          );
+        }
+
+        return Column(
+          children: snapshot.data!.docs.map((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final action = data['action'] ?? 'unknown';
+            final timestamp = data['triggeredAt'] as Timestamp?;
+            final location = data['location'] as Map<String, dynamic>?;
+
+            IconData icon;
+            Color color;
+            String actionText;
+
+            switch (action) {
+              case 'triggered':
+                icon = Icons.warning;
+                color = Colors.red;
+                actionText = 'SOS Triggered';
+                break;
+              case 'acknowledged':
+                icon = Icons.check;
+                color = Colors.orange;
+                actionText = 'Acknowledged';
+                break;
+              case 'resolved':
+                icon = Icons.check_circle;
+                color = Colors.green;
+                actionText = 'Resolved';
+                break;
+              default:
+                icon = Icons.info;
+                color = Colors.grey;
+                actionText = action;
+            }
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, color: color, size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          actionText,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        if (timestamp != null)
+                          Text(
+                            _formatDateTime(timestamp.toDate()),
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 14,
+                            ),
+                          ),
+                        if (location != null)
+                          Text(
+                            'Lat: ${location['latitude']?.toStringAsFixed(4)}, Lng: ${location['longitude']?.toStringAsFixed(4)}',
+                            style: TextStyle(
+                              color: Colors.grey.shade500,
+                              fontSize: 12,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        );
+      },
     );
   }
 
-  Widget _buildSosLogsList() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: CaretakerColors.cardWhite,
-        borderRadius: CaretakerLayout.cardRadius,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('SOS Logs', style: CaretakerTextStyles.sectionTitle),
-          const SizedBox(height: 16),
-          const SizedBox(height: 16),
-          // Removed Fall Detected as requested
-          _buildLogItem('Manual SOS', 'Oct 24, 10:30 AM', 'Resolved', Colors.orange),
-          const Divider(height: 24),
-          _buildLogItem('False Alarm', 'Oct 20, 2:00 PM', 'Resolved', Colors.grey),
-        ],
-      ),
-    );
-  }
+  String _formatDateTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
 
-  Widget _buildLogItem(String title, String time, String status, Color iconColor) {
-    return Row(
-      children: [
-        Icon(Icons.history, color: iconColor),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-              Text(time, style: CaretakerTextStyles.caption),
-            ],
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: CaretakerColors.dividerGrey,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Text(
-            status,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: CaretakerColors.textSecondary),
-          ),
-        ),
-      ],
-    );
+    if (difference.inMinutes < 1) {
+      return 'Just now';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m ago';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}h ago';
+    } else {
+      return '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
+    }
   }
 }
