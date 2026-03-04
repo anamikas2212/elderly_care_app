@@ -21,7 +21,7 @@ class _LocationScreenState extends State<LocationScreen> {
   
   // Current location (will be updated in real-time)
   LatLng? _currentLocation;
-  
+
   // Current zoom level
   double _currentZoom = 15.0;
   
@@ -33,6 +33,23 @@ class _LocationScreenState extends State<LocationScreen> {
   StreamSubscription<Position>? _positionStreamSubscription;
   
   // Distance from home
+  double? _distanceFromHome;
+  bool _isInsideSafeZone = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _requestLocationPermission();
+  }
+
+  // Location permission & loading state
+  bool _locationPermissionGranted = false;
+  bool _isLoadingLocation = true;
+
+  // Stream subscription for location updates
+  StreamSubscription<Position>? _positionStreamSubscription;
+
+  // Distance & safe zone
   double? _distanceFromHome;
   bool _isInsideSafeZone = false;
 
@@ -57,9 +74,7 @@ class _LocationScreenState extends State<LocationScreen> {
     // Check if location services are enabled
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      setState(() {
-        _isLoadingLocation = false;
-      });
+      setState(() => _isLoadingLocation = false);
       _showLocationServiceDialog();
       return;
     }
@@ -69,43 +84,29 @@ class _LocationScreenState extends State<LocationScreen> {
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        setState(() {
-          _isLoadingLocation = false;
-        });
+        setState(() => _isLoadingLocation = false);
         _showPermissionDeniedDialog();
         return;
       }
     }
 
     if (permission == LocationPermission.deniedForever) {
-      setState(() {
-        _isLoadingLocation = false;
-      });
+      setState(() => _isLoadingLocation = false);
       _showPermissionDeniedForeverDialog();
       return;
     }
 
-    // Permission granted - start tracking
-    setState(() {
-      _locationPermissionGranted = true;
-    });
+    setState(() => _locationPermissionGranted = true);
     _startLocationTracking();
   }
-
   // Start real-time location tracking
   void _startLocationTracking() {
-    // Get initial position
-    Geolocator.getCurrentPosition(
+    Geolocator.getCurrentPosition( // Get initial position
       desiredAccuracy: LocationAccuracy.high,
-    ).then((position) {
-      _updateLocation(position);
-    }).catchError((error) {
+    ).then(_updateLocation).catchError((error) {
       print('Error getting initial position: $error');
-      setState(() {
-        _isLoadingLocation = false;
-      });
+      setState(() => _isLoadingLocation = false);
     });
-
     // Listen to location updates
     const LocationSettings locationSettings = LocationSettings(
       accuracy: LocationAccuracy.high,
@@ -254,7 +255,6 @@ class _LocationScreenState extends State<LocationScreen> {
     });
   }
 
-  // Zoom out function
   void _zoomOut() {
     setState(() {
       _currentZoom = (_currentZoom - 1).clamp(5.0, 18.0);
@@ -262,7 +262,6 @@ class _LocationScreenState extends State<LocationScreen> {
     });
   }
 
-  // Center on home
   void _centerOnHome() {
     setState(() {
       _currentZoom = 15.0;
@@ -281,14 +280,14 @@ class _LocationScreenState extends State<LocationScreen> {
   }
 
   // Format distance for display
+
   String _formatDistance(double? distance) {
     if (distance == null) return 'Calculating...';
-    if (distance < 1000) {
-      return '${distance.toStringAsFixed(0)} m';
-    } else {
-      return '${(distance / 1000).toStringAsFixed(2)} km';
-    }
+    if (distance < 1000) return '${distance.toStringAsFixed(0)} m';
+    return '${(distance / 1000).toStringAsFixed(2)} km';
   }
+
+  // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -348,11 +347,7 @@ class _LocationScreenState extends State<LocationScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.location_off,
-              size: 100,
-              color: Colors.red,
-            ),
+            const Icon(Icons.location_off, size: 100, color: Colors.red),
             const SizedBox(height: 24),
             const Text(
               'Location Permission Needed',
@@ -462,7 +457,6 @@ class _LocationScreenState extends State<LocationScreen> {
           ),
           
           const SizedBox(height: 20),
-          
           // Expanded Map Container
           Expanded(
             child: Container(
@@ -714,7 +708,7 @@ class _LocationScreenState extends State<LocationScreen> {
                 _buildLegendItem(
                   icon: Icons.circle_outlined,
                   color: Colors.green,
-                  label: 'Safe Zone',
+                  label: 'Safe Zone (${_safeZoneRadius.toInt()}m)',
                 ),
               ],
             ),
@@ -723,6 +717,8 @@ class _LocationScreenState extends State<LocationScreen> {
       ),
     );
   }
+
+  // ── Reusable widgets ──────────────────────────────────────────────────────
 
   Widget _buildZoomButton(IconData icon, VoidCallback onTap) {
     return Material(
@@ -737,16 +733,9 @@ class _LocationScreenState extends State<LocationScreen> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Colors.blue.shade300,
-              width: 2,
-            ),
+            border: Border.all(color: Colors.blue.shade300, width: 2),
           ),
-          child: Icon(
-            icon,
-            size: 32,
-            color: Colors.blue,
-          ),
+          child: Icon(icon, size: 32, color: Colors.blue),
         ),
       ),
     );
@@ -801,10 +790,7 @@ class _LocationScreenState extends State<LocationScreen> {
         const SizedBox(width: 6),
         Text(
           label,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         ),
       ],
     );
