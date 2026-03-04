@@ -479,7 +479,6 @@ class CaretakerDataService {
     }
 
     return query
-        .orderBy('createdAt', descending: true)
         .limit(50)
         .snapshots()
         .map((snapshot) {
@@ -536,7 +535,6 @@ class CaretakerDataService {
     return _firestore
         .collection('colorTapGameSessions')
         .where('userId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
         .limit(20)
         .snapshots()
         .map((snapshot) {
@@ -580,7 +578,6 @@ class CaretakerDataService {
     return _firestore
         .collection('colorTapGameSessions')
         .where('userId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
         .limit(20)
         .snapshots()
         .map((snapshot) {

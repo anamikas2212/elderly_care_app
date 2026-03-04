@@ -1,4 +1,4 @@
-﻿/*
+/*
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -2440,58 +2440,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
     }
   }
 
-  Future<void> _createTestMedicationAlert() async {
-    if (elderlyUserId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No user ID loaded yet')),
-      );
-      return;
-    }
-    try {
-      await FirebaseFirestore.instance.collection('alerts').add({
-        'userId': elderlyUserId,
-        'isActive': true,
-        'type': 'warning',
-        'title': 'Missed Evening Medication',
-        'message': 'Blood pressure pill overdue by 2 hours',
-        'actionText': 'View',
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ Test medication alert created'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ Error creating alert: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
 
-  Future<void> _dismissAlert(String alertId) async {
-    try {
-      await FirebaseFirestore.instance
-          .collection('alerts')
-          .doc(alertId)
-          .update({'isActive': false});
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Alert dismissed'),
-          duration: Duration(seconds: 1),
-        ),
-      );
-    } catch (e) {
-      debugPrint('Error dismissing alert: $e');
-    }
-  }
 
   // ── Build ─────────────────────────────────────────────────────────────────
 
@@ -2547,11 +2496,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
               delegate: SliverChildListDelegate([
                 _buildPatientHeaderCard(context),
                 const SizedBox(height: 16),
-                _buildAlertBanner(context),
-                const SizedBox(height: 16),
                 _buildCognitiveHealthCard(),
-                const SizedBox(height: 16),
-                _buildDomainScoresCard(),
                 const SizedBox(height: 16),
                 _buildGameMetricsCard(),
                 const SizedBox(height: 16),
@@ -2750,114 +2695,12 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
     }
   }
 
-  // ── Alert Banner (Firestore-driven from File 1) ───────────────────────────
 
-  Widget _buildAlertBanner(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('alerts')
-          .where('userId', isEqualTo: elderlyUserId)
-          .where('isActive', isEqualTo: true)
-          .orderBy('createdAt', descending: true)
-          .limit(3)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const SizedBox.shrink();
-        }
-        return Column(
-          children: snapshot.data!.docs.map((doc) {
-            final alert = doc.data() as Map<String, dynamic>;
-            final alertId = doc.id;
-            final title = alert['title'] as String? ?? 'Alert';
-            final message = alert['message'] as String? ?? '';
-            final type = alert['type'] as String? ?? 'warning';
-            final actionText = alert['actionText'] as String? ?? 'Dismiss';
-            final alertColor = _getAlertColor(type);
-
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: alertColor.withOpacity(0.1),
-                  borderRadius: CaretakerLayout.cardRadius,
-                ),
-                child: Row(
-                  children: [
-                    Icon(_getAlertIcon(type), color: alertColor, size: 28),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: alertColor,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            message,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey.shade700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () => _dismissAlert(alertId),
-                      style: TextButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: alertColor,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                      ),
-                      child: Text(actionText),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }).toList(),
-        );
-      },
-    );
-  }
-
-  IconData _getAlertIcon(String type) {
-    switch (type) {
-      case 'critical':
-        return Icons.warning_amber_rounded;
-      case 'info':
-        return Icons.info_outline;
-      default:
-        return Icons.error_outline;
-    }
-  }
-
-  Color _getAlertColor(String type) {
-    switch (type) {
-      case 'critical':
-        return CaretakerColors.errorRed;
-      case 'info':
-        return CaretakerColors.primaryGreen;
-      default:
-        return CaretakerColors.warningAmber;
-    }
-  }
-
-  // ── Cognitive Health Score Card (File 2 version – richer metrics display) ─
+  // ── Cognitive Health Score Card ───────────────────────────────────────────
 
   Widget _buildCognitiveHealthCard() {
-    return StreamBuilder<Map<String, dynamic>>(
-      stream: _dataService.getOverallCognitiveHealth(elderlyUserId),
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _cognitiveHealthFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return _buildLoadingCard("Calculating cognitive health...");
@@ -2865,19 +2708,14 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
         if (snapshot.hasError) {
           return _buildErrorCard("Error: ${snapshot.error}");
         }
-        if (!snapshot.hasData ||
-            snapshot.data == null ||
-            (snapshot.data!['totalSessions'] ?? 0) == 0) {
+        if (!snapshot.hasData || snapshot.data == null) {
           return _buildEmptyCard(
             "No game data yet. Play games to see your cognitive health score.",
           );
         }
 
         final data = snapshot.data!;
-        final score = data['healthScore'] as int? ?? 0;
-        final totalSessions = data['totalSessions'] as int? ?? 0;
-        final avgAccuracy = data['avgAccuracy'] as double? ?? 0.0;
-        final avgReactionTime = data['avgReactionTime'] as double? ?? 0.0;
+        final score = data['overallScore'] as int? ?? 0;
 
         final Color scoreColor =
             score >= 75 ? Colors.green : score >= 50 ? Colors.orange : Colors.red;
@@ -2957,68 +2795,25 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  children: [
-                    _buildMetricRow(
-                      'Accuracy',
-                      '${avgAccuracy.toStringAsFixed(1)}%',
-                      Icons.check_circle_outline,
-                    ),
-                    const Divider(height: 16),
-                    _buildMetricRow(
-                      'Avg Reaction Time',
-                      '${avgReactionTime.toStringAsFixed(3)}s',
-                      Icons.timer_outlined,
-                    ),
-                    const Divider(height: 16),
-                    _buildMetricRow(
-                      'Sessions Analyzed',
-                      '$totalSessions',
-                      Icons.analytics_outlined,
-                    ),
-                  ],
-                ),
+              const SizedBox(height: 24),
+              const Text(
+                'Domain Breakdown',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              // Domain breakdown from the cached future (File 1)
-              if (_cognitiveHealthFuture != null) ...[
-                const SizedBox(height: 24),
-                const Text(
-                  'Domain Breakdown',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-                FutureBuilder<Map<String, dynamic>>(
-                  future: _cognitiveHealthFuture,
-                  builder: (context, futureSnapshot) {
-                    if (!futureSnapshot.hasData) return const SizedBox.shrink();
-                    final d = futureSnapshot.data!;
-                    return Column(
-                      children: [
-                        _buildDomainBar("Memory", d['memory'] ?? 0, Colors.purple),
-                        _buildDomainBar("Attention", d['attention'] ?? 0, Colors.blue),
-                        _buildDomainBar(
-                          "Processing Speed",
-                          d['processingSpeed'] ?? 0,
-                          Colors.orange,
-                        ),
-                        _buildDomainBar(
-                          "Executive Function",
-                          d['executiveFunction'] ?? 0,
-                          Colors.teal,
-                        ),
-                        _buildDomainBar("Language", d['language'] ?? 0, Colors.pink),
-                      ],
-                    );
-                  },
-                ),
-              ],
+              const SizedBox(height: 12),
+              _buildDomainBar("Memory", data['memory'] ?? 0, Colors.purple),
+              _buildDomainBar("Attention", data['attention'] ?? 0, Colors.blue),
+              _buildDomainBar(
+                "Processing Speed",
+                data['processingSpeed'] ?? 0,
+                Colors.orange,
+              ),
+              _buildDomainBar(
+                "Executive Function",
+                data['executiveFunction'] ?? 0,
+                Colors.teal,
+              ),
+              _buildDomainBar("Language", data['language'] ?? 0, Colors.pink),
             ],
           ),
         );
@@ -3026,28 +2821,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
     );
   }
 
-  Widget _buildMetricRow(String label, String value, IconData icon) {
-    return Row(
-      children: [
-        Icon(icon, size: 18, color: Colors.grey.shade600),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            label,
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
-          ),
-        ),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.bold,
-            color: CaretakerColors.textPrimary,
-          ),
-        ),
-      ],
-    );
-  }
+
 
   Widget _buildDomainBar(String label, int score, Color color) {
     return Padding(
@@ -3083,149 +2857,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
     );
   }
 
-  // ── Domain Scores Card (File 2 – Attention & Processing Speed) ────────────
-
-  Widget _buildDomainScoresCard() {
-    return StreamBuilder<Map<String, dynamic>>(
-      stream: _dataService.calculateDomainScoresByDifficulty(elderlyUserId, null),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return _buildLoadingCard("Calculating domain scores...");
-        }
-        if (snapshot.hasError) {
-          return _buildErrorCard("Error loading domains: ${snapshot.error}");
-        }
-        if (!snapshot.hasData || snapshot.data == null) {
-          return _buildEmptyCard("No domain data available");
-        }
-
-        final data = snapshot.data!;
-        final attentionScore = data['attentionScore'] as double? ?? 0.0;
-        final processingSpeedScore = data['processingSpeedScore'] as double? ?? 0.0;
-        final sessionsCount = data['sessionsCount'] as int? ?? 0;
-
-        return Container(
-          padding: const EdgeInsets.all(20),
-          decoration: _buildCardDecoration(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Cognitive Domains',
-                    style: CaretakerTextStyles.cardTitle,
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: CaretakerColors.lightGreen,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      'Color Tap Game',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: CaretakerColors.primaryGreen,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Based on $sessionsCount game sessions',
-                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-              ),
-              const SizedBox(height: 20),
-              _buildDomainRow(
-                'Attention',
-                'Measures focus and correct tap accuracy',
-                attentionScore,
-                CaretakerColors.highlightBlue,
-                Icons.center_focus_strong,
-              ),
-              const SizedBox(height: 16),
-              _buildDomainRow(
-                'Processing Speed',
-                'Measures reaction time and response speed',
-                processingSpeedScore,
-                CaretakerColors.successGreen,
-                Icons.speed,
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildDomainRow(
-    String label,
-    String description,
-    double score,
-    Color color,
-    IconData icon,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Icon(icon, size: 16, color: color),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Text(
-                    description,
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                  ),
-                ],
-              ),
-            ),
-            Text(
-              '${score.toStringAsFixed(0)}%',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            value: score / 100,
-            backgroundColor: Colors.grey.shade200,
-            color: color,
-            minHeight: 8,
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ── Game Performance Metrics Card (File 2 – tap breakdown) ────────────────
+  // -- Game Performance Metrics Card (File 2 - tap breakdown) ----------------
 
   Widget _buildGameMetricsCard() {
     return StreamBuilder<Map<String, dynamic>>(
@@ -3925,16 +3557,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
             Colors.teal,
           ),
         ),
-        // Test Alert button
-        GestureDetector(
-          onTap: _createTestMedicationAlert,
-          child: _buildNavCardContent(
-            "Test Alert",
-            Icons.notification_important,
-            Colors.amber.shade100,
-            Colors.orange,
-          ),
-        ),
+
       ],
     );
   }
