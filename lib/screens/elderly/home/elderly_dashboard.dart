@@ -1,11 +1,16 @@
-/*import 'package:elderly_care_app/screens/elderly/medication/AddMedicationScreen.dart';
+// lib/screens/elderly/home/elderly_dashboard.dart
+
+import 'package:elderly_care_app/screens/elderly/medication/AddMedicationScreen.dart';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../auth/login_screen.dart';
 import '../medication/medication_list_screen.dart';
 import '../location_screen.dart';
 import '../games_screen.dart';
 import '../buddy_chat_screen.dart';
 import '../zone_selection_screen.dart';
+import '../../../services/sos_service.dart';
+import '../../../services/user_id_helper.dart';
 
 late String userId;
 
@@ -18,10 +23,12 @@ class ElderlyDashboard extends StatefulWidget {
 }
 
 class _ElderlyDashboardState extends State<ElderlyDashboard> {
+  final SOSService _sosService = SOSService();
   double zoomLevel = 1.0;
   int currentTab = 0;
   bool showDemo = true;
   int demoStep = 0;
+  bool _triggeringSOS = false;
 
   @override
   void initState() {
@@ -31,6 +38,189 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
         _showDemoOverlay();
       }
     });
+  }
+
+  /// Trigger SOS Alert
+  Future<void> _triggerSOSAlert() async {
+    if (_triggeringSOS) return;
+
+    // Show confirmation dialog first
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(25),
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(30),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.warning_amber_rounded,
+                    size: 100, color: Colors.red),
+                const SizedBox(height: 20),
+                const Text(
+                  'Emergency SOS',
+                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 15),
+                const Text(
+                  'This will alert your caretakers immediately. Are you in an emergency?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 20, color: Colors.black54),
+                ),
+                const SizedBox(height: 30),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey.shade300,
+                          foregroundColor: Colors.black87,
+                          padding: const EdgeInsets.symmetric(vertical: 18),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                        ),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          padding: const EdgeInsets.symmetric(vertical: 18),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                        ),
+                        child: const Text(
+                          'Yes, Send SOS',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _triggeringSOS = true);
+
+    try {
+      // Get current user ID
+      final elderlyUserId =
+          widget.currentUserId ?? await UserIdHelper.getCurrentUserId();
+
+      if (elderlyUserId == null) {
+        throw Exception('User ID not found');
+      }
+
+      // Get current location
+      Position? currentLocation;
+      try {
+        currentLocation = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+        );
+      } catch (e) {
+        print('Could not get location: $e');
+      }
+
+      // Trigger SOS
+      await _sosService.triggerSOS(
+        elderlyUserId: elderlyUserId,
+        elderlyUserName: widget.currentUserId ?? 'Elderly User',
+        currentLocation: currentLocation,
+      );
+
+      if (!mounted) return;
+
+      // Show success dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(25),
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(30),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.check_circle, size: 100, color: Colors.green),
+                const SizedBox(height: 20),
+                const Text(
+                  'SOS Alert Sent!',
+                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 15),
+                const Text(
+                  'Your caretakers have been notified. Help is on the way.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 20, color: Colors.black54),
+                ),
+                const SizedBox(height: 30),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 40,
+                      vertical: 18,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                  ),
+                  child: const Text(
+                    'OK',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to send SOS: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _triggeringSOS = false);
+      }
+    }
   }
 
   void _showDemoOverlay() {
@@ -48,7 +238,6 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                     child: Container(color: Colors.black.withAlpha(179)),
                   ),
                 ),
-
                 if (demoStep >= 1 && demoStep <= 4)
                   Positioned(
                     top: _getHighlightTop(demoStep),
@@ -71,7 +260,6 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                       ),
                     ),
                   ),
-
                 if (demoStep >= 1 && demoStep <= 4)
                   Positioned(
                     top: _getArrowTop(demoStep),
@@ -88,7 +276,6 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                       ],
                     ),
                   ),
-
                 SafeArea(
                   child: Column(
                     children: [
@@ -122,9 +309,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                             ElevatedButton.icon(
                               onPressed: () {
                                 Navigator.pop(context);
-                                setState(() {
-                                  showDemo = false;
-                                });
+                                setState(() => showDemo = false);
                               },
                               icon: const Icon(Icons.close, size: 24),
                               label: const Text(
@@ -149,9 +334,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                           ],
                         ),
                       ),
-
                       const Spacer(),
-
                       Container(
                         margin: const EdgeInsets.symmetric(horizontal: 20),
                         padding: const EdgeInsets.all(30),
@@ -204,9 +387,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                           ],
                         ),
                       ),
-
                       const SizedBox(height: 25),
-
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
                         child: Row(
@@ -215,9 +396,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                               Expanded(
                                 child: ElevatedButton.icon(
                                   onPressed: () {
-                                    setDialogState(() {
-                                      demoStep--;
-                                    });
+                                    setDialogState(() => demoStep--);
                                   },
                                   icon: const Icon(Icons.arrow_back, size: 28),
                                   label: const Text(
@@ -245,14 +424,10 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                               child: ElevatedButton.icon(
                                 onPressed: () {
                                   if (demoStep < 4) {
-                                    setDialogState(() {
-                                      demoStep++;
-                                    });
+                                    setDialogState(() => demoStep++);
                                   } else {
                                     Navigator.pop(context);
-                                    setState(() {
-                                      showDemo = false;
-                                    });
+                                    setState(() => showDemo = false);
                                   }
                                 },
                                 icon: Icon(
@@ -282,9 +457,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                           ],
                         ),
                       ),
-
                       const SizedBox(height: 25),
-
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: List.generate(5, (index) {
@@ -306,7 +479,6 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                           );
                         }),
                       ),
-
                       const SizedBox(height: 25),
                     ],
                   ),
@@ -553,18 +725,22 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
       case 3:
         return 'Tap this PURPLE card to play fun games that keep your mind sharp!';
       case 4:
-        return 'Press this BIG RED BUTTON in any emergency. Or shake your phone hard. Help comes fast!';
+        return 'Press this BIG RED BUTTON in any emergency. Help comes fast!';
       default:
         return '';
     }
   }
 
   void increaseZoom() {
-    if (zoomLevel < 1.5) setState(() => zoomLevel += 0.1);
+    if (zoomLevel < 1.5) {
+      setState(() => zoomLevel += 0.1);
+    }
   }
 
   void decreaseZoom() {
-    if (zoomLevel > 0.8) setState(() => zoomLevel -= 0.1);
+    if (zoomLevel > 0.8) {
+      setState(() => zoomLevel -= 0.1);
+    }
   }
 
   void _showZoomDialog(BuildContext context) {
@@ -689,13 +865,14 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                             ],
                           ),
                           child: IconButton(
-                            onPressed:
-                                () => Navigator.pushReplacement(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const LoginScreen(),
-                                  ),
+                            onPressed: () {
+                              Navigator.pushReplacement(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const LoginScreen(),
                                 ),
+                              );
+                            },
                             icon: const Icon(Icons.arrow_back),
                             iconSize: 32,
                             color: Colors.black87,
@@ -847,1144 +1024,6 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                           mainAxisSpacing: 16,
                           childAspectRatio: 0.9,
                           children: [
-                            // Pill Reminder Card
-                            _buildFeatureCard(
-                              icon: Icons.medication,
-                              title: 'Pill\nReminder',
-                              gradient: [
-                                Colors.green.shade400,
-                                Colors.green.shade600,
-                              ],
-                              badge: '1 NOW',
-                              badgeColor: Colors.red,
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder:
-                                        (_) => MedicationListScreen(
-                                          userId:
-                                              widget.currentUserId ?? 'Unknown',
-                                          role: UserRole.elderly, // Added
-                                        ),
-                                  ),
-                                );
-                              },
-                            ),
-                            // Location Card
-                            _buildFeatureCard(
-                              icon: Icons.location_on,
-                              title: 'My\nLocation',
-                              gradient: [
-                                Colors.blue.shade400,
-                                Colors.blue.shade600,
-                              ],
-                              badge: 'Safe ✓',
-                              badgeColor: Colors.green,
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const LocationScreen(),
-                                  ),
-                                );
-                              },
-                            ),
-                            // Brain Games Card
-                            _buildFeatureCard(
-                              icon: Icons.psychology,
-                              title: 'Brain\nGames',
-                              gradient: [
-                                Colors.purple.shade400,
-                                Colors.purple.shade600,
-                              ],
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder:
-                                        (_) => ZoneSelectionScreen(
-                                          userId:
-                                              widget.currentUserId ??
-                                              'Elderly User',
-                                        ),
-                                  ),
-                                );
-                              },
-                            ),
-                            // Buddy Chat Card
-                            _buildFeatureCard(
-                              icon: Icons.chat,
-                              title: 'My\nBuddy',
-                              gradient: [
-                                Colors.pink.shade400,
-                                Colors.pink.shade600,
-                              ],
-                              badge: '💬',
-                              badgeColor: Colors.yellow.shade700,
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder:
-                                        (_) => BuddyChatScreen(
-                                          userId:
-                                              widget.currentUserId ??
-                                              'Unknown', // Added
-                                        ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 100),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      bottomNavigationBar: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: ElevatedButton(
-              onPressed: () {},
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                elevation: 8,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Icon(Icons.warning, size: 40, color: Colors.white),
-                  SizedBox(width: 15),
-                  Text(
-                    'SOS EMERGENCY',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  SizedBox(width: 15),
-                  Icon(Icons.phone, size: 40, color: Colors.white),
-                ],
-              ),
-            ),
-          ),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withAlpha(26),
-                  blurRadius: 10,
-                  offset: const Offset(0, -5),
-                ),
-              ],
-            ),
-            child: BottomNavigationBar(
-              currentIndex: currentTab,
-              onTap: (index) => setState(() => currentTab = index),
-              selectedFontSize: 16,
-              unselectedFontSize: 16,
-              iconSize: 32,
-              items: const [
-                BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.bar_chart),
-                  label: 'Activity',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.settings),
-                  label: 'Settings',
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFeatureCard({
-    required IconData icon,
-    required String title,
-    required List<Color> gradient,
-    String? badge,
-    Color? badgeColor,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: gradient,
-          ),
-          borderRadius: BorderRadius.circular(25),
-          boxShadow: [
-            BoxShadow(
-              color: gradient[0].withAlpha(128),
-              blurRadius: 15,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(25),
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(15),
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(icon, size: 50, color: gradient[1]),
-                  ),
-                  const SizedBox(height: 15),
-                  Text(
-                    title,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      height: 1.2,
-                    ),
-                  ),
-                  if (badge != null) ...[
-                    const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: badgeColor,
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                      child: Text(
-                        badge,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-
-/*import 'package:elderly_care_app/screens/elderly/medication/AddMedicationScreen.dart';
-import 'package:flutter/material.dart';
-import '../../auth/login_screen.dart';
-import '../medication/medication_list_screen.dart';
-import '../location_screen.dart';
-import '../games_screen.dart';
-import '../buddy_chat_screen.dart';
-import '../zone_selection_screen.dart';
-
-late String userId;
-
-class ElderlyDashboard extends StatefulWidget {
-  final String? currentUserId;
-  const ElderlyDashboard({super.key, this.currentUserId});
-
-  @override
-  State<ElderlyDashboard> createState() => _ElderlyDashboardState();
-}
-
-class _ElderlyDashboardState extends State<ElderlyDashboard> {
-  double zoomLevel = 1.0;
-  int currentTab = 0;
-  bool showDemo = true;
-  int demoStep = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (showDemo) {
-        _showDemoOverlay();
-      }
-    });
-  }
-
-  void _showDemoOverlay() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return Stack(
-              children: [
-                // Semi-transparent background
-                Positioned.fill(
-                  child: GestureDetector(
-                    onTap: () {},
-                    child: Container(color: Colors.black.withAlpha(179)),
-                  ),
-                ),
-
-                // Highlight specific feature based on step
-                if (demoStep >= 1 && demoStep <= 4)
-                  Positioned(
-                    top: _getHighlightTop(demoStep),
-                    left: _getHighlightLeft(demoStep),
-                    child: IgnorePointer(
-                      child: Container(
-                        width: _getHighlightWidth(demoStep),
-                        height: _getHighlightHeight(demoStep),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.yellow, width: 4),
-                          borderRadius: BorderRadius.circular(25),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.yellow.withAlpha(128),
-                              blurRadius: 20,
-                              spreadRadius: 5,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-
-                // Arrow pointing to feature
-                if (demoStep >= 1 && demoStep <= 4)
-                  Positioned(
-                    top: _getArrowTop(demoStep),
-                    left: _getArrowLeft(demoStep),
-                    child: Icon(
-                      Icons.arrow_downward,
-                      size: 60,
-                      color: Colors.yellow,
-                      shadows: [
-                        Shadow(
-                          color: Colors.black.withAlpha(128),
-                          blurRadius: 10,
-                        ),
-                      ],
-                    ),
-                  ),
-
-                // Demo content
-                SafeArea(
-                  child: Column(
-                    children: [
-                      // Skip button at top
-                      Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 10,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withAlpha(51),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: Colors.white.withAlpha(77),
-                                  width: 2,
-                                ),
-                              ),
-                              child: Text(
-                                'Step ${demoStep + 1} of 5',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            ElevatedButton.icon(
-                              onPressed: () {
-                                Navigator.pop(context);
-                                setState(() {
-                                  showDemo = false;
-                                });
-                              },
-                              icon: const Icon(Icons.close, size: 24),
-                              label: const Text(
-                                'Skip',
-                                style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.white,
-                                foregroundColor: Colors.black,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 25,
-                                  vertical: 15,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const Spacer(),
-
-                      // Demo instruction card at bottom
-                      Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 20),
-                        padding: const EdgeInsets.all(30),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [Colors.white, Colors.blue.shade50],
-                          ),
-                          borderRadius: BorderRadius.circular(25),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.blue.withAlpha(128),
-                              blurRadius: 20,
-                              offset: const Offset(0, 10),
-                            ),
-                          ],
-                          border: Border.all(
-                            color: Colors.blue.shade200,
-                            width: 3,
-                          ),
-                        ),
-                        child: Column(
-                          children: [
-                            Icon(
-                              _getDemoIcon(demoStep),
-                              size: 80,
-                              color: _getDemoColor(demoStep),
-                            ),
-                            const SizedBox(height: 20),
-                            Text(
-                              _getDemoTitle(demoStep),
-                              style: const TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black87,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 15),
-                            Text(
-                              _getDemoDescription(demoStep),
-                              style: const TextStyle(
-                                fontSize: 20,
-                                color: Colors.black87,
-                                height: 1.5,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 25),
-
-                      // Navigation buttons
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Row(
-                          children: [
-                            if (demoStep > 0)
-                              Expanded(
-                                child: ElevatedButton.icon(
-                                  onPressed: () {
-                                    setDialogState(() {
-                                      demoStep--;
-                                    });
-                                  },
-                                  icon: const Icon(Icons.arrow_back, size: 28),
-                                  label: const Text(
-                                    'Back',
-                                    style: TextStyle(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.grey.shade300,
-                                    foregroundColor: Colors.black87,
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 20,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            if (demoStep > 0) const SizedBox(width: 15),
-                            Expanded(
-                              flex: 2,
-                              child: ElevatedButton.icon(
-                                onPressed: () {
-                                  if (demoStep < 4) {
-                                    setDialogState(() {
-                                      demoStep++;
-                                    });
-                                  } else {
-                                    Navigator.pop(context);
-                                    setState(() {
-                                      showDemo = false;
-                                    });
-                                  }
-                                },
-                                icon: Icon(
-                                  demoStep < 4
-                                      ? Icons.arrow_forward
-                                      : Icons.check,
-                                  size: 28,
-                                ),
-                                label: Text(
-                                  demoStep < 4 ? 'Next' : 'Got It!',
-                                  style: const TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue,
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 20,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(15),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 25),
-
-                      // Page indicators
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(5, (index) {
-                          return Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 5),
-                            width: index == demoStep ? 35 : 12,
-                            height: 12,
-                            decoration: BoxDecoration(
-                              color:
-                                  index == demoStep
-                                      ? Colors.white
-                                      : Colors.white.withAlpha(77),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color: Colors.white.withAlpha(128),
-                                width: 1,
-                              ),
-                            ),
-                          );
-                        }),
-                      ),
-
-                      const SizedBox(height: 25),
-                    ],
-                  ),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  void _showLogoutDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(25),
-          ),
-          child: Container(
-            padding: const EdgeInsets.all(30),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.logout, size: 80, color: Colors.red),
-                const SizedBox(height: 20),
-                const Text(
-                  'Logout?',
-                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 15),
-                const Text(
-                  'Do you want to go back to the login screen?',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 20, color: Colors.black54),
-                ),
-                const SizedBox(height: 30),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () => Navigator.pop(context),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.grey.shade300,
-                          foregroundColor: Colors.black87,
-                          padding: const EdgeInsets.symmetric(vertical: 18),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(15),
-                          ),
-                        ),
-                        child: const Text(
-                          'Cancel',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const LoginScreen(),
-                            ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red,
-                          padding: const EdgeInsets.symmetric(vertical: 18),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(15),
-                          ),
-                        ),
-                        child: const Text(
-                          'Yes, Logout',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  // Helper methods to position highlights
-  double _getHighlightTop(int step) {
-    switch (step) {
-      case 1:
-        return 220;
-      case 2:
-        return 220;
-      case 3:
-        return 470;
-      case 4:
-        return 640;
-      default:
-        return 0;
-    }
-  }
-
-  double _getHighlightLeft(int step) {
-    switch (step) {
-      case 1:
-        return 16;
-      case 2:
-        return MediaQuery.of(context).size.width / 2 + 8;
-      case 3:
-        return 16;
-      case 4:
-        return 16;
-      default:
-        return 0;
-    }
-  }
-
-  double _getHighlightWidth(int step) {
-    switch (step) {
-      case 1:
-      case 2:
-      case 3:
-        return MediaQuery.of(context).size.width / 2 - 24;
-      case 4:
-        return MediaQuery.of(context).size.width - 32;
-      default:
-        return 0;
-    }
-  }
-
-  double _getHighlightHeight(int step) {
-    switch (step) {
-      case 1:
-      case 2:
-      case 3:
-        return 220;
-      case 4:
-        return 80;
-      default:
-        return 0;
-    }
-  }
-
-  double _getArrowTop(int step) {
-    switch (step) {
-      case 1:
-        return 160;
-      case 2:
-        return 160;
-      case 3:
-        return 410;
-      case 4:
-        return 580;
-      default:
-        return 0;
-    }
-  }
-
-  double _getArrowLeft(int step) {
-    switch (step) {
-      case 1:
-        return MediaQuery.of(context).size.width / 4 - 30;
-      case 2:
-        return MediaQuery.of(context).size.width * 3 / 4 - 30;
-      case 3:
-        return MediaQuery.of(context).size.width / 4 - 30;
-      case 4:
-        return MediaQuery.of(context).size.width / 2 - 30;
-      default:
-        return 0;
-    }
-  }
-
-  IconData _getDemoIcon(int step) {
-    switch (step) {
-      case 0:
-        return Icons.waving_hand;
-      case 1:
-        return Icons.medication;
-      case 2:
-        return Icons.location_on;
-      case 3:
-        return Icons.psychology;
-      case 4:
-        return Icons.warning;
-      default:
-        return Icons.info;
-    }
-  }
-
-  Color _getDemoColor(int step) {
-    switch (step) {
-      case 0:
-        return Colors.blue;
-      case 1:
-        return Colors.green;
-      case 2:
-        return Colors.blue;
-      case 3:
-        return Colors.purple;
-      case 4:
-        return Colors.red;
-      default:
-        return Colors.blue;
-    }
-  }
-
-  String _getDemoTitle(int step) {
-    switch (step) {
-      case 0:
-        return 'Welcome to Your Care App!';
-      case 1:
-        return 'Never Miss Your Pills';
-      case 2:
-        return 'Stay Safe with GPS';
-      case 3:
-        return 'Keep Your Mind Sharp';
-      case 4:
-        return 'Emergency SOS Button';
-      default:
-        return '';
-    }
-  }
-
-  String _getDemoDescription(int step) {
-    switch (step) {
-      case 0:
-        return 'Let\'s take a quick tour! I\'ll show you where everything is and how to use it.';
-      case 1:
-        return 'Tap this GREEN card to see your medicines. Press "Taken" when you take them!';
-      case 2:
-        return 'Tap this BLUE card to see where you are. Your family knows you\'re safe!';
-      case 3:
-        return 'Tap this PURPLE card to play fun games that keep your mind sharp!';
-      case 4:
-        return 'Press this BIG RED BUTTON in any emergency. Or shake your phone hard. Help comes fast!';
-      default:
-        return '';
-    }
-  }
-
-  void increaseZoom() {
-    if (zoomLevel < 1.5) {
-      setState(() {
-        zoomLevel += 0.1;
-      });
-    }
-  }
-
-  void decreaseZoom() {
-    if (zoomLevel > 0.8) {
-      setState(() {
-        zoomLevel -= 0.1;
-      });
-    }
-  }
-
-  void _showZoomDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(25),
-          ),
-          child: Container(
-            padding: const EdgeInsets.all(30),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.search, size: 80, color: Colors.blue),
-                const SizedBox(height: 20),
-                const Text(
-                  'Screen Magnifier',
-                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 15),
-                const Text(
-                  'Use the zoom buttons below to adjust text size',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 20, color: Colors.black54),
-                ),
-                const SizedBox(height: 30),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        decreaseZoom();
-                      },
-                      icon: const Icon(Icons.zoom_out, size: 32),
-                      label: const Text(
-                        'Smaller',
-                        style: TextStyle(fontSize: 20),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.grey.shade700,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 25,
-                          vertical: 15,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                      ),
-                    ),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        increaseZoom();
-                      },
-                      icon: const Icon(Icons.zoom_in, size: 32),
-                      label: const Text(
-                        'Bigger',
-                        style: TextStyle(fontSize: 20),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 25,
-                          vertical: 15,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text(
-                    'Close',
-                    style: TextStyle(fontSize: 22, color: Colors.grey),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Colors.blue.shade50, Colors.purple.shade50],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Top Bar with Back Button, Greeting and Zoom Controls
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    // Back Button Row
-                    Row(
-                      children: [
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(15),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withAlpha(26),
-                                blurRadius: 8,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: IconButton(
-                            onPressed: () {
-                              Navigator.pushReplacement(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const LoginScreen(),
-                                ),
-                              );
-                            },
-                            icon: const Icon(Icons.arrow_back),
-                            iconSize: 32,
-                            color: Colors.black87,
-                            tooltip: 'Back to Login',
-                          ),
-                        ),
-                        const Expanded(
-                          child: Center(
-                            child: Text(
-                              'My Dashboard',
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black87,
-                              ),
-                            ),
-                          ),
-                        ),
-                        // Magnifier Button
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(15),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withAlpha(26),
-                                blurRadius: 8,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: IconButton(
-                            onPressed: () {
-                              _showZoomDialog(context);
-                            },
-                            icon: const Icon(Icons.search),
-                            iconSize: 32,
-                            color: Colors.blue,
-                            tooltip: 'Magnifier',
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        // Logout Button
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(15),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withAlpha(26),
-                                blurRadius: 8,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: IconButton(
-                            onPressed: () {
-                              _showLogoutDialog(context);
-                            },
-                            icon: const Icon(Icons.logout),
-                            iconSize: 32,
-                            color: Colors.red,
-                            tooltip: 'Logout',
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    // Greeting and Zoom Controls Row
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        // Greeting Card
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 15,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withAlpha(26),
-                                blurRadius: 10,
-                                offset: const Offset(0, 5),
-                              ),
-                            ],
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Hello, ${widget.currentUserId ?? "Friend"}! 👋',
-                                style: const TextStyle(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const Text(
-                                'Ready to play?',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        // Zoom Controls
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withAlpha(26),
-                                blurRadius: 10,
-                                offset: const Offset(0, 5),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            children: [
-                              IconButton(
-                                onPressed: decreaseZoom,
-                                icon: const Icon(Icons.zoom_out),
-                                iconSize: 32,
-                                color: Colors.grey.shade700,
-                              ),
-                              IconButton(
-                                onPressed: increaseZoom,
-                                icon: const Icon(Icons.zoom_in),
-                                iconSize: 32,
-                                color: Colors.blue,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              // Main Content with Zoom
-              Expanded(
-                child: Transform.scale(
-                  scale: zoomLevel,
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 20),
-                        // Feature Grid
-                        GridView.count(
-                          crossAxisCount: 2,
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                          childAspectRatio: 0.9,
-                          children: [
-                            // Pill Reminder Card
                             _buildFeatureCard(
                               icon: Icons.medication,
                               title: 'Pill\nReminder',
@@ -2008,7 +1047,6 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                                 );
                               },
                             ),
-                            // Location Card
                             _buildFeatureCard(
                               icon: Icons.location_on,
                               title: 'My\nLocation',
@@ -2027,7 +1065,6 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                                 );
                               },
                             ),
-                            // Brain Games Card
                             _buildFeatureCard(
                               icon: Icons.psychology,
                               title: 'Brain\nGames',
@@ -2049,7 +1086,6 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                                 );
                               },
                             ),
-                            // Buddy Chat Card
                             _buildFeatureCard(
                               icon: Icons.chat,
                               title: 'My\nBuddy',
@@ -2063,7 +1099,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) => const BuddyChatScreen(),
+                                    builder: (_) => BuddyChatScreen(userId: widget.currentUserId ?? 'Unknown'),
                                   ),
                                 );
                               },
@@ -2080,15 +1116,13 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
           ),
         ),
       ),
-      // Bottom Navigation
       bottomNavigationBar: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // SOS Button
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: ElevatedButton(
-              onPressed: () {},
+              onPressed: _triggeringSOS ? null : _triggerSOSAlert,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,
                 padding: const EdgeInsets.symmetric(vertical: 20),
@@ -2097,1109 +1131,32 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                 ),
                 elevation: 8,
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Icon(Icons.warning, size: 40, color: Colors.white),
-                  SizedBox(width: 15),
-                  Text(
-                    'SOS EMERGENCY',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  SizedBox(width: 15),
-                  Icon(Icons.phone, size: 40, color: Colors.white),
-                ],
-              ),
-            ),
-          ),
-          // Navigation Bar
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withAlpha(26),
-                  blurRadius: 10,
-                  offset: const Offset(0, -5),
-                ),
-              ],
-            ),
-            child: BottomNavigationBar(
-              currentIndex: currentTab,
-              onTap: (index) {
-                setState(() {
-                  currentTab = index;
-                });
-              },
-              selectedFontSize: 16,
-              unselectedFontSize: 16,
-              iconSize: 32,
-              items: const [
-                BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.bar_chart),
-                  label: 'Activity',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.settings),
-                  label: 'Settings',
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFeatureCard({
-    required IconData icon,
-    required String title,
-    required List<Color> gradient,
-    String? badge,
-    Color? badgeColor,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: gradient,
-          ),
-          borderRadius: BorderRadius.circular(25),
-          boxShadow: [
-            BoxShadow(
-              color: gradient[0].withAlpha(128),
-              blurRadius: 15,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(25),
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(15),
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(icon, size: 50, color: gradient[1]),
-                  ),
-                  const SizedBox(height: 15),
-                  Text(
-                    title,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      height: 1.2,
-                    ),
-                  ),
-                  if (badge != null) ...[
-                    const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
+              child: _triggeringSOS
+                  ? const SizedBox(
+                      height: 40,
+                      child: Center(
+                        child: CircularProgressIndicator(color: Colors.white),
                       ),
-                      decoration: BoxDecoration(
-                        color: badgeColor,
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                      child: Text(
-                        badge,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-   */*/
-
-
-   import 'package:elderly_care_app/screens/elderly/medication/AddMedicationScreen.dart';
-import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import '../../auth/login_screen.dart';
-import '../medication/medication_list_screen.dart';
-import '../location_screen.dart';
-import '../games_screen.dart';
-import '../buddy_chat_screen.dart';
-import '../zone_selection_screen.dart';
-import '../visionguardian/vision_guardian_screen.dart';
-
-final _firestore = FirebaseFirestore.instance;
-final _auth = FirebaseAuth.instance;
-
-class ElderlyDashboard extends StatefulWidget {
-  final String? currentUserId;
-  const ElderlyDashboard({super.key, this.currentUserId});
-
-  @override
-  State<ElderlyDashboard> createState() => _ElderlyDashboardState();
-}
-
-class _ElderlyDashboardState extends State<ElderlyDashboard> {
-  double zoomLevel = 1.0;
-  int currentTab = 0;
-  bool showDemo = true;
-  int demoStep = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (showDemo) _showDemoOverlay();
-    });
-  }
-
-  // ── Active Alert Count (from File 1) ──────────────────────────────────────
-
-  Future<int> _getActiveAlertCount() async {
-    try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('alerts')
-          .where('userId', isEqualTo: widget.currentUserId ?? '')
-          .where('isActive', isEqualTo: true)
-          .get();
-      return snapshot.docs.length;
-    } catch (e) {
-      return 0;
-    }
-  }
-
-  // ── Demo Overlay (6 steps from File 1, with File 2's cleaner structure) ───
-
-  void _showDemoOverlay() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return Stack(
-              children: [
-                // Semi-transparent background
-                Positioned.fill(
-                  child: GestureDetector(
-                    onTap: () {},
-                    child: Container(color: Colors.black.withAlpha(179)),
-                  ),
-                ),
-
-                // Highlight specific feature based on step
-                if (demoStep >= 1 && demoStep <= 5)
-                  Positioned(
-                    top: _getHighlightTop(demoStep),
-                    left: _getHighlightLeft(demoStep),
-                    child: IgnorePointer(
-                      child: Container(
-                        width: _getHighlightWidth(demoStep),
-                        height: _getHighlightHeight(demoStep),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.yellow, width: 4),
-                          borderRadius: BorderRadius.circular(25),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.yellow.withAlpha(128),
-                              blurRadius: 20,
-                              spreadRadius: 5,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-
-                // Arrow pointing to feature
-                if (demoStep >= 1 && demoStep <= 5)
-                  Positioned(
-                    top: _getArrowTop(demoStep),
-                    left: _getArrowLeft(demoStep),
-                    child: Icon(
-                      Icons.arrow_downward,
-                      size: 60,
-                      color: Colors.yellow,
-                      shadows: [
-                        Shadow(
-                          color: Colors.black.withAlpha(128),
-                          blurRadius: 10,
-                        ),
-                      ],
-                    ),
-                  ),
-
-                // Demo content
-                SafeArea(
-                  child: Column(
-                    children: [
-                      // Step counter + Skip button
-                      Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 10,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withAlpha(51),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: Colors.white.withAlpha(77),
-                                  width: 2,
-                                ),
-                              ),
-                              child: Text(
-                                'Step ${demoStep + 1} of 6',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            ElevatedButton.icon(
-                              onPressed: () {
-                                Navigator.pop(context);
-                                setState(() => showDemo = false);
-                              },
-                              icon: const Icon(Icons.close, size: 24),
-                              label: const Text(
-                                'Skip',
-                                style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.white,
-                                foregroundColor: Colors.black,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 25,
-                                  vertical: 15,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const Spacer(),
-
-                      // Demo instruction card
-                      Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 20),
-                        padding: const EdgeInsets.all(30),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [Colors.white, Colors.blue.shade50],
-                          ),
-                          borderRadius: BorderRadius.circular(25),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.blue.withAlpha(128),
-                              blurRadius: 20,
-                              offset: const Offset(0, 10),
-                            ),
-                          ],
-                          border: Border.all(
-                            color: Colors.blue.shade200,
-                            width: 3,
-                          ),
-                        ),
-                        child: Column(
-                          children: [
-                            Icon(
-                              _getDemoIcon(demoStep),
-                              size: 80,
-                              color: _getDemoColor(demoStep),
-                            ),
-                            const SizedBox(height: 20),
-                            Text(
-                              _getDemoTitle(demoStep),
-                              style: const TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black87,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 15),
-                            Text(
-                              _getDemoDescription(demoStep),
-                              style: const TextStyle(
-                                fontSize: 20,
-                                color: Colors.black87,
-                                height: 1.5,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 25),
-
-                      // Navigation buttons
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Row(
-                          children: [
-                            if (demoStep > 0)
-                              Expanded(
-                                child: ElevatedButton.icon(
-                                  onPressed: () =>
-                                      setDialogState(() => demoStep--),
-                                  icon: const Icon(Icons.arrow_back, size: 28),
-                                  label: const Text(
-                                    'Back',
-                                    style: TextStyle(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.grey.shade300,
-                                    foregroundColor: Colors.black87,
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 20,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            if (demoStep > 0) const SizedBox(width: 15),
-                            Expanded(
-                              flex: 2,
-                              child: ElevatedButton.icon(
-                                onPressed: () {
-                                  if (demoStep < 5) {
-                                    setDialogState(() => demoStep++);
-                                  } else {
-                                    Navigator.pop(context);
-                                    setState(() => showDemo = false);
-                                  }
-                                },
-                                icon: Icon(
-                                  demoStep < 5
-                                      ? Icons.arrow_forward
-                                      : Icons.check,
-                                  size: 28,
-                                ),
-                                label: Text(
-                                  demoStep < 5 ? 'Next' : 'Got It!',
-                                  style: const TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue,
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 20,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(15),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 25),
-
-                      // Page indicators (6 dots)
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(6, (index) {
-                          return Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 5),
-                            width: index == demoStep ? 35 : 12,
-                            height: 12,
-                            decoration: BoxDecoration(
-                              color: index == demoStep
-                                  ? Colors.white
-                                  : Colors.white.withAlpha(77),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color: Colors.white.withAlpha(128),
-                                width: 1,
-                              ),
-                            ),
-                          );
-                        }),
-                      ),
-
-                      const SizedBox(height: 25),
-                    ],
-                  ),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  // ── Demo Helper Methods (6-step from File 1) ──────────────────────────────
-
-  double _getHighlightTop(int step) {
-    switch (step) {
-      case 1: return 220;
-      case 2: return 220;
-      case 3: return 470;
-      case 4: return 470;
-      case 5: return 640;
-      default: return 0;
-    }
-  }
-
-  double _getHighlightLeft(int step) {
-    switch (step) {
-      case 1: return 16;
-      case 2: return MediaQuery.of(context).size.width / 2 + 8;
-      case 3: return 16;
-      case 4: return MediaQuery.of(context).size.width / 2 + 8;
-      case 5: return 16;
-      default: return 0;
-    }
-  }
-
-  double _getHighlightWidth(int step) {
-    switch (step) {
-      case 1:
-      case 2:
-      case 3:
-      case 4:
-        return MediaQuery.of(context).size.width / 2 - 24;
-      case 5:
-        return MediaQuery.of(context).size.width - 32;
-      default: return 0;
-    }
-  }
-
-  double _getHighlightHeight(int step) {
-    switch (step) {
-      case 1:
-      case 2:
-      case 3:
-      case 4:
-        return 220;
-      case 5: return 80;
-      default: return 0;
-    }
-  }
-
-  double _getArrowTop(int step) {
-    switch (step) {
-      case 1: return 160;
-      case 2: return 160;
-      case 3: return 410;
-      case 4: return 410;
-      case 5: return 580;
-      default: return 0;
-    }
-  }
-
-  double _getArrowLeft(int step) {
-    switch (step) {
-      case 1: return MediaQuery.of(context).size.width / 4 - 30;
-      case 2: return MediaQuery.of(context).size.width * 3 / 4 - 30;
-      case 3: return MediaQuery.of(context).size.width / 4 - 30;
-      case 4: return MediaQuery.of(context).size.width * 3 / 4 - 30;
-      case 5: return MediaQuery.of(context).size.width / 2 - 30;
-      default: return 0;
-    }
-  }
-
-  IconData _getDemoIcon(int step) {
-    switch (step) {
-      case 0: return Icons.waving_hand;
-      case 1: return Icons.medication;
-      case 2: return Icons.location_on;
-      case 3: return Icons.psychology;
-      case 4: return Icons.visibility;
-      case 5: return Icons.warning;
-      default: return Icons.info;
-    }
-  }
-
-  Color _getDemoColor(int step) {
-    switch (step) {
-      case 0: return Colors.blue;
-      case 1: return Colors.green;
-      case 2: return Colors.blue;
-      case 3: return Colors.purple;
-      case 4: return Colors.teal;
-      case 5: return Colors.red;
-      default: return Colors.blue;
-    }
-  }
-
-  String _getDemoTitle(int step) {
-    switch (step) {
-      case 0: return 'Welcome to Your Care App!';
-      case 1: return 'Never Miss Your Pills';
-      case 2: return 'Stay Safe with GPS';
-      case 3: return 'Keep Your Mind Sharp';
-      case 4: return 'Medicine Scanner';
-      case 5: return 'Emergency SOS Button';
-      default: return '';
-    }
-  }
-
-  String _getDemoDescription(int step) {
-    switch (step) {
-      case 0: return 'Let\'s take a quick tour! I\'ll show you where everything is and how to use it.';
-      case 1: return 'Tap this GREEN card to see your medicines. Press "Taken" when you take them!';
-      case 2: return 'Tap this BLUE card to see where you are. Your family knows you\'re safe!';
-      case 3: return 'Tap this PURPLE card to play fun games that keep your mind sharp!';
-      case 4: return 'Tap this TEAL card to scan your medicine and verify it\'s the right one!';
-      case 5: return 'Press this BIG RED BUTTON in any emergency. Or shake your phone hard. Help comes fast!';
-      default: return '';
-    }
-  }
-
-  // ── Logout Dialog ─────────────────────────────────────────────────────────
-
-  void _showLogoutDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(25),
-          ),
-          child: Container(
-            padding: const EdgeInsets.all(30),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.logout, size: 80, color: Colors.red),
-                const SizedBox(height: 20),
-                const Text(
-                  'Logout?',
-                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 15),
-                const Text(
-                  'Do you want to go back to the login screen?',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 20, color: Colors.black54),
-                ),
-                const SizedBox(height: 30),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () => Navigator.pop(context),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.grey.shade300,
-                          foregroundColor: Colors.black87,
-                          padding: const EdgeInsets.symmetric(vertical: 18),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(15),
-                          ),
-                        ),
-                        child: const Text(
-                          'Cancel',
+                    )
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: const [
+                        Icon(Icons.warning, size: 40, color: Colors.white),
+                        SizedBox(width: 15),
+                        Text(
+                          'SOS EMERGENCY',
                           style: TextStyle(
-                            fontSize: 22,
+                            fontSize: 32,
                             fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const LoginScreen(),
-                            ),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red,
-                          padding: const EdgeInsets.symmetric(vertical: 18),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(15),
-                          ),
-                        ),
-                        child: const Text(
-                          'Yes, Logout',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  // ── Zoom Controls ─────────────────────────────────────────────────────────
-
-  void increaseZoom() {
-    if (zoomLevel < 1.5) setState(() => zoomLevel += 0.1);
-  }
-
-  void decreaseZoom() {
-    if (zoomLevel > 0.8) setState(() => zoomLevel -= 0.1);
-  }
-
-  void _showZoomDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(25),
-          ),
-          child: Container(
-            padding: const EdgeInsets.all(30),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.search, size: 80, color: Colors.blue),
-                const SizedBox(height: 20),
-                const Text(
-                  'Screen Magnifier',
-                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 15),
-                const Text(
-                  'Use the zoom buttons below to adjust text size',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 20, color: Colors.black54),
-                ),
-                const SizedBox(height: 30),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        decreaseZoom();
-                      },
-                      icon: const Icon(Icons.zoom_out, size: 32),
-                      label: const Text(
-                        'Smaller',
-                        style: TextStyle(fontSize: 20),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.grey.shade700,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 25,
-                          vertical: 15,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                      ),
-                    ),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        increaseZoom();
-                      },
-                      icon: const Icon(Icons.zoom_in, size: 32),
-                      label: const Text(
-                        'Bigger',
-                        style: TextStyle(fontSize: 20),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 25,
-                          vertical: 15,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text(
-                    'Close',
-                    style: TextStyle(fontSize: 22, color: Colors.grey),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  // ── Build ─────────────────────────────────────────────────────────────────
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Colors.blue.shade50, Colors.purple.shade50],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Top Bar
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    // Back / Title / Magnifier / Logout row
-                    Row(
-                      children: [
-                        _buildIconButton(
-                          icon: Icons.arrow_back,
-                          color: Colors.black87,
-                          tooltip: 'Back to Login',
-                          onTap: () => Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const LoginScreen(),
-                            ),
-                          ),
-                        ),
-                        const Expanded(
-                          child: Center(
-                            child: Text(
-                              'My Dashboard',
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black87,
-                              ),
-                            ),
-                          ),
-                        ),
-                        _buildIconButton(
-                          icon: Icons.search,
-                          color: Colors.blue,
-                          tooltip: 'Magnifier',
-                          onTap: () => _showZoomDialog(context),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildIconButton(
-                          icon: Icons.logout,
-                          color: Colors.red,
-                          tooltip: 'Logout',
-                          onTap: () => _showLogoutDialog(context),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    // Greeting + Zoom controls
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 15,
-                          ),
-                          decoration: BoxDecoration(
                             color: Colors.white,
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withAlpha(26),
-                                blurRadius: 10,
-                                offset: const Offset(0, 5),
-                              ),
-                            ],
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Hello, ${widget.currentUserId ?? "Friend"}! 👋',
-                                style: const TextStyle(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const Text(
-                                'Ready to go?',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            ],
                           ),
                         ),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withAlpha(26),
-                                blurRadius: 10,
-                                offset: const Offset(0, 5),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            children: [
-                              IconButton(
-                                onPressed: decreaseZoom,
-                                icon: const Icon(Icons.zoom_out),
-                                iconSize: 32,
-                                color: Colors.grey.shade700,
-                              ),
-                              IconButton(
-                                onPressed: increaseZoom,
-                                icon: const Icon(Icons.zoom_in),
-                                iconSize: 32,
-                                color: Colors.blue,
-                              ),
-                            ],
-                          ),
-                        ),
+                        SizedBox(width: 15),
+                        Icon(Icons.phone, size: 40, color: Colors.white),
                       ],
                     ),
-                  ],
-                ),
-              ),
-
-              // Feature Grid
-              Expanded(
-                child: Transform.scale(
-                  scale: zoomLevel,
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 20),
-                        GridView.count(
-                          crossAxisCount: 2,
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                          childAspectRatio: 0.9,
-                          children: [
-                            // Pill Reminder — dynamic badge from Firestore (File 1)
-                            FutureBuilder<int>(
-                              future: _getActiveAlertCount(),
-                              builder: (context, snapshot) {
-                                final alertCount = snapshot.data ?? 0;
-                                return _buildFeatureCard(
-                                  icon: Icons.medication,
-                                  title: 'Pill\nReminder',
-                                  gradient: [
-                                    Colors.green.shade400,
-                                    Colors.green.shade600,
-                                  ],
-                                  badge: alertCount > 0
-                                      ? '$alertCount NOW'
-                                      : null,
-                                  badgeColor: Colors.red,
-                                  onTap: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => MedicationListScreen(
-                                        userId:
-                                            widget.currentUserId ?? 'Unknown',
-                                        role: UserRole.elderly,
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-
-                            // Location Card
-                            _buildFeatureCard(
-                              icon: Icons.location_on,
-                              title: 'My\nLocation',
-                              gradient: [
-                                Colors.blue.shade400,
-                                Colors.blue.shade600,
-                              ],
-                              badge: 'Safe ✓',
-                              badgeColor: Colors.green,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const LocationScreen(),
-                                ),
-                              ),
-                            ),
-
-                            // Brain Games Card
-                            _buildFeatureCard(
-                              icon: Icons.psychology,
-                              title: 'Brain\nGames',
-                              gradient: [
-                                Colors.purple.shade400,
-                                Colors.purple.shade600,
-                              ],
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => ZoneSelectionScreen(
-                                    userId:
-                                        widget.currentUserId ?? 'Elderly User',
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                            // Vision Guardian / Medicine Scanner (from File 1)
-                            _buildFeatureCard(
-                              icon: Icons.visibility,
-                              title: 'Medicine\nScanner',
-                              gradient: [
-                                Colors.teal.shade400,
-                                Colors.teal.shade600,
-                              ],
-                              badge: '👁️',
-                              badgeColor: Colors.blue.shade700,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => VisionGuardianScreen(
-                                    userId: widget.currentUserId ?? 'Unknown',
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                            // Buddy Chat Card — passes userId (from File 2)
-                            _buildFeatureCard(
-                              icon: Icons.chat,
-                              title: 'My\nBuddy',
-                              gradient: [
-                                Colors.pink.shade400,
-                                Colors.pink.shade600,
-                              ],
-                              badge: '💬',
-                              badgeColor: Colors.yellow.shade700,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => BuddyChatScreen(
-                                    userId: widget.currentUserId ?? 'Unknown',
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 100),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-
-      // Bottom Navigation
-      bottomNavigationBar: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // SOS Button
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: ElevatedButton(
-              onPressed: () {},
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                elevation: 8,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Icon(Icons.warning, size: 40, color: Colors.white),
-                  SizedBox(width: 15),
-                  Text(
-                    'SOS EMERGENCY',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  SizedBox(width: 15),
-                  Icon(Icons.phone, size: 40, color: Colors.white),
-                ],
-              ),
             ),
           ),
-
-          // Bottom Navigation Bar
           Container(
             decoration: BoxDecoration(
               color: Colors.white,
@@ -3218,10 +1175,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
               unselectedFontSize: 16,
               iconSize: 32,
               items: const [
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.home),
-                  label: 'Home',
-                ),
+                BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
                 BottomNavigationBarItem(
                   icon: Icon(Icons.bar_chart),
                   label: 'Activity',
@@ -3234,36 +1188,6 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  // ── Shared Helpers ────────────────────────────────────────────────────────
-
-  Widget _buildIconButton({
-    required IconData icon,
-    required Color color,
-    required String tooltip,
-    required VoidCallback onTap,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(26),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: IconButton(
-        onPressed: onTap,
-        icon: Icon(icon),
-        iconSize: 32,
-        color: color,
-        tooltip: tooltip,
       ),
     );
   }

@@ -1,4 +1,4 @@
-/*
+﻿/*
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -2376,6 +2376,8 @@ import '../analytics/event_ordering_analytics_screen.dart';
 import '../analytics/daily_routine_analytics_screen.dart';
 import '../analytics/monument_recall_analytics_screen.dart';
 
+import '../../../services/sos_service.dart';
+
 class CaretakerDashboard extends StatefulWidget {
   const CaretakerDashboard({Key? key}) : super(key: key);
 
@@ -2394,6 +2396,10 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
   bool _isLoading = true;
   String? _errorMessage;
 
+  final SOSService _sosService = SOSService();
+  bool _hasActiveSOS = false;
+  bool _isHome = true;
+
   // Cached cognitive health future so it doesn't reset on every rebuild
   Future<Map<String, dynamic>>? _cognitiveHealthFuture;
 
@@ -2401,6 +2407,20 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
   void initState() {
     super.initState();
     _loadElderlyUserId();
+    
+    // Listen to SOS alerts
+    _listenToSOSAlerts();
+  }
+
+  void _listenToSOSAlerts() {
+    if (elderlyUserId.isEmpty) return;
+    
+    _sosService.getActiveSOSAlerts(elderlyUserId).listen((snapshot) {
+      if (!mounted) return;
+      setState(() {
+        _hasActiveSOS = snapshot.docs.isNotEmpty;
+      });
+    });
   }
 
   Future<void> _loadElderlyUserId() async {
@@ -2438,9 +2458,34 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
         _isLoading = false;
       });
     }
+    // Check SOS status
+    _checkSOSStatus();
+    
+    // Check location status
+    _checkLocationStatus();
   }
 
+  Future<void> _checkSOSStatus() async {
+    if (elderlyUserId.isEmpty) return;
+    
+    final hasActiveSOS = await _sosService.hasActiveSOS(elderlyUserId);
+    
+    if (!mounted) return;
+    setState(() {
+      _hasActiveSOS = hasActiveSOS;
+    });
+  }
 
+  Future<void> _checkLocationStatus() async {
+    if (elderlyUserId.isEmpty) return;
+    
+    final locationStatus = await _sosService.getLocationStatus(elderlyUserId);
+    
+    if (!mounted) return;
+    setState(() {
+      _isHome = locationStatus['isHome'] ?? false;
+    });
+  }
 
   // ── Build ─────────────────────────────────────────────────────────────────
 
@@ -2581,103 +2626,92 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
   // ── Patient Header Card (uses getUserProfile stream from File 2) ──────────
 
   Widget _buildPatientHeaderCard(BuildContext context) {
-    return StreamBuilder<Map<String, dynamic>>(
-      stream: _dataService.getUserProfile(elderlyUserId),
-      builder: (context, snapshot) {
-        String name = elderlyUserName.isNotEmpty ? elderlyUserName : elderlyUserId;
-        String age = elderlyUserAge;
-        String gender = elderlyUserGender;
-        String location = "Home";
-        String lastActive = "";
-        String status = "Active";
+    final name = elderlyUserName.isNotEmpty ? elderlyUserName : elderlyUserId;
+    final age = elderlyUserAge;
+    final gender = elderlyUserGender;
+    
+    // ✅ UPDATED: Dynamic status based on SOS
+    final status = _hasActiveSOS ? 'SOS TRIGGERED' : 'Active';
+    final statusColor = _hasActiveSOS ? Colors.red : CaretakerColors.successGreen;
+    
+    // ✅ UPDATED: Dynamic gradient based on SOS
+    final gradientColors = _hasActiveSOS
+        ? [Colors.red.shade400, Colors.red.shade600]
+        : [CaretakerColors.primaryGreen, Color(0xFF2DBE91)];
 
-        if (snapshot.hasData && snapshot.data != null) {
-          final profile = snapshot.data!;
-          name = profile['name'] as String? ?? name;
-          age = profile['age']?.toString() ?? age;
-          gender = profile['gender'] as String? ?? gender;
-          location = profile['location'] as String? ?? location;
-          lastActive = profile['lastActive'] as String? ?? "";
-          status = profile['status'] as String? ?? status;
-        }
-
-        final statusColor = _getStatusColor(status);
-
-        return Container(
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [CaretakerColors.primaryGreen, Color(0xFF2DBE91)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: CaretakerLayout.cardRadius,
-          ),
-          padding: const EdgeInsets.all(20),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: gradientColors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: CaretakerLayout.cardRadius,
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                const SizedBox(height: 4),
+                Text('Age $age • $gender', style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.9))),
+                const SizedBox(height: 8),
+                
+                // ✅ UPDATED: Show Home/Away based on location
+                Row(
                   children: [
-                    Text(
-                      name,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+                    Icon(
+                      _isHome ? Icons.home : Icons.location_on,
+                      size: 14,
+                      color: Colors.white,
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(width: 4),
                     Text(
-                      "Age $age • $gender",
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.white.withOpacity(0.9),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Icon(Icons.location_on, size: 14, color: Colors.white),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            lastActive.isNotEmpty
-                                ? "$location • $lastActive"
-                                : location,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.white.withOpacity(0.9),
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
+                      _isHome ? 'Home' : 'Away from Home',
+                      style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.9)),
                     ),
                   ],
                 ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white, width: 1.5),
-                ),
-                child: Text(
-                  status,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
+                
+                // ✅ NEW: Show SOS icon if active
+                if (_hasActiveSOS) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.warning, size: 16, color: Colors.white),
+                      const SizedBox(width: 4),
+                      Text(
+                        'EMERGENCY ALERT ACTIVE',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ),
-            ],
+                ],
+              ],
+            ),
           ),
-        );
-      },
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: statusColor.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.white, width: 1.5),
+            ),
+            child: Text(
+              status,
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
