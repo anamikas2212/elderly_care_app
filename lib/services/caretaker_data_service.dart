@@ -678,7 +678,6 @@ class CaretakerDataService {
         .handleError((e) { print("Error in OtherGames stream: $e"); return []; });
 
     // Merge logic
-    StreamController<List<Map<String, dynamic>>> controller = StreamController<List<Map<String, dynamic>>>.broadcast();
     List<Map<String, dynamic>> ctList = [];
     List<Map<String, dynamic>> fcList = [];
     List<Map<String, dynamic>> ogList = [];
@@ -686,16 +685,18 @@ class CaretakerDataService {
     // ignore: cancel_subscriptions
     StreamSubscription? sub1, sub2, sub3;
 
+    final controller = StreamController<List<Map<String, dynamic>>>.broadcast();
+
     void update() {
       if (controller.isClosed) return;
       final all = [...ctList, ...fcList, ...ogList];
       all.sort((a, b) => (b['createdAt'] as int).compareTo(a['createdAt'] as int));
-      controller.add(all.take(10).toList()); // Only send top 10
+      controller.add(all.take(10).toList());
     }
 
-    sub1 = colorTapStream.listen((l) { ctList = l; update(); });
-    sub2 = flipCardStream.listen((l) { fcList = l; update(); });
-    sub3 = otherGamesStream.listen((l) { ogList = l; update(); });
+    sub1 = colorTapStream.listen((l) { ctList = l; update(); }, onError: (e) { print('CT error: $e'); update(); });
+    sub2 = flipCardStream.listen((l) { fcList = l; update(); }, onError: (e) { print('FC error: $e'); update(); });
+    sub3 = otherGamesStream.listen((l) { ogList = l; update(); }, onError: (e) { print('OG error: $e'); update(); });
 
     controller.onCancel = () {
       sub1?.cancel();
@@ -708,6 +709,120 @@ class CaretakerDataService {
 
   Future<List<Map<String, dynamic>>> _fetchAllGameSessions(String userId) async {
     return []; 
+  }
+
+  /// Future-based version of getGameSessionHistory — fetches once, no stream complexity.
+  Future<List<Map<String, dynamic>>> getRecentActivityFuture(String userId) async {
+    final List<Map<String, dynamic>> all = [];
+
+    try {
+      final ctSnap = await _firestore
+          .collection('colorTapGameSessions')
+          .where('userId', isEqualTo: userId)
+          .limit(20)
+          .get();
+      for (final d in ctSnap.docs) {
+        final data = d.data();
+        all.add({
+          'gameType': 'Color Tap',
+          'icon': 'touch_app',
+          'color': 'blue',
+          'score': data['score'] ?? 0,
+          'createdAt': _parseTimestamp(data['createdAt']),
+          'correct_taps': data['correct_taps'] ?? 0,
+          'false_taps': data['false_taps'] ?? 0,
+          'average_reaction_time': (data['average_reaction_time'] as num?)?.toDouble() ?? 0.0,
+        });
+      }
+    } catch (_) {}
+
+    try {
+      final fcSnap = await _firestore
+          .collection('flipCardGameSessions')
+          .where('userId', isEqualTo: userId)
+          .limit(20)
+          .get();
+      for (final d in fcSnap.docs) {
+        final data = d.data();
+        all.add({
+          'gameType': 'Flip Card',
+          'icon': 'flip',
+          'color': 'purple',
+          'score': data['score'] ?? 0,
+          'createdAt': _parseTimestamp(data['createdAt']),
+          'efficiency': (data['efficiency'] as num?)?.toDouble() ?? 0.0,
+        });
+      }
+    } catch (_) {}
+
+    try {
+      final ogSnap = await _firestore
+          .collection('game_sessions')
+          .where('userId', isEqualTo: userId)
+          .limit(20)
+          .get();
+      for (final d in ogSnap.docs) {
+        final data = d.data();
+        final gameType = data['gameType'] as String? ?? 'Unknown';
+        String label;
+        switch (gameType) {
+          case 'city_atlas': label = 'City Atlas'; break;
+          case 'event_ordering': label = 'Event Ordering'; break;
+          case 'daily_routine_recall': label = 'Routine Recall'; break;
+          case 'monument_recall': label = 'Monument Recall'; break;
+          default: label = gameType;
+        }
+        all.add({
+          'gameType': label,
+          'icon': 'sports_esports',
+          'color': 'teal',
+          'score': (data['score'] as num?)?.toInt() ?? 0,
+          'createdAt': _parseTimestamp(data['timestamp']),
+          'metrics': data['metrics'] ?? {},
+          'cognitive_contributions': data['cognitive_contributions'] ?? {},
+        });
+      }
+    } catch (_) {}
+
+    all.sort((a, b) => (b['createdAt'] as int).compareTo(a['createdAt'] as int));
+    return all.take(10).toList();
+  }
+
+  /// Future-based version of getOverallStatistics — fetches once.
+  Future<Map<String, dynamic>> getOverallStatisticsFuture(String userId) async {
+    int ct = 0, fc = 0, og = 0;
+
+    try {
+      final ctSnap = await _firestore
+          .collection('colorTapGameSessions')
+          .where('userId', isEqualTo: userId)
+          .get();
+      ct = ctSnap.docs.length;
+    } catch (_) {}
+
+    try {
+      final fcSnap = await _firestore
+          .collection('flipCardGameSessions')
+          .where('userId', isEqualTo: userId)
+          .get();
+      fc = fcSnap.docs.length;
+    } catch (_) {}
+
+    try {
+      final ogSnap = await _firestore
+          .collection('game_sessions')
+          .where('userId', isEqualTo: userId)
+          .get();
+      og = ogSnap.docs.where((d) {
+        final type = d.data()['gameType'] as String? ?? '';
+        return !['Color Tap', 'Color Tap (Reaction)', 'Flip Card', 'Flip Card Match'].contains(type);
+      }).length;
+    } catch (_) {}
+
+    return {
+      'totalGames': ct + fc + og,
+      'medicationAdherence': 87,
+    };
   }
 
 
@@ -745,14 +860,13 @@ class CaretakerDataService {
         })
         .handleError((e) => 0);
 
-    StreamController<Map<String, dynamic>> controller = StreamController<Map<String, dynamic>>.broadcast();
-    
     int ct = 0;
     int fc = 0;
     int og = 0;
-    
     // ignore: cancel_subscriptions
     StreamSubscription? sub1, sub2, sub3;
+    
+    final controller = StreamController<Map<String, dynamic>>.broadcast();
     
     void emit() {
       if (!controller.isClosed) {
@@ -763,9 +877,9 @@ class CaretakerDataService {
       }
     }
     
-    sub1 = colorTapCount.listen((c) { ct = c; emit(); });
-    sub2 = flipCardCount.listen((c) { fc = c; emit(); });
-    sub3 = otherGamesCount.listen((c) { og = c; emit(); });
+    sub1 = colorTapCount.listen((c) { ct = c; emit(); }, onError: (e) { print('CT count error: $e'); emit(); });
+    sub2 = flipCardCount.listen((c) { fc = c; emit(); }, onError: (e) { print('FC count error: $e'); emit(); });
+    sub3 = otherGamesCount.listen((c) { og = c; emit(); }, onError: (e) { print('OG count error: $e'); emit(); });
     
     controller.onCancel = () {
       sub1?.cancel();
