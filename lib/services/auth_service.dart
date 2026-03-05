@@ -103,11 +103,15 @@ class AuthService {
     );
     final uid = credential.user!.uid;
 
-    // Verify role
+    // If user logged in via email/password, they are a caretaker.
+    // Create or fix the Firestore profile if it's missing or has wrong role.
     final doc = await _firestore.collection('users').doc(uid).get();
-    if (doc.exists && doc.data()?['role'] != 'caretaker') {
-      await _auth.signOut();
-      throw Exception('This account is not a caretaker account.');
+    if (!doc.exists || doc.data()?['role'] != 'caretaker') {
+      await _firestore.collection('users').doc(uid).set({
+        'role': 'caretaker',
+        'email': email,
+        'linked_elderly': doc.exists ? (doc.data()?['linked_elderly'] ?? []) : [],
+      }, SetOptions(merge: true));
     }
 
     final prefs = await SharedPreferences.getInstance();

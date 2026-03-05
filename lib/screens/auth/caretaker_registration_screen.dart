@@ -69,7 +69,7 @@ class _CaretakerRegistrationScreenState
       } else if (e.toString().contains('operation-not-allowed')) {
         msg = 'Email/Password sign-in is not enabled. Please enable it in Firebase Console.';
       }
-      _showError(msg);
+      _showError('$msg\n\nDebug: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

@@ -66,7 +66,7 @@ class _CaretakerLoginScreenState extends State<CaretakerLoginScreen> {
       } else if (e.toString().contains('invalid-email')) {
         msg = 'Invalid email format.';
       }
-      _showError(msg);
+      _showError('$msg\n\nDebug: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
