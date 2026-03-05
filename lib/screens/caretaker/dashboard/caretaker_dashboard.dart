@@ -19,7 +19,8 @@ import '../analytics/daily_routine_analytics_screen.dart';
 import '../analytics/monument_recall_analytics_screen.dart';
 
 class CaretakerDashboard extends StatefulWidget {
-  const CaretakerDashboard({Key? key}) : super(key: key);
+  final String? elderlyUserId;
+  const CaretakerDashboard({Key? key, this.elderlyUserId}) : super(key: key);
 
   @override
   State<CaretakerDashboard> createState() => _CaretakerDashboardState();
@@ -49,14 +50,39 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
 
   Future<void> _loadElderlyUserId() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final uid =
-          prefs.getString('elderly_user_uid') ??
-          prefs.getString('elderly_user_id') ??
-          prefs.getString('elderly_user_name');
-      final name = prefs.getString('elderly_user_name') ?? uid ?? '';
-      final loadedAge = prefs.getString('elderly_user_age') ?? '--';
-      final loadedGender = prefs.getString('elderly_user_gender') ?? '--';
+      String? uid = widget.elderlyUserId;
+      String name = '';
+      String loadedAge = '--';
+      String loadedGender = '--';
+
+      if (uid != null && uid.isNotEmpty) {
+        // UID passed from PatientSelectionScreen → fetch profile from Firestore
+        try {
+          final doc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(uid)
+              .get();
+          if (doc.exists) {
+            final data = doc.data()!;
+            name = data['name'] ?? uid;
+            loadedAge = data['age'] ?? '--';
+            loadedGender = data['gender'] ?? '--';
+          } else {
+            name = uid;
+          }
+        } catch (_) {
+          name = uid;
+        }
+      } else {
+        // Fallback: read from SharedPreferences (backwards compatibility)
+        final prefs = await SharedPreferences.getInstance();
+        uid = prefs.getString('elderly_user_uid') ??
+            prefs.getString('elderly_user_id') ??
+            prefs.getString('elderly_user_name');
+        name = prefs.getString('elderly_user_name') ?? uid ?? '';
+        loadedAge = prefs.getString('elderly_user_age') ?? '--';
+        loadedGender = prefs.getString('elderly_user_gender') ?? '--';
+      }
 
       if (uid == null || uid.isEmpty) {
         setState(() {
@@ -68,7 +94,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
 
       if (!mounted) return;
       setState(() {
-        elderlyUserId = uid;
+        elderlyUserId = uid!;
         elderlyUserName = name;
         elderlyUserAge = loadedAge;
         elderlyUserGender = loadedGender;

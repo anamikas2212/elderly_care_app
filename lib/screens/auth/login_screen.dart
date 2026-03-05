@@ -2,8 +2,7 @@
 // ✅ COMPLETE FIXED VERSION - Replace your entire file with this
 
 import 'package:flutter/material.dart';
-import '../elderly/home/elderly_dashboard.dart';
-import '../caretaker/dashboard/caretaker_dashboard.dart';
+import 'caretaker_login_screen.dart';
 import 'elderly_initial_login_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -30,7 +29,7 @@ class _LoginScreenState extends State<LoginScreen> {
       } else {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const CaretakerDashboard()),
+          MaterialPageRoute(builder: (_) => const CaretakerLoginScreen()),
         );
       }
     });

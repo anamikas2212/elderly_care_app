@@ -2255,6 +2255,7 @@ import '../games_screen.dart';
 import '../buddy_chat_screen.dart';
 import '../zone_selection_screen.dart';
 import '../visionguardian/vision_guardian_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 final _firestore = FirebaseFirestore.instance;
 final _auth = FirebaseAuth.instance;
@@ -2272,13 +2273,24 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
   int currentTab = 0;
   bool showDemo = true;
   int demoStep = 0;
+  String? _careCode;
 
   @override
   void initState() {
     super.initState();
+    _loadCareCode();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (showDemo) _showDemoOverlay();
     });
+  }
+
+  Future<void> _loadCareCode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final code = prefs.getString('care_code');
+    print('🔍 Loading care code from SharedPreferences: $code');
+    if (code != null && mounted) {
+      setState(() => _careCode = code);
+    }
   }
 
   // ── Active Alert Count (from File 1) ──────────────────────────────────────
@@ -3022,6 +3034,50 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                         ),
                       ],
                     ),
+
+                    // Care Code Banner
+                    if (_careCode != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [Colors.teal.shade400, Colors.teal.shade600],
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.teal.withAlpha(77),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.link, color: Colors.white, size: 24),
+                              const SizedBox(width: 10),
+                              const Expanded(
+                                child: Text(
+                                  'Share with Caregiver:',
+                                  style: TextStyle(color: Colors.white, fontSize: 14),
+                                ),
+                              ),
+                              Text(
+                                '${_careCode!.substring(0, 3)}-${_careCode!.substring(3)}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 3,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
