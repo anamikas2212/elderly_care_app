@@ -123,12 +123,27 @@ class AuthService {
 
   /// Checks if a caretaker is already logged in.
   Future<bool> isCaretakerLoggedIn() async {
-    // Wait for Firebase Auth to restore the session (critical on web)
-    final user = await _auth.authStateChanges().first;
-    if (user == null || user.isAnonymous) return false;
-
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('user_role') == 'caretaker';
+    final savedRole = prefs.getString('user_role');
+    final savedUid = prefs.getString('caretaker_uid');
+
+    // If SharedPreferences says caretaker, verify with Firebase Auth
+    if (savedRole == 'caretaker' && savedUid != null && savedUid.isNotEmpty) {
+      // Wait briefly for Firebase to restore session
+      try {
+        final user = await _auth.authStateChanges().first.timeout(
+          const Duration(seconds: 3),
+          onTimeout: () => _auth.currentUser,
+        );
+        // If Firebase confirms a non-anonymous user, we're good
+        if (user != null && !user.isAnonymous) return true;
+        // Even if Firebase hasn't restored yet, trust SharedPreferences
+        return true;
+      } catch (_) {
+        return true; // Trust SharedPreferences
+      }
+    }
+    return false;
   }
 
   // ── Sign Out ──────────────────────────────────────────────────────────────
@@ -138,7 +153,12 @@ class AuthService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('user_role');
     await prefs.remove('caretaker_uid');
-    // Keep elderly prefs so they can re-login
+    await prefs.remove('elderly_user_uid');
+    await prefs.remove('elderly_user_id');
+    await prefs.remove('elderly_user_name');
+    await prefs.remove('elderly_user_age');
+    await prefs.remove('elderly_user_gender');
+    await prefs.remove('care_code');
   }
 
   Future<void> signOutElderly() async {

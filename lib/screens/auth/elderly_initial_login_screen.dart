@@ -37,16 +37,17 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
       _isAnimating = true;
     });
 
-    // Sign in anonymously to get a Firebase UID for Firestore queries
+    // Sign in anonymously to get a FRESH Firebase UID for this elderly user.
+    // Always sign out first to avoid reusing the caretaker's session or
+    // a previous elderly user's anonymous session.
     String uid = '';
     try {
       final existingUser = FirebaseAuth.instance.currentUser;
       if (existingUser != null) {
-        uid = existingUser.uid;
-      } else {
-        final credential = await FirebaseAuth.instance.signInAnonymously();
-        uid = credential.user?.uid ?? '';
+        await FirebaseAuth.instance.signOut();
       }
+      final credential = await FirebaseAuth.instance.signInAnonymously();
+      uid = credential.user?.uid ?? '';
     } catch (e) {
       // Firebase not available — fall back to name-based ID
       uid = _nameController.text.trim();

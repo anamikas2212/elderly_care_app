@@ -54,6 +54,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
       String name = '';
       String loadedAge = '--';
       String loadedGender = '--';
+      String dataId = ''; // The ID used by SessionTracker for game data
 
       if (uid != null && uid.isNotEmpty) {
         // UID passed from PatientSelectionScreen → fetch profile from Firestore
@@ -73,6 +74,25 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
         } catch (_) {
           name = uid;
         }
+
+        // The SessionTracker stores game data using the NAME as userId,
+        // not the Firebase UID. So we use the name for data queries.
+        // Also check if a name-based user doc exists (old format) with richer data.
+        dataId = name;
+        if (name.isNotEmpty && name != uid) {
+          try {
+            final nameDoc = await FirebaseFirestore.instance
+                .collection('users')
+                .doc(name)
+                .get();
+            if (nameDoc.exists) {
+              final nameData = nameDoc.data()!;
+              // Use name-based doc for age/gender if UID doc didn't have them
+              if (loadedAge == '--') loadedAge = nameData['age'] ?? '--';
+              if (loadedGender == '--') loadedGender = nameData['gender'] ?? '--';
+            }
+          } catch (_) {}
+        }
       } else {
         // Fallback: read from SharedPreferences (backwards compatibility)
         final prefs = await SharedPreferences.getInstance();
@@ -82,7 +102,10 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
         name = prefs.getString('elderly_user_name') ?? uid ?? '';
         loadedAge = prefs.getString('elderly_user_age') ?? '--';
         loadedGender = prefs.getString('elderly_user_gender') ?? '--';
+        dataId = name.isNotEmpty ? name : (uid ?? '');
       }
+
+      if (dataId.isEmpty) dataId = uid ?? name;
 
       if (uid == null || uid.isEmpty) {
         setState(() {
@@ -94,13 +117,13 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
 
       if (!mounted) return;
       setState(() {
-        elderlyUserId = uid!;
+        elderlyUserId = dataId; // Use name-based ID for data queries
         elderlyUserName = name;
         elderlyUserAge = loadedAge;
         elderlyUserGender = loadedGender;
-        _cognitiveHealthFuture = _dataService.getCognitiveHealthFuture(uid);
-        _recentActivityFuture = _dataService.getRecentActivityFuture(uid);
-        _overallStatsFuture = _dataService.getOverallStatisticsFuture(uid);
+        _cognitiveHealthFuture = _dataService.getCognitiveHealthFuture(dataId);
+        _recentActivityFuture = _dataService.getRecentActivityFuture(dataId);
+        _overallStatsFuture = _dataService.getOverallStatisticsFuture(dataId);
         _isLoading = false;
       });
     } catch (e) {

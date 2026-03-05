@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/auth_service.dart';
 import '../../services/pairing_service.dart';
 import 'dashboard/caretaker_dashboard.dart';
@@ -27,11 +29,21 @@ class _PatientSelectionScreenState extends State<PatientSelectionScreen> {
   Future<void> _loadPatients() async {
     setState(() => _isLoading = true);
     try {
-      final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid == null) return;
+      // Try Firebase Auth first, fall back to SharedPreferences
+      String? uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) {
+        final prefs = await SharedPreferences.getInstance();
+        uid = prefs.getString('caretaker_uid');
+      }
+      print('👩‍⚕️ Loading patients for caretaker UID: $uid');
+      if (uid == null || uid.isEmpty) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
       final profiles = await _pairingService.getLinkedElderlyProfiles(uid);
       if (mounted) setState(() { _patients = profiles; _isLoading = false; });
     } catch (e) {
+      print('❌ Error loading patients: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -189,6 +201,62 @@ class _PatientSelectionScreenState extends State<PatientSelectionScreen> {
     );
   }
 
+  Future<void> _removePatient(Map<String, dynamic> patient) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove Patient?'),
+        content: Text(
+          'Remove "${patient['name']}" (UID: ${patient['uid']}) from your linked patients?\n\nYou can re-add them with a new Care Code.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Remove', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        final uid = FirebaseAuth.instance.currentUser?.uid;
+        if (uid == null) {
+          final prefs = await SharedPreferences.getInstance();
+          final savedUid = prefs.getString('caretaker_uid');
+          if (savedUid == null) return;
+          await FirebaseFirestore.instance.collection('users').doc(savedUid).update({
+            'linked_elderly': FieldValue.arrayRemove([patient['uid']]),
+          });
+        } else {
+          await FirebaseFirestore.instance.collection('users').doc(uid).update({
+            'linked_elderly': FieldValue.arrayRemove([patient['uid']]),
+          });
+        }
+        _loadPatients(); // Refresh
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${patient['name']} removed.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to remove: $e'), backgroundColor: Colors.red),
+          );
+        }
+      }
+    }
+  }
+
   Future<void> _logout() async {
     await _authService.signOut();
     if (!mounted) return;
@@ -309,6 +377,7 @@ class _PatientSelectionScreenState extends State<PatientSelectionScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
         onTap: () => _navigateToDashboard(patient),
+        onLongPress: () => _removePatient(patient),
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(20),

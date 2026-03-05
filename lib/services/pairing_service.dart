@@ -135,14 +135,18 @@ class PairingService {
 
     final linkedUids =
         List<String>.from(caretakerDoc.data()?['linked_elderly'] ?? []);
+    // Deduplicate UIDs (in case same UID was added twice)
+    final uniqueUids = linkedUids.toSet().toList();
+    print('🔗 Linked elderly UIDs (${uniqueUids.length} unique of ${linkedUids.length} total): $uniqueUids');
 
     final profiles = <Map<String, dynamic>>[];
-    for (final uid in linkedUids) {
+    for (final uid in uniqueUids) {
       try {
         final elderlyDoc =
             await _firestore.collection('users').doc(uid).get();
         if (elderlyDoc.exists) {
           final data = elderlyDoc.data()!;
+          print('👤 UID $uid → name: ${data['name']}, age: ${data['age']}, gender: ${data['gender']}');
           profiles.add({
             'uid': uid,
             'name': data['name'] ?? 'Unknown',
