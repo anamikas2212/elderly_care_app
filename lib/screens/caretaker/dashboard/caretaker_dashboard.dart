@@ -2630,11 +2630,11 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
     final age = elderlyUserAge;
     final gender = elderlyUserGender;
     
-    // ✅ UPDATED: Dynamic status based on SOS
+    // UPDATED: Dynamic status based on SOS
     final status = _hasActiveSOS ? 'SOS TRIGGERED' : 'Active';
     final statusColor = _hasActiveSOS ? Colors.red : CaretakerColors.successGreen;
     
-    // ✅ UPDATED: Dynamic gradient based on SOS
+    // UPDATED: Dynamic gradient based on SOS
     final gradientColors = _hasActiveSOS
         ? [Colors.red.shade400, Colors.red.shade600]
         : [CaretakerColors.primaryGreen, Color(0xFF2DBE91)];
@@ -2661,7 +2661,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
                 Text('Age $age • $gender', style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.9))),
                 const SizedBox(height: 8),
                 
-                // ✅ UPDATED: Show Home/Away based on location
+                // UPDATED: Show Home/Away based on location
                 Row(
                   children: [
                     Icon(
@@ -2677,7 +2677,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
                   ],
                 ),
                 
-                // ✅ NEW: Show SOS icon if active
+                // NEW: Show SOS icon if active
                 if (_hasActiveSOS) ...[
                   const SizedBox(height: 8),
                   Row(

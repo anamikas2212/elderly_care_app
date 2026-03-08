@@ -150,7 +150,6 @@ class _SafetyMonitorScreenState extends State<SafetyMonitorScreen> {
             ),
             const SizedBox(height: 12),
             _buildActiveAlertsSection(),
-
             const SizedBox(height: 24),
 
             // SOS Logs
@@ -170,14 +169,38 @@ class _SafetyMonitorScreenState extends State<SafetyMonitorScreen> {
     );
   }
 
+  // FIXED: Active Alerts - No more blinking!
   Widget _buildActiveAlertsSection() {
     return StreamBuilder<QuerySnapshot>(
       stream: _sosService.getActiveSOSAlerts(elderlyUserId),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+        // Show loading ONLY on first load
+        if (snapshot.connectionState == ConnectionState.waiting && 
+            !snapshot.hasData) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: CircularProgressIndicator(),
+            ),
+          );
         }
 
+        // Handle errors gracefully
+        if (snapshot.hasError) {
+          return Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Text(
+              'Error loading alerts: ${snapshot.error}',
+              style: const TextStyle(color: Colors.red),
+            ),
+          );
+        }
+
+        // No active alerts
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return Container(
             padding: const EdgeInsets.all(20),
@@ -220,118 +243,133 @@ class _SafetyMonitorScreenState extends State<SafetyMonitorScreen> {
           );
         }
 
+        // Cache the docs to prevent flickering
+        final activeDocs = snapshot.data!.docs;
+
+        // Display active alerts
         return Column(
-          children: snapshot.data!.docs.map((doc) {
+          children: activeDocs.map((doc) {
             final data = doc.data() as Map<String, dynamic>;
             final alertId = doc.id;
-            final elderlyName = data['elderlyUserName'] ?? 'Unknown';
-            final status = data['status'] ?? 'active';
-            final triggeredAt = (data['triggeredAt'] as Timestamp?)?.toDate();
-            final location = data['location'] as Map<String, dynamic>?;
-
-            return Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.red, width: 2),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.warning_amber_rounded,
-                          size: 32, color: Colors.red),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'EMERGENCY ALERT',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.red,
-                              ),
-                            ),
-                            Text(
-                              elderlyName,
-                              style: const TextStyle(fontSize: 16),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: status == 'acknowledged'
-                              ? Colors.orange
-                              : Colors.red,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          status.toUpperCase(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  if (triggeredAt != null)
-                    Text(
-                      'Triggered: ${_formatDateTime(triggeredAt)}',
-                      style: TextStyle(color: Colors.grey.shade700),
-                    ),
-                  if (location != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      'Location: ${location['latitude']?.toStringAsFixed(4)}, ${location['longitude']?.toStringAsFixed(4)}',
-                      style: TextStyle(color: Colors.grey.shade700),
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      if (status == 'active')
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: () => _acknowledgeSOS(alertId),
-                            icon: const Icon(Icons.check),
-                            label: const Text('Acknowledge'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.orange,
-                            ),
-                          ),
-                        ),
-                      if (status == 'active') const SizedBox(width: 8),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () => _resolveSOS(alertId),
-                          icon: const Icon(Icons.check_circle),
-                          label: const Text('Resolve'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            );
+            return _buildAlertCard(alertId, data);
           }).toList(),
         );
       },
+    );
+  }
+
+  // FIXED: Extract alert card to prevent rebuilds
+  Widget _buildAlertCard(String alertId, Map<String, dynamic> data) {
+    final elderlyName = data['elderlyUserName'] ?? 'Unknown';
+    final status = data['status'] ?? 'active';
+    final triggeredAt = (data['triggeredAt'] as Timestamp?)?.toDate();
+    final location = data['location'] as Map<String, dynamic>?;
+    final isInsideSafeZone = data['isInsideSafeZone'] as bool? ?? false;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.red, width: 2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, size: 32, color: Colors.red),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'EMERGENCY ALERT',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.red,
+                      ),
+                    ),
+                    Text(
+                      elderlyName,
+                      style: const TextStyle(fontSize: 16),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: status == 'acknowledged' ? Colors.orange : Colors.red,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  status.toUpperCase(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (triggeredAt != null)
+            Text(
+              'Triggered: ${_formatDateTime(triggeredAt)}',
+              style: TextStyle(color: Colors.grey.shade700),
+            ),
+          const SizedBox(height: 4),
+          Text(
+            'Location: ${isInsideSafeZone ? "Home" : "Away from Home"}',
+            style: TextStyle(
+              color: isInsideSafeZone ? Colors.green : Colors.orange,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          if (location != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              'GPS: ${location['latitude']?.toStringAsFixed(4)}, ${location['longitude']?.toStringAsFixed(4)}',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+            ),
+          ],
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              if (status == 'active')
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _acknowledgeSOS(alertId),
+                    icon: const Icon(Icons.check),
+                    label: const Text('Acknowledge'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                    ),
+                  ),
+                ),
+              if (status == 'active') const SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _resolveSOS(alertId),
+                  icon: const Icon(Icons.check_circle),
+                  label: const Text('Resolve'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -339,8 +377,28 @@ class _SafetyMonitorScreenState extends State<SafetyMonitorScreen> {
     return StreamBuilder<QuerySnapshot>(
       stream: _sosService.getSOSLogs(elderlyUserId),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+        if (snapshot.connectionState == ConnectionState.waiting && 
+            !snapshot.hasData) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Text(
+              'Error loading history: ${snapshot.error}',
+              style: const TextStyle(color: Colors.red),
+            ),
+          );
         }
 
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
@@ -382,6 +440,11 @@ class _SafetyMonitorScreenState extends State<SafetyMonitorScreen> {
                 icon = Icons.check_circle;
                 color = Colors.green;
                 actionText = 'Resolved';
+                break;
+              case 'false_alarm':
+                icon = Icons.cancel;
+                color = Colors.grey;
+                actionText = 'False Alarm';
                 break;
               default:
                 icon = Icons.info;
