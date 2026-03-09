@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../elderly/home/elderly_dashboard.dart';
+import '../../services/pairing_service.dart';
 
 class ElderlyInitialLoginScreen extends StatefulWidget {
   const ElderlyInitialLoginScreen({super.key});
@@ -16,8 +17,7 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _ageController = TextEditingController();
   final TextEditingController _genderController = TextEditingController();
-  final TextEditingController _caretakerIdController =
-      TextEditingController(); // Added
+  final PairingService _pairingService = PairingService();
   bool _isAnimating = false;
 
   void _login() async {
@@ -37,22 +37,21 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
       _isAnimating = true;
     });
 
-    // Sign in anonymously to get a Firebase UID for Firestore queries
+    // Sign in anonymously to get a FRESH Firebase UID for this elderly user.
+    // Always sign out first to avoid reusing the caretaker's session or
+    // a previous elderly user's anonymous session.
     String uid = '';
     try {
       final existingUser = FirebaseAuth.instance.currentUser;
       if (existingUser != null) {
-        uid = existingUser.uid;
-      } else {
-        final credential = await FirebaseAuth.instance.signInAnonymously();
-        uid = credential.user?.uid ?? '';
+        await FirebaseAuth.instance.signOut();
       }
+      final credential = await FirebaseAuth.instance.signInAnonymously();
+      uid = credential.user?.uid ?? '';
     } catch (e) {
       // Firebase not available — fall back to name-based ID
       uid = _nameController.text.trim();
     }
-
-    final caretakerId = _caretakerIdController.text.trim(); // Added
 
     // Save details locally
     final prefs = await SharedPreferences.getInstance();
@@ -61,9 +60,7 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
     await prefs.setString('elderly_user_name', _nameController.text.trim());
     await prefs.setString('elderly_user_age', _ageController.text.trim());
     await prefs.setString('elderly_user_gender', _genderController.text.trim());
-    if (caretakerId.isNotEmpty) {
-      await prefs.setString('caretaker_id', caretakerId); // Added
-    }
+    await prefs.setString('user_role', 'elderly');
 
     // Write elderly user document to Firestore so EnhancedMemoryService
     // can look up the caretakerId when sending notifications.
@@ -72,34 +69,40 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
         'name': _nameController.text.trim(),
         'age': _ageController.text.trim(),
         'gender': _genderController.text.trim(),
+        'role': 'elderly',
         'lastActive': FieldValue.serverTimestamp(),
       };
-      if (caretakerId.isNotEmpty) {
-        userData['caretakerId'] = caretakerId; // Added
-      }
       await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
           .set(userData, SetOptions(merge: true));
       print('✅ Elderly user profile saved to Firestore');
+
+      // Generate 6-digit pairing code for caretaker linking
+      try {
+        final code = await _pairingService.generatePairingCode(uid);
+        await prefs.setString('care_code', code);
+        print('✅ Care Code generated and saved: $code');
+      } catch (e) {
+        print('⚠️ Could not generate pairing code: $e');
+      }
     } catch (e) {
       print('⚠️ Could not save user profile to Firestore: $e');
     }
 
-    // Simulate a brief loading/welcome delay
-    Future.delayed(const Duration(milliseconds: 1500), () {
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder:
-                (context) => ElderlyDashboard(
-                  currentUserId: _nameController.text.trim(),
-                ),
+    // Navigate to dashboard AFTER code generation is complete
+    await Future.delayed(const Duration(milliseconds: 500));
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ElderlyDashboard(
+            currentUserId: _nameController.text.trim(),
           ),
-        );
-      }
-    });
+        ),
+      );
+    }
+
   }
 
   @override
@@ -254,34 +257,6 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // Caretaker ID Input (optional) - Added
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 5,
-                    ),
-                    child: TextField(
-                      controller: _caretakerIdController,
-                      style: const TextStyle(fontSize: 20),
-                      textAlign: TextAlign.center,
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
-                        hintText: 'Caretaker ID (optional)',
-                        hintStyle: TextStyle(color: Colors.black26),
-                      ),
-                    ),
-                  ),
                   const SizedBox(height: 40),
 
                   // Login Button
