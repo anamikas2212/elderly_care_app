@@ -17,7 +17,7 @@ class _LocationScreenState extends State<LocationScreen> {
   
   // Home location (hardcoded for now)
   final LatLng _homeLocation = LatLng(9.998418620839775, 76.361358164756); // hostel
-  final double _safeZoneRadius = 500.0; // 1km radius
+  final double _safeZoneRadius = 670.0; // 1km radius
   
   // Current location (will be updated in real-time)
   LatLng? _currentLocation;
