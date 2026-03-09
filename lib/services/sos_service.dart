@@ -1,4 +1,5 @@
-// lib/services/sos_service.dart
+//i tried modifying the actual code accordingly, but this im not sure. edit to fit the original code
+//lib/services/sos_service.dart
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
@@ -11,6 +12,7 @@ class SOSService {
     required String elderlyUserId,
     required String elderlyUserName,
     Position? currentLocation,
+    required bool isInsideSafeZone, // NEW: Pass safe zone status
   }) async {
     try {
       // Create SOS alert document
@@ -29,6 +31,8 @@ class SOSService {
               }
             : null,
         'isActive': true,
+        'isInsideSafeZone': isInsideSafeZone, // Store location status
+        'alertType': 'sos', // sos or false_alarm
       });
 
       // Create SOS log entry
@@ -46,12 +50,14 @@ class SOSService {
                 'longitude': currentLocation.longitude,
               }
             : null,
+        'isInsideSafeZone': isInsideSafeZone,
       });
 
       // Update elderly user status
       await _firestore.collection('elderly_users').doc(elderlyUserId).set({
         'sosActive': true,
         'lastSOSAt': FieldValue.serverTimestamp(),
+        'isInsideSafeZone': isInsideSafeZone,
       }, SetOptions(merge: true));
 
       print('✅ SOS Alert triggered: ${sosRef.id}');
@@ -61,10 +67,36 @@ class SOSService {
     }
   }
 
+  /// Trigger false alarm
+  Future<void> triggerFalseAlarm({
+    required String elderlyUserId,
+    required String elderlyUserName,
+  }) async {
+    try {
+      // Create false alarm log entry
+      await _firestore
+          .collection('sos_logs')
+          .doc(elderlyUserId)
+          .collection('logs')
+          .add({
+        'alertId': null,
+        'action': 'false_alarm',
+        'triggeredAt': FieldValue.serverTimestamp(),
+        'message': 'False alarm - cancelled by user',
+      });
+
+      print('False alarm logged');
+    } catch (e) {
+      print('Error logging false alarm: $e');
+      rethrow;
+    }
+  }
+
   /// Acknowledge SOS alert (caretaker action)
   Future<void> acknowledgeSOS(String alertId, String caretakerId) async {
     try {
-      await _firestore.collection('sos_alerts').doc(alertId).update({
+      await 
+      _firestore.collection('sos_alerts').doc(alertId).update({
         'status': 'acknowledged',
         'acknowledgedAt': FieldValue.serverTimestamp(),
         'acknowledgedBy': caretakerId,
@@ -181,7 +213,7 @@ class SOSService {
           await _firestore.collection('safe_zones').doc(elderlyUserId).get();
 
       if (!safeZoneDoc.exists) {
-        return {'status': 'unknown', 'isHome': false};
+        return {'status': 'unknown', 'isHome': false, 'distance': 0.0};
       }
 
       final safeZoneData = safeZoneDoc.data()!;
@@ -190,7 +222,7 @@ class SOSService {
       final radius = (safeZoneData['radius'] as num?)?.toDouble() ?? 1000.0;
 
       if (homeLatitude == null || homeLongitude == null) {
-        return {'status': 'unknown', 'isHome': false};
+        return {'status': 'unknown', 'isHome': false, 'distance': 0.0};
       }
 
       // Get current location
@@ -213,10 +245,24 @@ class SOSService {
         'isHome': isHome,
         'distance': distance,
         'radius': radius,
+        'position': position,
       };
     } catch (e) {
       print('Error getting location status: $e');
-      return {'status': 'unknown', 'isHome': false};
+      return {'status': 'unknown', 'isHome': false, 'distance': 0.0};
     }
   }
+
+  /// Get safe zone status from Firestore (for caretaker dashboard)
+  Stream<bool> getSafeZoneStatus(String elderlyUserId) {
+    return _firestore
+        .collection('elderly_users')
+        .doc(elderlyUserId)
+        .snapshots()
+        .map((snapshot) {
+      if (!snapshot.exists) return false;
+      final data = snapshot.data();
+      return data?['isInsideSafeZone'] as bool? ?? false;
+    });
+  }  
 }

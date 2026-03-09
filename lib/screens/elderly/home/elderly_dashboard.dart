@@ -2256,6 +2256,7 @@ import '../buddy_chat_screen.dart';
 import '../zone_selection_screen.dart';
 import '../../../services/sos_service.dart';
 import '../../../services/user_id_helper.dart';
+import 'dart:async'; // For Timer
 import '../visionguardian/vision_guardian_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -2278,6 +2279,9 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
   bool _triggeringSOS = false;
   String? _careCode;
 
+  Timer? _autoConfirmTimer;
+  Timer? _autoDismissTimer;
+
   @override
   void initState() {
     super.initState();
@@ -2296,91 +2300,18 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
       setState(() => _careCode = code);
     }
   }
-  
-  /// Trigger SOS Alert
+
+  @override
+  void dispose() {
+    // ✅ Cancel any active timers
+    _autoConfirmTimer?.cancel();
+    _autoDismissTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Trigger SOS Alert with Timer Features
   Future<void> _triggerSOSAlert() async {
     if (_triggeringSOS) return;
-
-    // Show confirmation dialog first
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(25),
-          ),
-          child: Container(
-            padding: const EdgeInsets.all(30),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.warning_amber_rounded,
-                    size: 100, color: Colors.red),
-                const SizedBox(height: 20),
-                const Text(
-                  'Emergency SOS',
-                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 15),
-                const Text(
-                  'This will alert your caretakers immediately. Are you in an emergency?',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 20, color: Colors.black54),
-                ),
-                const SizedBox(height: 30),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.grey.shade300,
-                          foregroundColor: Colors.black87,
-                          padding: const EdgeInsets.symmetric(vertical: 18),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(15),
-                          ),
-                        ),
-                        child: const Text(
-                          'Cancel',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red,
-                          padding: const EdgeInsets.symmetric(vertical: 18),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(15),
-                          ),
-                        ),
-                        child: const Text(
-                          'Yes, Send SOS',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-
-    if (confirmed != true) return;
 
     setState(() => _triggeringSOS = true);
 
@@ -2389,30 +2320,167 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
       final elderlyUserId =
           widget.currentUserId ?? await UserIdHelper.getCurrentUserId();
 
-      if (elderlyUserId == null) {
+      if (elderlyUserId == null || elderlyUserId.isEmpty) {
         throw Exception('User ID not found');
       }
 
-      // Get current location
-      Position? currentLocation;
-      try {
-        currentLocation = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high,
-        );
-      } catch (e) {
-        print('Could not get location: $e');
+      // ✅ ADDED: Get location status BEFORE showing dialog
+      final locationStatus = await _sosService.getLocationStatus(elderlyUserId);
+      final isHome = locationStatus['isHome'] as bool? ?? false;
+      final position = locationStatus['position'] as Position?;
+
+      if (!mounted) return;
+
+      // ✅ ADDED: Auto-confirm after 6 seconds
+      bool? confirmed;
+
+      // Start auto-confirm timer
+      _autoConfirmTimer = Timer(const Duration(seconds: 6), () {
+        if (mounted && Navigator.canPop(context)) {
+          Navigator.pop(context, true); // Auto-confirm as YES
+        }
+      });
+
+      // Show confirmation dialog with auto-confirm message
+      confirmed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(25),
+            ),
+            child: Container(
+              padding: const EdgeInsets.all(30),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.warning_amber_rounded,
+                      size: 100, color: Colors.red),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Emergency SOS',
+                    style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 15),
+                  const Text(
+                    'This will alert your caretakers immediately. Are you in an emergency?',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 20, color: Colors.black54),
+                  ),
+                  const SizedBox(height: 10),
+                  // ✅ ADDED: Auto-confirm countdown message
+                  Text(
+                    'Auto-confirming in 6 seconds...',
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 30),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.grey.shade300,
+                            foregroundColor: Colors.black87,
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                          ),
+                          child: const Text(
+                            'No',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                          ),
+                          child: const Text(
+                            'Yes, Send SOS',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+
+      // ✅ ADDED: Cancel auto-confirm timer if user clicked
+      _autoConfirmTimer?.cancel();
+
+      // ✅ ADDED: If null (dialog dismissed by timer), treat as confirmed
+      if (confirmed == null) {
+        confirmed = true;
       }
 
-      // Trigger SOS
+      // ✅ ADDED: Handle false alarm
+      if (confirmed == false) {
+        // User clicked "No" - log false alarm
+        await _sosService.triggerFalseAlarm(
+          elderlyUserId: elderlyUserId,
+          elderlyUserName: elderlyUserId,
+        );
+
+        if (!mounted) return;
+
+        // Show false alarm message briefly
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('False alarm logged'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+
+        setState(() => _triggeringSOS = false);
+        return;
+      }
+
+      // Get current location (fallback if not already loaded)
+      Position? currentLocation = position;
+      if (currentLocation == null) {
+        try {
+          currentLocation = await Geolocator.getCurrentPosition(
+            desiredAccuracy: LocationAccuracy.high,
+          );
+        } catch (e) {
+          print('Could not get location: $e');
+        }
+      }
+
+      // ✅ MODIFIED: Trigger SOS with location status
       await _sosService.triggerSOS(
         elderlyUserId: elderlyUserId,
         elderlyUserName: widget.currentUserId ?? 'Elderly User',
         currentLocation: currentLocation,
+        isInsideSafeZone: isHome, // ✅ Pass safe zone status
       );
 
       if (!mounted) return;
 
-      // Show success dialog
+      // ✅ MODIFIED: Show success dialog without OK button
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -2437,32 +2505,19 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 20, color: Colors.black54),
                 ),
-                const SizedBox(height: 30),
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 40,
-                      vertical: 18,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                  ),
-                  child: const Text(
-                    'OK',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
+                const SizedBox(height: 15),
               ],
             ),
           ),
         ),
       );
+
+      // ✅ ADDED: Auto-dismiss success dialog after 5 seconds
+      _autoDismissTimer = Timer(const Duration(seconds: 5), () {
+        if (mounted && Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
+      });
     } catch (e) {
       if (!mounted) return;
 
@@ -3221,13 +3276,6 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              const Text(
-                                'Ready to play?',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  color: Colors.grey,
-                                ),
-                              ),
                             ],
                           ),
                         ),
@@ -3332,8 +3380,6 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                                 Colors.green.shade400,
                                 Colors.green.shade600,
                               ],
-                              badge: '1 NOW',
-                              badgeColor: Colors.red,
                               onTap: () {
                                 Navigator.push(
                                   context,
@@ -3394,8 +3440,6 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                                 Colors.pink.shade400,
                                 Colors.pink.shade600,
                               ],
-                              badge: '💬',
-                              badgeColor: Colors.yellow.shade700,
                               onTap: () {
                                 Navigator.push(
                                   context,
