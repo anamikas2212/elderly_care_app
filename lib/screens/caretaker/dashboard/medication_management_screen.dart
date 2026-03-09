@@ -655,7 +655,7 @@ class _MedicationManagementScreenState
         ),
         const SizedBox(height: 8),
         Text(
-          'Weekly Average: ${_adherencePercentage.toStringAsFixed(0)}%',
+          'Weekly Average: --',
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,

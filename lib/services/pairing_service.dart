@@ -119,6 +119,28 @@ class PairingService {
       'linked_elderly': FieldValue.arrayUnion([elderlyUid]),
     });
 
+    // Set caretakerId on the elderly user's doc so the buddy notification
+    // system (EnhancedMemoryService) can route alerts to the caretaker
+    await _firestore.collection('users').doc(elderlyUid).set({
+      'caretakerId': caretakerUid,
+    }, SetOptions(merge: true));
+
+    // Also update the name-based doc if it exists (backward compatibility)
+    try {
+      final elderlyProfile = await _firestore.collection('users').doc(elderlyUid).get();
+      if (elderlyProfile.exists) {
+        final elderlyName = elderlyProfile.data()?['name'];
+        if (elderlyName != null && elderlyName != elderlyUid) {
+          final nameDoc = await _firestore.collection('users').doc(elderlyName).get();
+          if (nameDoc.exists) {
+            await _firestore.collection('users').doc(elderlyName).set({
+              'caretakerId': caretakerUid,
+            }, SetOptions(merge: true));
+          }
+        }
+      }
+    } catch (_) {}
+
     // Delete the used code
     await doc.reference.delete();
 

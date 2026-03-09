@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../theme/caretaker_theme.dart';
@@ -241,7 +241,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
         children: [
           const Text("Overview", style: CaretakerTextStyles.header),
           Text(
-            "Caretaker Dashboard",
+            "Caregiver Dashboard",
             style: CaretakerTextStyles.caption.copyWith(fontSize: 12),
           ),
         ],
@@ -917,7 +917,6 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
         }
         final stats = snapshot.data ?? {};
         final totalGames = (stats['totalGames'] as num?)?.toInt() ?? 0;
-        final adherence = (stats['medicationAdherence'] as num?)?.toInt() ?? 0;
 
         return Row(
           children: [
@@ -934,7 +933,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
             Expanded(
               child: _buildSmallStatCard(
                 title: "Medication",
-                value: "$adherence%",
+                value: "--",
                 subtext: "Adherence",
                 icon: Icons.medication,
                 color: CaretakerColors.successGreen,

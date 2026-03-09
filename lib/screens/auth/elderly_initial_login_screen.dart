@@ -17,6 +17,7 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _ageController = TextEditingController();
   final TextEditingController _genderController = TextEditingController();
+  final TextEditingController _caretakerIdController = TextEditingController();
   final PairingService _pairingService = PairingService();
   bool _isAnimating = false;
 
@@ -61,6 +62,10 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
     await prefs.setString('elderly_user_age', _ageController.text.trim());
     await prefs.setString('elderly_user_gender', _genderController.text.trim());
     await prefs.setString('user_role', 'elderly');
+    final caretakerId = _caretakerIdController.text.trim();
+    if (caretakerId.isNotEmpty) {
+      await prefs.setString('caretaker_id', caretakerId);
+    }
 
     // Write elderly user document to Firestore so EnhancedMemoryService
     // can look up the caretakerId when sending notifications.
@@ -72,6 +77,9 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
         'role': 'elderly',
         'lastActive': FieldValue.serverTimestamp(),
       };
+      if (caretakerId.isNotEmpty) {
+        userData['caretakerId'] = caretakerId;
+      }
       await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
@@ -251,6 +259,36 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
                       decoration: const InputDecoration(
                         border: InputBorder.none,
                         hintText: 'Gender (e.g. Female)',
+                        hintStyle: TextStyle(color: Colors.black26),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Caretaker ID Input (Optional)
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 5,
+                    ),
+                    child: TextField(
+                      controller: _caretakerIdController,
+                      style: const TextStyle(fontSize: 20),
+                      textAlign: TextAlign.center,
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        hintText: 'Caretaker ID (Optional)',
                         hintStyle: TextStyle(color: Colors.black26),
                       ),
                     ),

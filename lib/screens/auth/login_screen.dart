@@ -142,9 +142,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   // Caretaker Button
                   GestureDetector(
-                    onTap: () => selectRole('caretaker'),
+                    onTap: () => selectRole('Caregiver'),
                     child: AnimatedScale(
-                      scale: selectedRole == 'caretaker' ? 0.95 : 1.0,
+                      scale: selectedRole == 'Caregiver' ? 0.95 : 1.0,
                       duration: const Duration(milliseconds: 200),
                       curve: Curves.easeOut,
                       child: Container(
@@ -174,7 +174,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             Icon(Icons.people, size: 50, color: Colors.white),
                             SizedBox(width: 20),
                             Text(
-                              'I am Caretaker',
+                              'I am Caregiver',
                               style: TextStyle(
                                 fontSize: 28,
                                 fontWeight: FontWeight.bold,

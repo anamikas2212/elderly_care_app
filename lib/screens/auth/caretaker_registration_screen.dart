@@ -49,7 +49,7 @@ class _CaretakerRegistrationScreenState
         name: name,
         email: email,
         password: password,
-        familyRole: role.isEmpty ? 'Caretaker' : role,
+        familyRole: role.isEmpty ? 'Caregiver' : role,
       );
       if (!mounted) return;
       Navigator.pushAndRemoveUntil(
@@ -58,7 +58,7 @@ class _CaretakerRegistrationScreenState
         (route) => false,
       );
     } catch (e) {
-      print('❌ Caretaker registration error: $e');
+      print('❌ Caregiver registration error: $e');
       String msg = 'Registration failed. Please try again.';
       if (e.toString().contains('email-already-in-use')) {
         msg = 'This email is already registered. Try logging in.';
@@ -67,7 +67,8 @@ class _CaretakerRegistrationScreenState
       } else if (e.toString().contains('weak-password')) {
         msg = 'Password is too weak. Use at least 6 characters.';
       } else if (e.toString().contains('operation-not-allowed')) {
-        msg = 'Email/Password sign-in is not enabled. Please enable it in Firebase Console.';
+        msg =
+            'Email/Password sign-in is not enabled. Please enable it in Firebase Console.';
       }
       _showError('$msg\n\nDebug: $e');
     } finally {
@@ -142,7 +143,7 @@ class _CaretakerRegistrationScreenState
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Register as a caretaker',
+                    'Register as a Caregiver',
                     style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
                   ),
                   const SizedBox(height: 30),
@@ -181,8 +182,10 @@ class _CaretakerRegistrationScreenState
                             : Icons.visibility,
                         color: Colors.grey,
                       ),
-                      onPressed: () =>
-                          setState(() => _obscurePassword = !_obscurePassword),
+                      onPressed:
+                          () => setState(
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -199,8 +202,10 @@ class _CaretakerRegistrationScreenState
                             : Icons.visibility,
                         color: Colors.grey,
                       ),
-                      onPressed: () =>
-                          setState(() => _obscureConfirm = !_obscureConfirm),
+                      onPressed:
+                          () => setState(
+                            () => _obscureConfirm = !_obscureConfirm,
+                          ),
                     ),
                   ),
                   const SizedBox(height: 30),
@@ -218,20 +223,23 @@ class _CaretakerRegistrationScreenState
                         ),
                         elevation: 4,
                       ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
+                      child:
+                          _isLoading
+                              ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                              : const Text(
+                                'Create Account',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
-                            )
-                          : const Text(
-                              'Create Account',
-                              style: TextStyle(
-                                  fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -295,8 +303,10 @@ class _CaretakerRegistrationScreenState
           prefixIcon: Icon(icon, color: Colors.blue.shade400),
           suffixIcon: suffixIcon,
           border: InputBorder.none,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 18,
+          ),
         ),
       ),
     );
