@@ -2328,7 +2328,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                 ),
 
                 // Highlight specific feature based on step
-                if (demoStep >= 1 && demoStep <= 5)
+                if (demoStep >= 1 && demoStep <= 4)
                   Positioned(
                     top: _getHighlightTop(demoStep),
                     left: _getHighlightLeft(demoStep),
@@ -2352,7 +2352,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                   ),
 
                 // Arrow pointing to feature
-                if (demoStep >= 1 && demoStep <= 5)
+                if (demoStep >= 1 && demoStep <= 4)
                   Positioned(
                     top: _getArrowTop(demoStep),
                     left: _getArrowLeft(demoStep),
@@ -2393,7 +2393,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                                 ),
                               ),
                               child: Text(
-                                'Step ${demoStep + 1} of 6',
+                                'Step ${demoStep + 1} of 5',
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 20,
@@ -2523,7 +2523,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                               flex: 2,
                               child: ElevatedButton.icon(
                                 onPressed: () {
-                                  if (demoStep < 5) {
+                                  if (demoStep < 4) {
                                     setDialogState(() => demoStep++);
                                   } else {
                                     Navigator.pop(context);
@@ -2531,13 +2531,13 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                                   }
                                 },
                                 icon: Icon(
-                                  demoStep < 5
+                                  demoStep < 4
                                       ? Icons.arrow_forward
                                       : Icons.check,
                                   size: 28,
                                 ),
                                 label: Text(
-                                  demoStep < 5 ? 'Next' : 'Got It!',
+                                  demoStep < 4 ? 'Next' : 'Got It!',
                                   style: const TextStyle(
                                     fontSize: 24,
                                     fontWeight: FontWeight.bold,
@@ -2560,10 +2560,10 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
 
                       const SizedBox(height: 25),
 
-                      // Page indicators (6 dots)
+                      // Page indicators (5 dots)
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(6, (index) {
+                        children: List.generate(5, (index) {
                           return Container(
                             margin: const EdgeInsets.symmetric(horizontal: 5),
                             width: index == demoStep ? 35 : 12,
@@ -2601,8 +2601,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
       case 1: return 220;
       case 2: return 220;
       case 3: return 470;
-      case 4: return 470;
-      case 5: return 640;
+      case 4: return 640;
       default: return 0;
     }
   }
@@ -2612,8 +2611,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
       case 1: return 16;
       case 2: return MediaQuery.of(context).size.width / 2 + 8;
       case 3: return 16;
-      case 4: return MediaQuery.of(context).size.width / 2 + 8;
-      case 5: return 16;
+      case 4: return 16;
       default: return 0;
     }
   }
@@ -2623,9 +2621,8 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
       case 1:
       case 2:
       case 3:
-      case 4:
         return MediaQuery.of(context).size.width / 2 - 24;
-      case 5:
+      case 4:
         return MediaQuery.of(context).size.width - 32;
       default: return 0;
     }
@@ -2636,9 +2633,8 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
       case 1:
       case 2:
       case 3:
-      case 4:
         return 220;
-      case 5: return 80;
+      case 4: return 80;
       default: return 0;
     }
   }
@@ -2648,8 +2644,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
       case 1: return 160;
       case 2: return 160;
       case 3: return 410;
-      case 4: return 410;
-      case 5: return 580;
+      case 4: return 580;
       default: return 0;
     }
   }
@@ -2659,8 +2654,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
       case 1: return MediaQuery.of(context).size.width / 4 - 30;
       case 2: return MediaQuery.of(context).size.width * 3 / 4 - 30;
       case 3: return MediaQuery.of(context).size.width / 4 - 30;
-      case 4: return MediaQuery.of(context).size.width * 3 / 4 - 30;
-      case 5: return MediaQuery.of(context).size.width / 2 - 30;
+      case 4: return MediaQuery.of(context).size.width / 2 - 30;
       default: return 0;
     }
   }
@@ -2671,8 +2665,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
       case 1: return Icons.medication;
       case 2: return Icons.location_on;
       case 3: return Icons.psychology;
-      case 4: return Icons.visibility;
-      case 5: return Icons.warning;
+      case 4: return Icons.warning;
       default: return Icons.info;
     }
   }
@@ -2683,8 +2676,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
       case 1: return Colors.green;
       case 2: return Colors.blue;
       case 3: return Colors.purple;
-      case 4: return Colors.teal;
-      case 5: return Colors.red;
+      case 4: return Colors.red;
       default: return Colors.blue;
     }
   }
@@ -2695,8 +2687,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
       case 1: return 'Never Miss Your Pills';
       case 2: return 'Stay Safe with GPS';
       case 3: return 'Keep Your Mind Sharp';
-      case 4: return 'Medicine Scanner';
-      case 5: return 'Emergency SOS Button';
+      case 4: return 'Emergency SOS Button';
       default: return '';
     }
   }
@@ -2704,11 +2695,10 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
   String _getDemoDescription(int step) {
     switch (step) {
       case 0: return 'Let\'s take a quick tour! I\'ll show you where everything is and how to use it.';
-      case 1: return 'Tap this GREEN card to see your medicines. Press "Taken" when you take them!';
+      case 1: return 'Tap this GREEN card to see your medicines. Use the camera icon to scan them!';
       case 2: return 'Tap this BLUE card to see where you are. Your family knows you\'re safe!';
       case 3: return 'Tap this PURPLE card to play fun games that keep your mind sharp!';
-      case 4: return 'Tap this TEAL card to scan your medicine and verify it\'s the right one!';
-      case 5: return 'Press this BIG RED BUTTON in any emergency. Or shake your phone hard. Help comes fast!';
+      case 4: return 'Press this BIG RED BUTTON in any emergency. Or shake your phone hard. Help comes fast!';
       default: return '';
     }
   }
@@ -2916,300 +2906,175 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
         child: SafeArea(
           child: Column(
             children: [
-              // Top Bar
+              // ─── Compact Header ───────────────────────────────────
               Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                child: Row(
                   children: [
-                    // Back / Title / Magnifier / Logout row
-                    Row(
-                      children: [
-                        _buildIconButton(
-                          icon: Icons.arrow_back,
+                    // Greeting
+                    Expanded(
+                      child: Text(
+                        'Hi, ${widget.currentUserId ?? "Friend"}! 👋',
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
                           color: Colors.black87,
-                          tooltip: 'Back to Login',
-                          onTap: () => Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const LoginScreen(),
-                            ),
-                          ),
                         ),
-                        const Expanded(
-                          child: Center(
-                            child: Text(
-                              'My Dashboard',
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black87,
-                              ),
-                            ),
-                          ),
-                        ),
-                        _buildIconButton(
-                          icon: Icons.search,
-                          color: Colors.blue,
-                          tooltip: 'Magnifier',
-                          onTap: () => _showZoomDialog(context),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildIconButton(
-                          icon: Icons.logout,
-                          color: Colors.red,
-                          tooltip: 'Logout',
-                          onTap: () => _showLogoutDialog(context),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    // Greeting + Zoom controls
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 15,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withAlpha(26),
-                                blurRadius: 10,
-                                offset: const Offset(0, 5),
-                              ),
-                            ],
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Hello, ${widget.currentUserId ?? "Friend"}! 👋',
-                                style: const TextStyle(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const Text(
-                                'Ready to go?',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withAlpha(26),
-                                blurRadius: 10,
-                                offset: const Offset(0, 5),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            children: [
-                              IconButton(
-                                onPressed: decreaseZoom,
-                                icon: const Icon(Icons.zoom_out),
-                                iconSize: 32,
-                                color: Colors.grey.shade700,
-                              ),
-                              IconButton(
-                                onPressed: increaseZoom,
-                                icon: const Icon(Icons.zoom_in),
-                                iconSize: 32,
-                                color: Colors.blue,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    // Care Code Banner
-                    if (_careCode != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [Colors.teal.shade400, Colors.teal.shade600],
-                            ),
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.teal.withAlpha(77),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.link, color: Colors.white, size: 24),
-                              const SizedBox(width: 10),
-                              const Expanded(
-                                child: Text(
-                                  'Share with Caregiver:',
-                                  style: TextStyle(color: Colors.white, fontSize: 14),
-                                ),
-                              ),
-                              Text(
-                                '${_careCode!.substring(0, 3)}-${_careCode!.substring(3)}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 3,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
+                    ),
+                    // Magnifier Button
+                    _buildIconButton(
+                      icon: Icons.search,
+                      color: Colors.blue,
+                      tooltip: 'Magnifier',
+                      onTap: () => _showZoomDialog(context),
+                    ),
+                    const SizedBox(width: 8),
+                    // Logout Button
+                    _buildIconButton(
+                      icon: Icons.logout,
+                      color: Colors.red,
+                      tooltip: 'Logout',
+                      onTap: () => _showLogoutDialog(context),
+                    ),
                   ],
                 ),
               ),
 
-              // Feature Grid
-              Expanded(
-                child: Transform.scale(
-                  scale: zoomLevel,
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Column(
+              // Care Code Banner (compact)
+              if (_careCode != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Colors.teal.shade400, Colors.teal.shade600],
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
                       children: [
-                        const SizedBox(height: 20),
-                        GridView.count(
-                          crossAxisCount: 2,
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                          childAspectRatio: 0.9,
+                        const Icon(Icons.link, color: Colors.white, size: 20),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Caregiver Code:',
+                          style: TextStyle(color: Colors.white, fontSize: 14),
+                        ),
+                        const Spacer(),
+                        Text(
+                          '${_careCode!.substring(0, 3)}-${_careCode!.substring(3)}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 3,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+              // ─── Feature Cards ─ 2×2 filling all available space ──
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
+                  child: Column(
+                    children: [
+                      // Row 1: Pill Reminder + Location
+                      Expanded(
+                        child: Row(
                           children: [
-                            // Pill Reminder — dynamic badge from Firestore (File 1)
-                            FutureBuilder<int>(
-                              future: _getActiveAlertCount(),
-                              builder: (context, snapshot) {
-                                final alertCount = snapshot.data ?? 0;
-                                return _buildFeatureCard(
-                                  icon: Icons.medication,
-                                  title: 'Pill\nReminder',
-                                  gradient: [
-                                    Colors.green.shade400,
-                                    Colors.green.shade600,
-                                  ],
-                                  badge: alertCount > 0
-                                      ? '$alertCount NOW'
-                                      : null,
-                                  badgeColor: Colors.red,
-                                  onTap: () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => MedicationListScreen(
-                                        userId:
-                                            widget.currentUserId ?? 'Unknown',
-                                        role: UserRole.elderly,
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-
-                            // Location Card
-                            _buildFeatureCard(
-                              icon: Icons.location_on,
-                              title: 'My\nLocation',
-                              gradient: [
-                                Colors.blue.shade400,
-                                Colors.blue.shade600,
-                              ],
-                              badge: 'Safe ✓',
-                              badgeColor: Colors.green,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const LocationScreen(),
-                                ),
+                            // Pill Reminder with camera icon
+                            Expanded(
+                              child: FutureBuilder<int>(
+                                future: _getActiveAlertCount(),
+                                builder: (context, snapshot) {
+                                  final alertCount = snapshot.data ?? 0;
+                                  return _buildPillReminderCard(
+                                    alertCount: alertCount,
+                                  );
+                                },
                               ),
                             ),
-
-                            // Brain Games Card
-                            _buildFeatureCard(
-                              icon: Icons.psychology,
-                              title: 'Brain\nGames',
-                              gradient: [
-                                Colors.purple.shade400,
-                                Colors.purple.shade600,
-                              ],
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => ZoneSelectionScreen(
-                                    userId:
-                                        widget.currentUserId ?? 'Elderly User',
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                            // Vision Guardian / Medicine Scanner (from File 1)
-                            _buildFeatureCard(
-                              icon: Icons.visibility,
-                              title: 'Medicine\nScanner',
-                              gradient: [
-                                Colors.teal.shade400,
-                                Colors.teal.shade600,
-                              ],
-                              badge: '👁️',
-                              badgeColor: Colors.blue.shade700,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => VisionGuardianScreen(
-                                    userId: widget.currentUserId ?? 'Unknown',
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                            // Buddy Chat Card — passes userId (from File 2)
-                            _buildFeatureCard(
-                              icon: Icons.chat,
-                              title: 'My\nBuddy',
-                              gradient: [
-                                Colors.pink.shade400,
-                                Colors.pink.shade600,
-                              ],
-                              badge: '💬',
-                              badgeColor: Colors.yellow.shade700,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => BuddyChatScreen(
-                                    userId: widget.currentUserId ?? 'Unknown',
+                            const SizedBox(width: 12),
+                            // Location
+                            Expanded(
+                              child: _buildFeatureCard(
+                                icon: Icons.location_on,
+                                title: 'My\nLocation',
+                                gradient: [
+                                  Colors.blue.shade400,
+                                  Colors.blue.shade600,
+                                ],
+                                badge: 'Safe ✓',
+                                badgeColor: Colors.green,
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const LocationScreen(),
                                   ),
                                 ),
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 100),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: 12),
+                      // Row 2: Brain Games + My Buddy
+                      Expanded(
+                        child: Row(
+                          children: [
+                            // Brain Games
+                            Expanded(
+                              child: _buildFeatureCard(
+                                icon: Icons.psychology,
+                                title: 'Brain\nGames',
+                                gradient: [
+                                  Colors.purple.shade400,
+                                  Colors.purple.shade600,
+                                ],
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => ZoneSelectionScreen(
+                                      userId: widget.currentUserId ??
+                                          'Elderly User',
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            // My Buddy
+                            Expanded(
+                              child: _buildFeatureCard(
+                                icon: Icons.chat,
+                                title: 'My\nBuddy',
+                                gradient: [
+                                  Colors.pink.shade400,
+                                  Colors.pink.shade600,
+                                ],
+                                badge: '💬',
+                                badgeColor: Colors.yellow.shade700,
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => BuddyChatScreen(
+                                      userId:
+                                          widget.currentUserId ?? 'Unknown',
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -3218,78 +3083,37 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
         ),
       ),
 
-      // Bottom Navigation
-      bottomNavigationBar: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // SOS Button
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: ElevatedButton(
-              onPressed: () {},
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                elevation: 8,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Icon(Icons.warning, size: 40, color: Colors.white),
-                  SizedBox(width: 15),
-                  Text(
-                    'SOS EMERGENCY',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  SizedBox(width: 15),
-                  Icon(Icons.phone, size: 40, color: Colors.white),
-                ],
-              ),
+      // Bottom: SOS Button only
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
+        child: ElevatedButton(
+          onPressed: () {},
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.red,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
             ),
+            elevation: 8,
           ),
-
-          // Bottom Navigation Bar
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withAlpha(26),
-                  blurRadius: 10,
-                  offset: const Offset(0, -5),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: const [
+              Icon(Icons.warning, size: 36, color: Colors.white),
+              SizedBox(width: 12),
+              Text(
+                'SOS EMERGENCY',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
                 ),
-              ],
-            ),
-            child: BottomNavigationBar(
-              currentIndex: currentTab,
-              onTap: (index) => setState(() => currentTab = index),
-              selectedFontSize: 16,
-              unselectedFontSize: 16,
-              iconSize: 32,
-              items: const [
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.home),
-                  label: 'Home',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.bar_chart),
-                  label: 'Activity',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.settings),
-                  label: 'Settings',
-                ),
-              ],
-            ),
+              ),
+              SizedBox(width: 12),
+              Icon(Icons.phone, size: 36, color: Colors.white),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -3317,13 +3141,14 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
       child: IconButton(
         onPressed: onTap,
         icon: Icon(icon),
-        iconSize: 32,
+        iconSize: 30,
         color: color,
         tooltip: tooltip,
       ),
     );
   }
 
+  /// Standard feature card — fills available space with large icon + text
   Widget _buildFeatureCard({
     required IconData icon,
     required String title,
@@ -3341,59 +3166,70 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
             end: Alignment.bottomRight,
             colors: gradient,
           ),
-          borderRadius: BorderRadius.circular(25),
+          borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: gradient[0].withAlpha(128),
-              blurRadius: 15,
-              offset: const Offset(0, 8),
+              color: gradient[0].withAlpha(120),
+              blurRadius: 14,
+              offset: const Offset(0, 7),
             ),
           ],
         ),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-            borderRadius: BorderRadius.circular(25),
+            borderRadius: BorderRadius.circular(24),
             onTap: onTap,
             child: Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(15),
-                    decoration: const BoxDecoration(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
                       color: Colors.white,
                       shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: gradient[1].withAlpha(60),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
                     ),
-                    child: Icon(icon, size: 50, color: gradient[1]),
+                    child: Icon(icon, size: 44, color: gradient[1]),
                   ),
-                  const SizedBox(height: 15),
-                  Text(
-                    title,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      height: 1.2,
+                  const SizedBox(height: 10),
+                  Flexible(
+                    child: Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 2,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        height: 1.15,
+                      ),
                     ),
                   ),
                   if (badge != null) ...[
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
-                        vertical: 6,
+                        vertical: 5,
                       ),
                       decoration: BoxDecoration(
                         color: badgeColor,
-                        borderRadius: BorderRadius.circular(15),
+                        borderRadius: BorderRadius.circular(14),
                       ),
                       child: Text(
                         badge,
                         style: const TextStyle(
-                          fontSize: 16,
+                          fontSize: 15,
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
                         ),
@@ -3404,6 +3240,139 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  /// Pill Reminder card with an integrated camera icon for Vision Guardian
+  Widget _buildPillReminderCard({required int alertCount}) {
+    final gradient = [Colors.green.shade400, Colors.green.shade600];
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: gradient,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: gradient[0].withAlpha(120),
+            blurRadius: 14,
+            offset: const Offset(0, 7),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: Stack(
+          children: [
+            // Main card content — tapping opens Pill Reminder
+            InkWell(
+              borderRadius: BorderRadius.circular(24),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => MedicationListScreen(
+                    userId: widget.currentUserId ?? 'Unknown',
+                    role: UserRole.elderly,
+                  ),
+                ),
+              ),
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: gradient[1].withAlpha(60),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: Icon(Icons.medication, size: 44, color: gradient[1]),
+                      ),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Pill\nReminder',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          height: 1.15,
+                        ),
+                      ),
+                      if (alertCount > 0) ...[
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Text(
+                            '$alertCount NOW',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            // Camera icon — opens Vision Guardian
+            Positioned(
+              top: 8,
+              right: 8,
+              child: GestureDetector(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => VisionGuardianScreen(
+                      userId: widget.currentUserId ?? 'Unknown',
+                    ),
+                  ),
+                ),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withAlpha(50),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    Icons.camera_alt,
+                    size: 26,
+                    color: Colors.green.shade700,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

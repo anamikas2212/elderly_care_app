@@ -346,11 +346,17 @@ class _MedicationListScreenState extends State<MedicationListScreen> {
 
   // ─── Medication card ──────────────────────────────────────────────────────
   Widget _buildMedicationCard(String docId, Map<String, dynamic> med) {
-    final name = med['name'] as String? ?? '';
-    final dosage = med['dose'] as String? ?? '';
-    final time = med['time'] as String? ?? '';
-    final days = med['days'] as String? ?? '';
-    final note = med['note'] as String? ?? '';
+    final name = med['name'] is String ? med['name'] as String : '';
+    final dosage = med['dose'] is String ? med['dose'] as String : '';
+    final time = med['time'] is String
+        ? med['time'] as String
+        : (med['time'] is List ? (med['time'] as List).join(', ') : '');
+    final days = med['days'] is String
+        ? med['days'] as String
+        : (med['days'] is List ? (med['days'] as List).join(', ') : '');
+    final note = med['note'] is String
+        ? med['note'] as String
+        : (med['note'] is List ? (med['note'] as List).join(', ') : '');
     final takenToday = med['takenToday'] as bool? ?? false;
 
     return Card(
