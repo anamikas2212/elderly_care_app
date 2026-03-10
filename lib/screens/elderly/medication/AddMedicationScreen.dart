@@ -28,21 +28,21 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
   // Controllers
   final _nameController = TextEditingController();
   final _dosageController = TextEditingController();
+  final _doctorController = TextEditingController();
   final _noteController = TextEditingController();
 
   // Selected values
   TimeOfDay? _selectedTime;
   String _selectedFrequency = 'Daily';
   String _selectedFoodTiming = 'Before Food';
+  final List<String> _selectedSpecificDays = [];
+  final List<String> _weekDays = [
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
+  ];
 
   final List<String> _frequencyOptions = [
     'Daily',
-    'Every Other Day',
-    'Mon, Wed, Fri',
-    'Tue, Thu, Sat',
-    'Weekdays',
-    'Weekends',
-    'Custom',
+    'Specific Days',
   ];
 
   final List<String> _foodTimingOptions = [
@@ -61,8 +61,22 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
     if (med != null) {
       _nameController.text = med['name'] as String? ?? '';
       _dosageController.text = med['dose'] as String? ?? '';
+      _doctorController.text = med['doctorName'] as String? ?? '';
       _noteController.text = _stripFoodTiming(med['note'] as String? ?? '');
-      _selectedFrequency = med['days'] as String? ?? 'Daily';
+      
+      final daysData = med['days'];
+      if (daysData is String) {
+        if (daysData == 'Daily') {
+          _selectedFrequency = 'Daily';
+        } else {
+          _selectedFrequency = 'Specific Days';
+          _selectedSpecificDays.addAll(daysData.split(', '));
+        }
+      } else if (daysData is List) {
+        _selectedFrequency = 'Specific Days';
+        _selectedSpecificDays.addAll(daysData.map((e) => e.toString()));
+      }
+      
       _selectedFoodTiming = med['foodTiming'] as String? ?? 'Before Food';
       _parseTime(med['time'] as String? ?? '');
     }
@@ -96,6 +110,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
   void dispose() {
     _nameController.dispose();
     _dosageController.dispose();
+    _doctorController.dispose();
     _noteController.dispose();
     super.dispose();
   }
@@ -152,11 +167,12 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
     final data = {
       'name': _nameController.text.trim(),
       'dose': _dosageController.text.trim(),
+      'doctorName': _doctorController.text.trim(),
       'time': _formatTime(_selectedTime!),
-      'days': _selectedFrequency,
+      'days': _selectedFrequency == 'Daily' ? 'Daily' : _selectedSpecificDays,
       'foodTiming': _selectedFoodTiming,
       'note': fullNote,
-      'takenToday': false,
+      'takenToday': false, // Kept for legacy compatibility
       'status': 'upcoming',
       'userId': widget.userId,
       'updatedAt': FieldValue.serverTimestamp(),
@@ -281,6 +297,19 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
 
               const SizedBox(height: 24),
 
+              // Doctor Name
+              _sectionTitle('Doctor Name (Optional)'),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _doctorController,
+                decoration: _inputDeco(
+                  hint: 'e.g., Dr. Smith',
+                  icon: Icons.person_outline,
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
               // Time
               _sectionTitle('Time'),
               const SizedBox(height: 8),
@@ -358,6 +387,33 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
                   ),
                 ),
               ),
+              
+              if (_selectedFrequency == 'Specific Days') ...[
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
+                  ].map((day) {
+                    final isSelected = _selectedSpecificDays.contains(day);
+                    return ChoiceChip(
+                      label: Text(day.substring(0, 3)),
+                      selected: isSelected,
+                      selectedColor: Colors.teal.shade100,
+                      onSelected: (selected) {
+                        setState(() {
+                          if (selected) {
+                            _selectedSpecificDays.add(day);
+                          } else {
+                            _selectedSpecificDays.remove(day);
+                          }
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+              ],
 
               const SizedBox(height: 24),
 

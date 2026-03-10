@@ -3,6 +3,7 @@ import '../../../theme/caretaker_theme.dart';
 import '../../elderly/medication/AddMedicationScreen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
 
 final _firestore = FirebaseFirestore.instance;
 final _auth = FirebaseAuth.instance;
@@ -20,8 +21,14 @@ class MedicationManagementScreen extends StatefulWidget {
 class _MedicationManagementScreenState
     extends State<MedicationManagementScreen> {
   // ─── Computed values from Firestore docs ────────────────────────────────
-  int _takenCount(List<QueryDocumentSnapshot> docs) =>
-      docs.where((d) => (d['takenToday'] as bool? ?? false)).length;
+  int _takenCount(List<QueryDocumentSnapshot> docs) {
+    final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    return docs.where((d) {
+      final med = d.data() as Map<String, dynamic>;
+      final takenDates = med['takenDates'] as List<dynamic>? ?? [];
+      return takenDates.contains(todayStr) || (med['takenToday'] == true);
+    }).length;
+  }
 
   double get _adherencePercentage => 87.0; // replace with real weekly calc
 
@@ -131,16 +138,31 @@ class _MedicationManagementScreenState
   }
 
   // ─── Toggle taken ────────────────────────────────────────────────────────
-  Future<void> _toggleTaken(String docId, bool currentValue) async {
-    await _firestore
-        .collection('users')
-        .doc(widget.userId)
-        .collection('medications')
-        .doc(docId)
-        .update({
-          'takenToday': !currentValue,
-          'status': !currentValue ? 'taken' : 'upcoming',
-        });
+  Future<void> _toggleTaken(String docId, bool isTakenToday) async {
+    final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    if (isTakenToday) {
+      await _firestore
+          .collection('users')
+          .doc(widget.userId)
+          .collection('medications')
+          .doc(docId)
+          .update({
+            'takenDates': FieldValue.arrayRemove([dateStr]),
+            'takenToday': false, // Legacy
+            'status': 'upcoming',
+          });
+    } else {
+      await _firestore
+          .collection('users')
+          .doc(widget.userId)
+          .collection('medications')
+          .doc(docId)
+          .update({
+            'takenDates': FieldValue.arrayUnion([dateStr]),
+            'takenToday': true, // Legacy
+            'status': 'taken',
+          });
+    }
   }
 
   // ─── Build ────────────────────────────────────────────────────────────────
@@ -421,7 +443,10 @@ class _MedicationManagementScreenState
 
   // ─── Medication card ──────────────────────────────────────────────────────
   Widget _buildMedicationCard(String docId, Map<String, dynamic> med) {
-    final isTaken = med['takenToday'] as bool? ?? false;
+    final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final takenDates = med['takenDates'] as List<dynamic>? ?? [];
+    final isTaken = takenDates.contains(dateStr) || (med['takenToday'] == true);
+    
     final status = med['status'] as String? ?? 'upcoming';
     final isOverdue = status == 'overdue';
 
@@ -489,6 +514,18 @@ class _MedicationManagementScreenState
                           color: Colors.grey.shade600,
                         ),
                       ),
+                      if ((med['doctorName'] as String? ?? '').isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            'Prescribed by: ${med['doctorName']}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.teal.shade700,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
