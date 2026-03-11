@@ -76,14 +76,17 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 30),
 
                   // Title
-                  const Text(
-                    'Unified Geriatric Care',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: const Text(
+                      'Unified Geriatric Care',
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                      textAlign: TextAlign.center,
                     ),
-                    textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 10),
                   const Text(
@@ -120,20 +123,23 @@ class _LoginScreenState extends State<LoginScreen> {
                           horizontal: 40,
                           vertical: 30,
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            Icon(Icons.elderly, size: 50, color: Colors.white),
-                            SizedBox(width: 20),
-                            Text(
-                              'I am Elderly',
-                              style: TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(Icons.elderly, size: 50, color: Colors.white),
+                              SizedBox(width: 20),
+                              Text(
+                                'I am Elderly',
+                                style: TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -168,20 +174,23 @@ class _LoginScreenState extends State<LoginScreen> {
                           horizontal: 40,
                           vertical: 30,
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            Icon(Icons.people, size: 50, color: Colors.white),
-                            SizedBox(width: 20),
-                            Text(
-                              'I am Caregiver',
-                              style: TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(Icons.people, size: 50, color: Colors.white),
+                              SizedBox(width: 20),
+                              Text(
+                                'I am Caregiver',
+                                style: TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),

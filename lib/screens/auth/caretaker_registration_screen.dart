@@ -13,6 +13,9 @@ class CaretakerRegistrationScreen extends StatefulWidget {
 class _CaretakerRegistrationScreenState
     extends State<CaretakerRegistrationScreen> {
   final _nameController = TextEditingController();
+  final _ageController = TextEditingController();
+  String _selectedGender = 'Female';
+  final _occupationController = TextEditingController();
   final _roleController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -24,13 +27,25 @@ class _CaretakerRegistrationScreenState
 
   Future<void> _register() async {
     final name = _nameController.text.trim();
+    final age = _ageController.text.trim();
+    final occupation = _occupationController.text.trim();
     final role = _roleController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
     final confirm = _confirmPasswordController.text.trim();
 
-    if (name.isEmpty || email.isEmpty || password.isEmpty) {
+    final intAge = int.tryParse(age) ?? 0;
+
+    if (name.isEmpty ||
+        age.isEmpty ||
+        email.isEmpty ||
+        password.isEmpty ||
+        role.isEmpty) {
       _showError('Please fill in all required fields.');
+      return;
+    }
+    if (intAge < 18) {
+      _showError('Caretaker must be at least 18 years old.');
       return;
     }
     if (password.length < 6) {
@@ -47,9 +62,12 @@ class _CaretakerRegistrationScreenState
     try {
       await _authService.registerCaretaker(
         name: name,
+        age: age,
+        gender: _selectedGender,
+        occupation: occupation,
         email: email,
         password: password,
-        familyRole: role.isEmpty ? 'Caregiver' : role,
+        familyRole: role,
       );
       if (!mounted) return;
       Navigator.pushAndRemoveUntil(
@@ -91,6 +109,8 @@ class _CaretakerRegistrationScreenState
   @override
   void dispose() {
     _nameController.dispose();
+    _ageController.dispose();
+    _occupationController.dispose();
     _roleController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -155,10 +175,37 @@ class _CaretakerRegistrationScreenState
                   ),
                   const SizedBox(height: 14),
 
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 1,
+                        child: _buildTextField(
+                          controller: _ageController,
+                          hint: 'Age *',
+                          icon: Icons.cake_outlined,
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        flex: 2,
+                        child: _buildDropdown(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+
                   _buildTextField(
                     controller: _roleController,
-                    hint: 'Family Role (e.g. Son, Nurse)',
+                    hint: 'Family Role (e.g. Son, Nurse) *',
                     icon: Icons.family_restroom,
+                  ),
+                  const SizedBox(height: 14),
+
+                  _buildTextField(
+                    controller: _occupationController,
+                    hint: 'Occupation (Optional)',
+                    icon: Icons.work_outline,
                   ),
                   const SizedBox(height: 14),
 
@@ -307,6 +354,41 @@ class _CaretakerRegistrationScreenState
             horizontal: 20,
             vertical: 18,
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDropdown() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(13),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _selectedGender,
+          isExpanded: true,
+          icon: Icon(Icons.keyboard_arrow_down, color: Colors.blue.shade400),
+          items: ['Male', 'Female', 'Other'].map((String value) {
+            return DropdownMenuItem<String>(
+              value: value,
+              child: Text(value, style: const TextStyle(fontSize: 16)),
+            );
+          }).toList(),
+          onChanged: (newValue) {
+            if (newValue != null) {
+              setState(() => _selectedGender = newValue);
+            }
+          },
         ),
       ),
     );

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'memory_service.dart';
 import 'chat_message.dart';
+import '../../config/app_config.dart';
 
 class BuddyChatScreen extends StatefulWidget {
   final String userId; // Pass the current user's ID
@@ -27,8 +28,7 @@ class _BuddyChatScreenState extends State<BuddyChatScreen> {
   final List<Map<String, dynamic>> _chatHistory = [];
   String _currentMood = 'neutral';
 
-  // Replace with your actual Groq API key
-  static const String _apiKey = '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';
+  static const String _apiKey = AppConfig.groqApiKey;
   static const String _baseUrl = 'https://api.groq.com/openai/v1/chat/completions';
   static const String _model = 'llama-3.3-70b-versatile';
 

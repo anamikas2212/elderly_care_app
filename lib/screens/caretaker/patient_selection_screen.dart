@@ -53,162 +53,13 @@ class _PatientSelectionScreenState extends State<PatientSelectionScreen> {
   }
 
   void _showAddPatientDialog() {
-    final codeController = TextEditingController();
-    bool isRedeeming = false;
-
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder:
-          (ctx) => StatefulBuilder(
-            builder:
-                (ctx, setDialogState) => AlertDialog(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  title: Row(
-                    children: [
-                      Icon(Icons.link, color: Colors.blue.shade600),
-                      const SizedBox(width: 10),
-                      const Text('Add Elderly'),
-                    ],
-                  ),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text(
-                        'Enter the 6-digit Care Code shared by your elderly.',
-                        style: TextStyle(color: Colors.black54),
-                      ),
-                      const SizedBox(height: 20),
-                      TextField(
-                        controller: codeController,
-                        keyboardType: TextInputType.number,
-                        maxLength: 6,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 8,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: '000000',
-                          hintStyle: TextStyle(
-                            color: Colors.grey.shade300,
-                            fontSize: 32,
-                            letterSpacing: 8,
-                          ),
-                          counterText: '',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide(color: Colors.blue.shade200),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide(
-                              color: Colors.blue.shade600,
-                              width: 2,
-                            ),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            vertical: 16,
-                            horizontal: 16,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text('Cancel'),
-                    ),
-                    ElevatedButton(
-                      onPressed:
-                          isRedeeming
-                              ? null
-                              : () async {
-                                final code = codeController.text.trim();
-                                if (code.length != 6) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Please enter a 6-digit code.',
-                                      ),
-                                    ),
-                                  );
-                                  return;
-                                }
-
-                                setDialogState(() => isRedeeming = true);
-
-                                try {
-                                  final caretakerUid =
-                                      FirebaseAuth.instance.currentUser?.uid;
-                                  if (caretakerUid == null) return;
-
-                                  await _pairingService.redeemPairingCode(
-                                    code: code,
-                                    caretakerUid: caretakerUid,
-                                  );
-
-                                  if (!mounted) return;
-                                  Navigator.pop(ctx);
-                                  _loadPatients();
-
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: const Text(
-                                        'Elderly linked successfully!',
-                                      ),
-                                      backgroundColor: Colors.green.shade600,
-                                      behavior: SnackBarBehavior.floating,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                    ),
-                                  );
-                                } catch (e) {
-                                  setDialogState(() => isRedeeming = false);
-                                  if (!mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        e.toString().replaceAll(
-                                          'Exception: ',
-                                          '',
-                                        ),
-                                      ),
-                                      backgroundColor: Colors.red.shade600,
-                                      behavior: SnackBarBehavior.floating,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                    ),
-                                  );
-                                }
-                              },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue.shade600,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child:
-                          isRedeeming
-                              ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                ),
-                              )
-                              : const Text('Link Elderly'),
-                    ),
-                  ],
-                ),
-          ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => AddPatientBottomSheet(
+        onSuccess: _loadPatients,
+      ),
     );
   }
 
@@ -468,6 +319,255 @@ class _PatientSelectionScreenState extends State<PatientSelectionScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class AddPatientBottomSheet extends StatefulWidget {
+  final VoidCallback onSuccess;
+  const AddPatientBottomSheet({Key? key, required this.onSuccess}) : super(key: key);
+
+  @override
+  State<AddPatientBottomSheet> createState() => _AddPatientBottomSheetState();
+}
+
+class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
+  final _pairingService = PairingService();
+  bool _isLoading = false;
+
+  final _formKey = GlobalKey<FormState>();
+  final _codeController = TextEditingController();
+  final _nameController = TextEditingController();
+  final _ageController = TextEditingController();
+  String _selectedGender = 'Male';
+  final _occupationController = TextEditingController();
+  final _medicalConditionController = TextEditingController();
+  final _phoneController = TextEditingController();
+  
+  // Emergency Contact
+  final _emgNameController = TextEditingController();
+  final _emgRelationController = TextEditingController();
+  final _emgAgeController = TextEditingController();
+  final _emgOccupationController = TextEditingController();
+  final _emgPhoneController = TextEditingController();
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    
+    final code = _codeController.text.trim();
+    if (code.length != 6) {
+      _showSnack('Please enter a valid 6-digit code.', isError: true);
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final caretakerUid = FirebaseAuth.instance.currentUser?.uid;
+      if (caretakerUid == null) throw Exception('Not logged in.');
+
+      final elderlyDetails = {
+        'name': _nameController.text.trim(),
+        'age': _ageController.text.trim(),
+        'gender': _selectedGender,
+        'occupation': _occupationController.text.trim(),
+        'medicalCondition': _medicalConditionController.text.trim(),
+        'phone': _phoneController.text.trim(),
+        'emergencyContact': {
+          'name': _emgNameController.text.trim(),
+          'relation': _emgRelationController.text.trim(),
+          'age': _emgAgeController.text.trim(),
+          'occupation': _emgOccupationController.text.trim(),
+          'phone': _emgPhoneController.text.trim(),
+        }
+      };
+
+      await _pairingService.redeemPairingCode(
+        code: code,
+        caretakerUid: caretakerUid,
+        elderlyDetails: elderlyDetails,
+      );
+
+      if (!mounted) return;
+      Navigator.pop(context);
+      widget.onSuccess();
+      _showSnack('Elderly linked successfully!');
+      
+    } catch (e) {
+      if (!mounted) return;
+      _showSnack(e.toString().replaceAll('Exception: ', ''), isError: true);
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _showSnack(String msg, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: isError ? Colors.red.shade600 : Colors.green.shade600,
+    ));
+  }
+
+  Widget _buildField(TextEditingController ctrl, String label, {bool isNumber = false, bool required = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextFormField(
+        controller: ctrl,
+        keyboardType: isNumber ? TextInputType.phone : TextInputType.text,
+        validator: required ? (v) => v!.trim().isEmpty ? 'Required' : null : null,
+        decoration: InputDecoration(
+          labelText: required ? '$label *' : label,
+          filled: true,
+          fillColor: Colors.grey.shade100,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.9,
+      ),
+      child: Column(
+        children: [
+          // Drag handle
+          Container(
+            margin: const EdgeInsets.only(top: 12, bottom: 8),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const Text(
+            'Add Elderly Patient',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const Divider(height: 30),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Care Code
+                    const Text('Care Code', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _codeController,
+                      keyboardType: TextInputType.number,
+                      maxLength: 6,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 28, letterSpacing: 10, fontWeight: FontWeight.bold),
+                      decoration: InputDecoration(
+                        hintText: '000000',
+                        counterText: '',
+                        filled: true,
+                        fillColor: Colors.blue.shade50,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(color: Colors.blue.shade200),
+                        ),
+                      ),
+                      validator: (v) => v!.trim().length != 6 ? 'Code required' : null,
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Elderly Profile
+                    const Text('Patient Profile', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const SizedBox(height: 12),
+                    _buildField(_nameController, 'Full Name', required: true),
+                    Row(
+                      children: [
+                        Expanded(child: _buildField(_ageController, 'Age / DOB', required: true)),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: _selectedGender,
+                                isExpanded: true,
+                                items: ['Male', 'Female', 'Other'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                                onChanged: (v) => setState(() => _selectedGender = v!),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    _buildField(_occupationController, 'Occupation (Optional)'),
+                    _buildField(_medicalConditionController, 'Medical Condition(s)'),
+                    _buildField(_phoneController, 'Phone Number', isNumber: true, required: true),
+                    
+                    const SizedBox(height: 12),
+                    const Text('Emergency Contact', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const SizedBox(height: 12),
+                    _buildField(_emgNameController, 'Name', required: true),
+                    _buildField(_emgRelationController, 'Relation to Patient', required: true),
+                    Row(
+                      children: [
+                        Expanded(child: _buildField(_emgAgeController, 'Age')),
+                        const SizedBox(width: 12),
+                        Expanded(child: _buildField(_emgOccupationController, 'Occupation')),
+                      ],
+                    ),
+                    _buildField(_emgPhoneController, 'Phone Number', isNumber: true, required: true),
+                    const SizedBox(height: 20),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          
+          // Submit Bottom Bar
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [BoxShadow(color: Colors.black.withAlpha(10), blurRadius: 10, offset: const Offset(0, -4))],
+            ),
+            child: SafeArea(
+              child: SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _submit,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.shade600,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: _isLoading 
+                      ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white))
+                      : const Text('Link & Save Patient', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

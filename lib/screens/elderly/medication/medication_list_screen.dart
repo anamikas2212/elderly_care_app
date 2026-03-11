@@ -171,9 +171,6 @@ class _MedicationListScreenState extends State<MedicationListScreen> {
       ),
       body: Column(
         children: [
-          // ── Alert banner (elderly only) ──────────────────────────────────
-          if (widget.role == UserRole.elderly) _buildAlertBanner(),
-
           // ── Medication list ──────────────────────────────────────────────
           Expanded(child: _buildMedicationList()),
         ],

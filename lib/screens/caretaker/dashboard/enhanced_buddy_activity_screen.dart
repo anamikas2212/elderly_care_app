@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../services/caretaker_notification_service.dart';
 import '../../../services/enhanced_memory_service.dart';
+import '../../../config/app_config.dart';
 
 class EnhancedBuddyActivityScreen extends StatefulWidget {
   final String caretakerId;
@@ -32,8 +33,7 @@ class _EnhancedBuddyActivityScreenState
     super.initState();
     _notificationService = CaretakerNotificationService();
     _memoryService = EnhancedMemoryService(
-      groqApiKey:
-          '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', // Replace with your actual key
+      groqApiKey: AppConfig.groqApiKey,
     );
     _tabController = TabController(length: 3, vsync: this);
 
@@ -382,7 +382,7 @@ class _EnhancedBuddyActivityScreenState
     final sentimentData =
         report['sentimentData'] as Map<String, dynamic>? ?? {};
     final reportPeriod = report['reportPeriod'] as Map<String, dynamic>?;
-    final wellnessScore = sentimentData['emotionalWellnessScore'] ?? 50.0;
+    final wellnessScore = (sentimentData['emotionalWellnessScore'] as num?)?.toDouble() ?? 50.0;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -943,7 +943,7 @@ class _EnhancedBuddyActivityScreenState
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _buildWellnessScoreBar(
-                    sentimentData['emotionalWellnessScore'] ?? 50.0,
+                    (sentimentData['emotionalWellnessScore'] as num?)?.toDouble() ?? 50.0,
                   ),
                   const SizedBox(height: 20),
                   const Text(

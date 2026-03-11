@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../services/caretaker_id_helper.dart';
 import '../../../theme/caretaker_theme.dart';
 import '../../../services/caretaker_data_service.dart';
 import 'cognitive_health_screen.dart';
@@ -10,6 +11,7 @@ import 'buddy_activity_log_screen.dart';
 import 'connect_screens.dart';
 import '../../auth/login_screen.dart';
 import 'enhanced_buddy_activity_screen.dart';
+import '../reports/ai_cognitive_reports_screen.dart';
 // Analytics screen imports
 import '../analytics/flip_card_analytics_screen.dart';
 import '../analytics/color_tap_analytics_screen.dart';
@@ -33,6 +35,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
   String elderlyUserName = "";
   String elderlyUserAge = "--";
   String elderlyUserGender = "--";
+  String caretakerId = "";
 
   bool _isLoading = true;
   String? _errorMessage;
@@ -107,9 +110,11 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
 
       if (dataId.isEmpty) dataId = uid ?? name;
 
-      if (uid == null || uid.isEmpty) {
+      final cId = await CaretakerIdHelper.getCurrentCaretakerId() ?? '';
+
+      if (uid == null || uid.isEmpty || cId.isEmpty) {
         setState(() {
-          _errorMessage = "No elderly user linked. Please set up a connection.";
+          _errorMessage = "Identity error. Please log in again.";
           _isLoading = false;
         });
         return;
@@ -121,6 +126,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
         elderlyUserName = name;
         elderlyUserAge = loadedAge;
         elderlyUserGender = loadedGender;
+        caretakerId = cId;
         _cognitiveHealthFuture = _dataService.getCognitiveHealthFuture(dataId);
         _recentActivityFuture = _dataService.getRecentActivityFuture(dataId);
         _overallStatsFuture = _dataService.getOverallStatisticsFuture(dataId);
@@ -1043,6 +1049,19 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
           ),
         ),
 
+        _buildNavCard(
+          context,
+          "AI Reports",
+          Icons.auto_awesome,
+          Colors.amber.shade100,
+          Colors.amber.shade700,
+          AiCognitiveReportsScreen(
+            caretakerId: caretakerId,
+            elderlyId: elderlyUserId,
+            elderlyName: elderlyUserName,
+          ),
+        ),
+
       ],
     );
   }
@@ -1050,7 +1069,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
   Future<Widget> _buildEnhancedBuddyScreen() async {
     final prefs = await SharedPreferences.getInstance();
     return EnhancedBuddyActivityScreen(
-      caretakerId: prefs.getString('caretaker_id') ?? 'caretaker_demo_id',
+      caretakerId: await CaretakerIdHelper.getCurrentCaretakerId() ?? caretakerId,
       elderlyId: prefs.getString('elderly_user_id') ?? elderlyUserId,
       elderlyName: prefs.getString('elderly_user_name') ?? elderlyUserName,
     );

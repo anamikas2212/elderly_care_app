@@ -59,6 +59,9 @@ class AuthService {
   /// Registers a new caretaker with email and password.
   Future<String> registerCaretaker({
     required String name,
+    required String age,
+    required String gender,
+    required String occupation,
     required String email,
     required String password,
     required String familyRole,
@@ -77,6 +80,9 @@ class AuthService {
     // Save profile to Firestore
     await _firestore.collection('users').doc(uid).set({
       'name': name,
+      'age': age,
+      'gender': gender,
+      'occupation': occupation,
       'email': email,
       'familyRole': familyRole,
       'role': 'caretaker',

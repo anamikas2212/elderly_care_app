@@ -6,6 +6,7 @@ import 'screens/auth/elderly_initial_login_screen.dart';
 import 'games/chill_zone/color_tap/color_tap_game.dart';
 import 'screens/elderly/zone_selection_screen.dart';
 import 'package:elderly_care_app/services/report_scheduler_service.dart'; // Added
+import 'package:elderly_care_app/config/app_config.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 void main() async {
@@ -15,7 +16,7 @@ void main() async {
   // Added: initialize report scheduler
   final scheduler = ReportSchedulerService();
   scheduler.initializeScheduler(
-    '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',
+    AppConfig.groqApiKey,
   );
 
   runApp(const ElderlyCarApp());
