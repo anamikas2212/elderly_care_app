@@ -1,4 +1,3 @@
-//i tried modifying the actual code accordingly, but this im not sure. edit to fit the original code
 //lib/services/sos_service.dart
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -31,7 +30,7 @@ class SOSService {
               }
             : null,
         'isActive': true,
-        'isInsideSafeZone': isInsideSafeZone, // Store location status
+        'isInsideSafeZone': isInsideSafeZone ?? false, // ✅ ADDED // Store location status
         'alertType': 'sos', // sos or false_alarm
       });
 
@@ -50,14 +49,14 @@ class SOSService {
                 'longitude': currentLocation.longitude,
               }
             : null,
-        'isInsideSafeZone': isInsideSafeZone,
+        'isInsideSafeZone': isInsideSafeZone ?? false, // ✅ ADDED
       });
 
       // Update elderly user status
       await _firestore.collection('elderly_users').doc(elderlyUserId).set({
         'sosActive': true,
         'lastSOSAt': FieldValue.serverTimestamp(),
-        'isInsideSafeZone': isInsideSafeZone,
+        'isInsideSafeZone': isInsideSafeZone ?? false, // ✅ ADDED
       }, SetOptions(merge: true));
 
       print('✅ SOS Alert triggered: ${sosRef.id}');
@@ -95,6 +94,8 @@ class SOSService {
   /// Acknowledge SOS alert (caretaker action)
   Future<void> acknowledgeSOS(String alertId, String caretakerId) async {
     try {
+      print('🔍 Acknowledging SOS with caretaker ID: "$caretakerId"'); // ✅ DEBUG
+
       await 
       _firestore.collection('sos_alerts').doc(alertId).update({
         'status': 'acknowledged',
@@ -120,7 +121,7 @@ class SOSService {
         });
       }
 
-      print('✅ SOS Alert acknowledged: $alertId');
+      print('✅ SOS Alert acknowledged: $alertId by $caretakerId');
     } catch (e) {
       print('❌ Error acknowledging SOS: $e');
       rethrow;
@@ -130,6 +131,8 @@ class SOSService {
   /// Resolve SOS alert (caretaker action)
   Future<void> resolveSOS(String alertId, String caretakerId) async {
     try {
+      print('🔍 Resolving SOS with caretaker ID: "$caretakerId"'); // ✅ DEBUG
+
       await _firestore.collection('sos_alerts').doc(alertId).update({
         'status': 'resolved',
         'resolvedAt': FieldValue.serverTimestamp(),
@@ -213,7 +216,9 @@ class SOSService {
           await _firestore.collection('safe_zones').doc(elderlyUserId).get();
 
       if (!safeZoneDoc.exists) {
-        return {'status': 'unknown', 'isHome': false, 'distance': 0.0};
+        return {'status': 'unknown', 'isHome': false, 'distance': 0.0,
+        'position': null, // ✅ ADDED: Return null position
+        };
       }
 
       final safeZoneData = safeZoneDoc.data()!;
@@ -222,7 +227,7 @@ class SOSService {
       final radius = (safeZoneData['radius'] as num?)?.toDouble() ?? 1000.0;
 
       if (homeLatitude == null || homeLongitude == null) {
-        return {'status': 'unknown', 'isHome': false, 'distance': 0.0};
+        return {'status': 'unknown', 'isHome': false, 'distance': 0.0, 'position': null,};
       }
 
       // Get current location
@@ -249,7 +254,7 @@ class SOSService {
       };
     } catch (e) {
       print('Error getting location status: $e');
-      return {'status': 'unknown', 'isHome': false, 'distance': 0.0};
+      return {'status': 'unknown', 'isHome': false, 'distance': 0.0, 'position': null,};
     }
   }
 

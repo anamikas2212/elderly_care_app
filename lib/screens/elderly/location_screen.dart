@@ -16,8 +16,8 @@ class _LocationScreenState extends State<LocationScreen> {
   final MapController _mapController = MapController();
   
   // Home location (hardcoded for now)
-  final LatLng _homeLocation = LatLng(9.998418620839775, 76.361358164756); // hostel
-  final double _safeZoneRadius = 670.0; // 1km radius
+  final LatLng _homeLocation = LatLng(9.998418620839775, 76.361358164756); // my hostel
+  final double _safeZoneRadius = 670.0; 
   
   // Current location (will be updated in real-time)
   LatLng? _currentLocation;
@@ -93,7 +93,7 @@ class _LocationScreenState extends State<LocationScreen> {
     // Listen to location updates
     const LocationSettings locationSettings = LocationSettings(
       accuracy: LocationAccuracy.high,
-      distanceFilter: 10, // Update every 10 meters
+      distanceFilter: 1, // Update every 1 meters
     );
 
     _positionStreamSubscription = Geolocator.getPositionStream(
@@ -386,7 +386,7 @@ class _LocationScreenState extends State<LocationScreen> {
                   children: [
                     Text(
                       _isInsideSafeZone ? '🏠' : '⚠️',
-                      style: const TextStyle(fontSize: 50),
+                      style: const TextStyle(fontSize: 40),
                     ),
                     const SizedBox(width: 15),
                     Expanded(
