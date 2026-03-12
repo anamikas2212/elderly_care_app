@@ -240,7 +240,6 @@ class _VisionGuardianScreenState extends State<VisionGuardianScreen>
             ],
 
             const SizedBox(height: 32),
-            _buildRecentScansSection(),
           ],
         ),
       ),
@@ -714,58 +713,6 @@ class _VisionGuardianScreenState extends State<VisionGuardianScreen>
                   ),
                 ],
                 const SizedBox(height: 18),
-                if (!takenToday)
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () => _markAsTaken(med),
-                      icon: const Icon(Icons.check_circle_outline, size: 26),
-                      label: const Text(
-                        'Mark as Taken',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green.shade600,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        elevation: 3,
-                      ),
-                    ),
-                  )
-                else
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade100,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.check_circle,
-                          color: Colors.green.shade700,
-                          size: 26,
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          'Already Taken Today!',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green.shade800,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
               ],
             ),
           ),

@@ -76,12 +76,20 @@ class NotificationService {
     required int hour,
     required int minute,
     int timeIndex = 0,
+    DateTimeComponents? matchComponents,
+    int? weekday, // 1=Mon .. 7=Sun
+    tz.TZDateTime? scheduledDate,
   }) async {
+    final tz.TZDateTime scheduled = scheduledDate ??
+        (weekday != null
+            ? _nextInstanceOfWeekday(weekday, hour, minute)
+            : _nextInstance(hour, minute));
+
     await _notifications.zonedSchedule(
       id,
       "Medication Reminder",
       "Take $name ($dose)",
-      _nextInstance(hour, minute),
+      scheduled,
       NotificationDetails(
         android: AndroidNotificationDetails(
           'med_channel',
@@ -104,7 +112,7 @@ class NotificationService {
       ),
       payload: "$userId|$docId|$timeIndex",
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      matchDateTimeComponents: DateTimeComponents.time,
+      matchDateTimeComponents: matchComponents,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
     );
@@ -120,6 +128,16 @@ class NotificationService {
       scheduled = scheduled.add(const Duration(days: 1));
     }
 
+    return scheduled;
+  }
+
+  tz.TZDateTime _nextInstanceOfWeekday(int weekday, int hour, int minute) {
+    final now = tz.TZDateTime.now(tz.local);
+    var scheduled =
+        tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
+    while (scheduled.weekday != weekday || scheduled.isBefore(now)) {
+      scheduled = scheduled.add(const Duration(days: 1));
+    }
     return scheduled;
   }
 
@@ -159,6 +177,8 @@ class NotificationService {
         hour: now.hour,
         minute: now.minute,
         timeIndex: timeIndex,
+        scheduledDate: tz.TZDateTime.from(now, tz.local),
+        matchComponents: null, // one-time snooze
       );
     }
   }
