@@ -1,8 +1,12 @@
+//location_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LocationScreen extends StatefulWidget {
   const LocationScreen({super.key});
@@ -17,7 +21,7 @@ class _LocationScreenState extends State<LocationScreen> {
   
   // Home location (hardcoded for now)
   final LatLng _homeLocation = LatLng(9.998418620839775, 76.361358164756); // my hostel
-  final double _safeZoneRadius = 670.0; 
+  final double _safeZoneRadius = 500.0; 
   
   // Current location (will be updated in real-time)
   LatLng? _currentLocation;
@@ -82,6 +86,7 @@ class _LocationScreenState extends State<LocationScreen> {
     setState(() => _locationPermissionGranted = true);
     _startLocationTracking();
   }
+
   // Start real-time location tracking
   void _startLocationTracking() {
     Geolocator.getCurrentPosition( // Get initial position
@@ -90,6 +95,7 @@ class _LocationScreenState extends State<LocationScreen> {
       print('Error getting initial position: $error');
       setState(() => _isLoadingLocation = false);
     });
+
     // Listen to location updates
     const LocationSettings locationSettings = LocationSettings(
       accuracy: LocationAccuracy.high,
@@ -103,8 +109,8 @@ class _LocationScreenState extends State<LocationScreen> {
     });
   }
 
-  // Update current location and calculate distance
-  void _updateLocation(Position position) {
+  // ✅ UPDATED: Update current location and send to Firebase using NAME as ID
+  Future<void> _updateLocation(Position position) async {
     final newLocation = LatLng(position.latitude, position.longitude);
     
     // Calculate distance from home
@@ -115,6 +121,8 @@ class _LocationScreenState extends State<LocationScreen> {
       position.longitude,
     );
 
+    bool isInside = distance <= _safeZoneRadius;
+
     setState(() {
       _currentLocation = newLocation;
       _distanceFromHome = distance;
@@ -122,9 +130,42 @@ class _LocationScreenState extends State<LocationScreen> {
       _isLoadingLocation = false;
     });
 
-    print('Location updated: ${position.latitude}, ${position.longitude}');
-    print('Distance from home: ${distance.toStringAsFixed(2)} meters');
-    print('Inside safe zone: $_isInsideSafeZone');
+    print('📍 Location updated: ${position.latitude}, ${position.longitude}');
+    print('📏 Distance from home: ${distance.toStringAsFixed(2)} meters');
+    print('🏠 Inside safe zone: $_isInsideSafeZone');
+
+    try {
+      // ✅ UPDATED: Use NAME as the document ID (not Firebase UID)
+      final prefs = await SharedPreferences.getInstance();
+      
+      // Try to get the elderly user's NAME (primary ID)
+      String? elderlyUserName = prefs.getString('elderly_user_name') ??
+                                prefs.getString('currentUserId') ??
+                                prefs.getString('elderly_user_id');
+
+      if (elderlyUserName == null || elderlyUserName.isEmpty) {
+        print('⚠️ No elderly user name found in SharedPreferences');
+        return;
+      }
+
+      print('✅ Updating location for user: $elderlyUserName (NAME as ID)');
+
+      // Update Firebase using NAME as document ID
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(elderlyUserName) // ✅ Using NAME, not UID
+          .set({
+        'latitude': position.latitude,
+        'longitude': position.longitude,
+        'isHome': isInside,
+        'distanceFromHome': distance,
+        'lastLocationUpdate': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true)); // Use merge to not overwrite other fields
+
+      print('✅ Location sent to Firebase: users/$elderlyUserName');
+    } catch (e) {
+      print('❌ Error sending location to Firebase: $e');
+    }
   }
 
   // Show location service disabled dialog
@@ -263,7 +304,6 @@ class _LocationScreenState extends State<LocationScreen> {
   }
 
   // Format distance for display
-
   String _formatDistance(double? distance) {
     if (distance == null) return 'Calculating...';
     if (distance < 1000) return '${distance.toStringAsFixed(0)} m';

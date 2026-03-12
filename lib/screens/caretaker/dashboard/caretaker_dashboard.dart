@@ -1,4 +1,4 @@
-﻿
+﻿//caretaker_dashboard.dart
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -42,7 +42,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
 
   final SOSService _sosService = SOSService();
   bool _hasActiveSOS = false;
-  bool _isHome = true;
+  bool _isHome = false;
 
   // Cached cognitive health future so it doesn't reset on every rebuild
   Future<Map<String, dynamic>>? _cognitiveHealthFuture;
@@ -53,20 +53,10 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
   void initState() {
     super.initState();
     _loadElderlyUserId();
-    
+    //Live Location
+    //_listenToElderlyLocation();
     // Listen to SOS alerts
-    _listenToSOSAlerts();
-  }
-
-  void _listenToSOSAlerts() {
-    if (elderlyUserId.isEmpty) return;
-    
-    _sosService.getActiveSOSAlerts(elderlyUserId).listen((snapshot) {
-      if (!mounted) return;
-      setState(() {
-        _hasActiveSOS = snapshot.docs.isNotEmpty;
-      });
-    });
+    //_listenToSOSAlerts();
   }
 
   Future<void> _loadElderlyUserId() async {
@@ -147,6 +137,23 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
         _overallStatsFuture = _dataService.getOverallStatisticsFuture(dataId);
         _isLoading = false;
       });
+
+      setState(() {
+        elderlyUserId = dataId;
+        elderlyUserName = name;
+        elderlyUserAge = loadedAge;
+        elderlyUserGender = loadedGender;
+        _cognitiveHealthFuture = _dataService.getCognitiveHealthFuture(dataId);
+        _recentActivityFuture = _dataService.getRecentActivityFuture(dataId);
+        _overallStatsFuture = _dataService.getOverallStatisticsFuture(dataId);
+        _isLoading = false;
+      });
+
+      _listenToElderlyLocation();
+      _listenToSOSAlerts();
+      _checkSOSStatus();
+      //_checkLocationStatus();
+
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -155,11 +162,44 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
       });
     }
     // Check SOS status
-    _checkSOSStatus();
+    //_checkSOSStatus();
     
     // Check location status
-    _checkLocationStatus();
+    //_checkLocationStatus();
   }
+
+  void _listenToElderlyLocation() {
+    if (elderlyUserId.isEmpty) return;
+
+    FirebaseFirestore.instance
+        .collection('users')
+        .doc(elderlyUserId)   // using name as ID
+        .snapshots()
+        .listen((snapshot) {
+
+      if (!snapshot.exists) return;
+
+      final data = snapshot.data() as Map<String, dynamic>;
+
+      if (!mounted) return;
+
+      setState(() {
+        _isHome = data['isHome'] ?? false;
+      });
+    });
+  }
+
+  void _listenToSOSAlerts() {
+    if (elderlyUserId.isEmpty) return;
+    
+    _sosService.getActiveSOSAlerts(elderlyUserId).listen((snapshot) {
+      if (!mounted) return;
+      setState(() {
+        _hasActiveSOS = snapshot.docs.isNotEmpty;
+      });
+    });
+  }
+
 
   Future<void> _checkSOSStatus() async {
     if (elderlyUserId.isEmpty) return;
@@ -171,7 +211,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
       _hasActiveSOS = hasActiveSOS;
     });
   }
-
+/*
   Future<void> _checkLocationStatus() async {
     if (elderlyUserId.isEmpty) return;
     
@@ -181,7 +221,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
     setState(() {
       _isHome = locationStatus['isHome'] ?? false;
     });
-  }
+  }*/
 
   // ── Build ─────────────────────────────────────────────────────────────────
 

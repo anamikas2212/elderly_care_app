@@ -62,7 +62,7 @@ class AuthService {
     required String email,
     required String password,
     required String familyRole,
-  }) async {
+    }) async {
     // Sign out any existing anonymous session first
     if (_auth.currentUser != null && _auth.currentUser!.isAnonymous) {
       await _auth.signOut();

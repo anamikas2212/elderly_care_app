@@ -44,24 +44,19 @@ class _SafetyMonitorScreenState extends State<SafetyMonitorScreen> with WidgetsB
     try {
       final prefs = await SharedPreferences.getInstance();
       
-      // ✅ ENHANCED: Try multiple keys and log what we find
-      final uid = prefs.getString('elderly_user_uid') ??
-          prefs.getString('elderly_user_id') ??
-          prefs.getString('elderly_user_name') ??
-          prefs.getString('elderlyUserId') ?? // ✅ ADDED: Additional fallback key
-          '';
+      final name = prefs.getString('elderly_user_name') ?? '';
 
-      print('🔍 Loaded elderly user ID: "$uid"');
+      print('🔍 Loaded elderly user ID: "$name"');
       print('📦 Available SharedPreferences keys: ${prefs.getKeys()}');
 
       if (!mounted) return;
       setState(() {
-        elderlyUserId = uid;
+        elderlyUserId = name;
         _isLoading = false;
       });
 
       // ✅ ADDED: If empty, try to reload from Firestore
-      if (uid.isEmpty) {
+      if (name.isEmpty) {
         print('⚠️ Elderly user ID is empty - attempting to reload from caretaker data');
         await _tryLoadFromCaretakerData(prefs);
       }
@@ -93,17 +88,17 @@ class _SafetyMonitorScreenState extends State<SafetyMonitorScreen> with WidgetsB
           .get();
 
       if (caretakerDoc.exists) {
-        final linkedElderlyId = caretakerDoc.data()?['linkedElderlyUserId'];
-        if (linkedElderlyId != null && linkedElderlyId.toString().isNotEmpty) {
-          print('✅ Found linked elderly user: $linkedElderlyId');
+        final linkedElderlyName = caretakerDoc.data()?['linkedElderlyUserName'];
+        if (linkedElderlyName != null && linkedElderlyName.toString().isNotEmpty) {
+          print('✅ Found linked elderly user: $linkedElderlyName');
           
           // Save it back to SharedPreferences
-          await prefs.setString('elderly_user_uid', linkedElderlyId.toString());
-          await prefs.setString('elderlyUserId', linkedElderlyId.toString());
+          await prefs.setString('elderly_user_name', linkedElderlyName.toString());
+          await prefs.setString('elderlyUserId', linkedElderlyName.toString());
           
           if (!mounted) return;
           setState(() {
-            elderlyUserId = linkedElderlyId.toString();
+            elderlyUserId = linkedElderlyName.toString();
           });
         }
       }
@@ -379,136 +374,105 @@ class _SafetyMonitorScreenState extends State<SafetyMonitorScreen> with WidgetsB
   Widget _buildAlertCard(QueryDocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     final alertId = doc.id;
-    final elderlyName = data['elderlyUserName'] ?? 'Unknown';
+    final elderlyName = data['elderlyUserId'] ?? 'Unknown';
     final status = data['status'] ?? 'active';
     final triggeredAt = (data['triggeredAt'] as Timestamp?)?.toDate();
     final location = data['location'] as Map<String, dynamic>?;
-    final isInsideSafeZone = data['isInsideSafeZone'] as bool? ?? false;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: status == 'acknowledged' ? Colors.orange : Colors.red,
-          width: 2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: (status == 'acknowledged' ? Colors.orange : Colors.red)
-                .withOpacity(0.2),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance
+          .collection('users')
+          .doc(elderlyName)
+          .get(),
+      builder: (context, snapshot) {
+        bool isInsideSafeZone = false;
+
+        if (snapshot.hasData && snapshot.data!.exists) {
+          final userData = snapshot.data!.data() as Map<String, dynamic>;
+          isInsideSafeZone = userData['isHome'] ?? false;
+        }
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: status == 'acknowledged' ? Colors.orange : Colors.red,
+              width: 2,
+            ),
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Text(
+                'EMERGENCY ALERT - $elderlyName',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red,
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              if (triggeredAt != null)
+                Text(
+                  'Triggered: ${_formatDateTime(triggeredAt)}',
+                ),
+
+              const SizedBox(height: 4),
+
+              Text(
+                'Location: ${isInsideSafeZone ? "Home" : "Away from Home"}',
+                style: TextStyle(
+                  color: isInsideSafeZone ? Colors.green : Colors.orange,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+
+              if (location != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'GPS: ${location['latitude']?.toStringAsFixed(4)}, '
+                  '${location['longitude']?.toStringAsFixed(4)}',
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ],
+
+              const SizedBox(height: 16),
+
               Row(
                 children: [
-                  Icon(
-                    Icons.warning_amber_rounded,
-                    color: status == 'acknowledged' ? Colors.orange : Colors.red,
-                    size: 32,
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'EMERGENCY ALERT',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.red,
+                  if (status == 'active')
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => _acknowledgeSOS(alertId),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
                         ),
+                        child: const Text('Acknowledge'),
                       ),
-                      Text(
-                        elderlyName,
-                        style: const TextStyle(fontSize: 16),
+                    ),
+
+                  if (status == 'active') const SizedBox(width: 8),
+
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => _resolveSOS(alertId),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
                       ),
-                    ],
+                      child: const Text('Resolve'),
+                    ),
                   ),
                 ],
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: status == 'acknowledged' ? Colors.orange : Colors.red,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  status.toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
             ],
           ),
-          const SizedBox(height: 12),
-          if (triggeredAt != null)
-            Text(
-              'Triggered: ${_formatDateTime(triggeredAt)}',
-              style: TextStyle(color: Colors.grey.shade700),
-            ),
-          const SizedBox(height: 4),
-          Text(
-            'Location: ${isInsideSafeZone ? "Home" : "Away from Home"}',
-            style: TextStyle(
-              color: isInsideSafeZone ? Colors.green : Colors.orange,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          if (location != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              'GPS: ${location['latitude']?.toStringAsFixed(4)}, ${location['longitude']?.toStringAsFixed(4)}',
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-            ),
-          ],
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              if (status == 'active')
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _acknowledgeSOS(alertId),
-                    icon: const Icon(Icons.check),
-                    label: const Text('Acknowledge'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
-                ),
-              if (status == 'active') const SizedBox(width: 8),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () => _resolveSOS(alertId),
-                  icon: const Icon(Icons.check_circle),
-                  label: const Text('Resolve'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
