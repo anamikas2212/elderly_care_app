@@ -24,34 +24,12 @@ class MedicationListScreen extends StatefulWidget {
 class _MedicationListScreenState extends State<MedicationListScreen> {
   DateTime _selectedDate = DateTime.now();
   late Stream<QuerySnapshot> _medicationsStream;
-  late Stream<QuerySnapshot> _alertsStream;
-  final Set<String> _notifiedAlerts = {};
-  List<QueryDocumentSnapshot> _activeAlerts = [];
 
   @override
   void initState() {
     super.initState();
     _medicationsStream = _firestore.collection('users').doc(widget.userId)
         .collection('medications').snapshots();
-    _alertsStream = _firestore.collection('alerts')
-        .where('userId', isEqualTo: widget.userId)
-        .where('isActive', isEqualTo: true)
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .asBroadcastStream();
-
-    if (widget.role == UserRole.elderly && !kIsWeb) {
-      _alertsStream.listen((snapshot) {
-        if (mounted) {
-          setState(() {
-            _activeAlerts = snapshot.docs;
-          });
-        }
-        if (snapshot.docs.isNotEmpty) {
-           _triggerLocalAlertNotification(snapshot.docs);
-        }
-      });
-    }
 
     if (!kIsWeb) {
       NotificationService.instance.init().then((_) {
@@ -238,7 +216,6 @@ class _MedicationListScreenState extends State<MedicationListScreen> {
         ],
       ),
       body: Column(children: [
-        if (widget.role == UserRole.elderly) _buildAlertBanner(),
         if (widget.role == UserRole.elderly) _buildWeeklyCalendar(),
         Expanded(child: _buildMedicationList()),
       ]),
@@ -252,83 +229,6 @@ class _MedicationListScreenState extends State<MedicationListScreen> {
             )
           : null,
     );
-  }
-
-  Widget _buildAlertBanner() {
-    if (_activeAlerts.isEmpty) return const SizedBox.shrink();
-    
-    return Container(
-      color: Colors.grey.shade100,
-      child: Column(
-        children: _activeAlerts.map((doc) {
-          final alert = doc.data() as Map<String, dynamic>;
-          final type = _safeString(alert['type'], fallback: 'warning');
-          final alertColor = _alertColor(type);
-          return Padding(
-            padding: const EdgeInsets.all(12),
-            child: Container(
-             padding: const EdgeInsets.all(16),
-             decoration: BoxDecoration(
-               color: _alertBgColor(type),
-               borderRadius: BorderRadius.circular(12),
-               border: Border.all(color: alertColor.withOpacity(0.3), width: 2),
-             ),
-             child: Row(children: [
-               Icon(_alertIcon(type), color: alertColor, size: 32),
-               const SizedBox(width: 12),
-               Expanded(child: Column(
-                 crossAxisAlignment: CrossAxisAlignment.start,
-                 children: [
-                   Text(_safeString(alert['title'], fallback: 'Alert'),
-                       style: TextStyle(fontWeight: FontWeight.w700,
-                           color: alertColor, fontSize: 18)),
-                   if (_safeString(alert['message']).isNotEmpty)
-                     Text(_safeString(alert['message']),
-                         style: TextStyle(
-                             color: alertColor.withOpacity(0.8), fontSize: 15)),
-                 ],
-               )),
-               IconButton(
-                 icon: Icon(Icons.close, color: alertColor, size: 24),
-                 onPressed: () => _dismissAlert(doc.id),
-                 padding: EdgeInsets.zero,
-                 constraints: const BoxConstraints(),
-               ),
-             ]),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Future<void> _triggerLocalAlertNotification(
-    List<QueryDocumentSnapshot> docs,
-  ) async {
-    if (docs.isEmpty) return;
-    
-    for (final doc in docs) {
-      if (_notifiedAlerts.contains(doc.id)) continue;
-      
-      final data = doc.data() as Map<String, dynamic>;
-      final isActive = data['isActive'] == true;
-      if (!isActive) continue;
-
-      final title = _safeString(data['title'], fallback: 'Medication Reminder');
-      final message = _safeString(
-        data['message'],
-        fallback: 'Please check your medication schedule.',
-      );
-
-      try {
-        await NotificationService.instance.showImmediate(
-          title: title,
-          body: message,
-          payload: 'alert|${doc.id}',
-        );
-        _notifiedAlerts.add(doc.id);
-      } catch (_) {}
-    }
   }
 
   Widget _buildWeeklyCalendar() {

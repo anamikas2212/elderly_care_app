@@ -185,48 +185,6 @@ class _MedicationManagementScreenState
     }
   }
   
-  // ─── Send Gentle Reminder ────────────────────────────────────────────────
-  Future<void> _sendReminderToElderly({String? medName}) async {
-      try {
-          String msg = medName != null ? 'You have missed a dose of $medName. Please take it as soon as possible.' : 'You have missed some of your medicine recently. Please try to take your medicine on time.';
-          final alertRef = _firestore.collection('alerts').doc();
-          await alertRef.set({
-              'userId': widget.userId,
-              'title': 'Medication Reminder',
-              'message': msg,
-              'type': 'medication_reminder',
-              'isActive': true,
-              'createdAt': FieldValue.serverTimestamp(),
-          });
-
-          await _firestore.collection('users').doc(widget.userId).collection('notifications').add({
-              'title': 'Medication Reminder',
-              'message': msg,
-              'type': 'medication_reminder',
-              'isRead': false,
-              'createdAt': FieldValue.serverTimestamp(),
-          });
-          
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('✅ Reminder sent to patient.'),
-                backgroundColor: Colors.green,
-                behavior: SnackBarBehavior.floating,
-              ),
-          );
-      } catch (e) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Error sending reminder: $e'),
-                backgroundColor: Colors.red,
-                behavior: SnackBarBehavior.floating,
-              ),
-          );
-      }
-  }
-
   // ─── Build UI ────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
@@ -331,43 +289,6 @@ class _MedicationManagementScreenState
                   _buildProgressSection(flatListToday),
 
                   const SizedBox(height: 24),
-
-                  // ── Missed dose alert ─────────────────────────────────
-                  Builder(
-                    builder: (_) {
-                      final now = TimeOfDay.now();
-                      final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
-                      final overdue = flatListToday.where((item) {
-                        final med = item['data'] as Map<String, dynamic>;
-                        final timeIndex = item['timeIndex'] as int;
-                        final takenDates = med['takenDates'] as List<dynamic>? ?? [];
-                        final legacyTaken = (timeIndex == 0) && (takenDates.contains(dateStr) || (med['takenToday'] == true && dateStr == DateFormat('yyyy-MM-dd').format(DateTime.now())));
-                        final isTaken = takenDates.contains('${dateStr}_$timeIndex') || legacyTaken;
-                        
-                        if (isTaken) return false;
-                        
-                        final t = _parse12hTime(item['timeStr']);
-                        if (t == null) return false;
-                        
-                        // Overdue if it's more than 30 mins past scheduled time
-                        if (now.hour > t.hour || (now.hour == t.hour && now.minute > t.minute + 30)) {
-                          return true;
-                        }
-                        return false;
-                      }).toList();
-                      
-                      if (overdue.isEmpty) return const SizedBox.shrink();
-                      
-                      return Column(
-                        children: overdue.map((item) {
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 12.0),
-                            child: _buildMissedDoseAlert(item['data'], item['timeStr']),
-                          );
-                        }).toList(),
-                      );
-                    },
-                  ),
 
                   // ── Today's schedule ──────────────────────────────────
                   _buildScheduleSection(flatListToday),
@@ -492,58 +413,6 @@ class _MedicationManagementScreenState
           ),
         ),
       ],
-    );
-  }
-
-  // ─── Missed dose alert ────────────────────────────────────────────────────
-  Widget _buildMissedDoseAlert(Map<String, dynamic> med, String time) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.red.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.red.shade200),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.warning_amber_rounded,
-            color: Colors.red.shade700,
-            size: 32,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Missed Dose: ${med['name']}',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.red.shade900,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Scheduled at $time',
-                  style: TextStyle(fontSize: 14, color: Colors.red.shade700),
-                ),
-              ],
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () => _sendReminderToElderly(medName: med['name']),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade600,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text('Remind', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
     );
   }
 
@@ -856,7 +725,6 @@ class _MedicationManagementScreenState
     
     Map<String, int> medicineMissedCount = {};
     List<Map<String, String>> missedHistory = []; // Tracks { 'name': 'Aspirin', 'date': '2026-03-10', 'time': '8:00 AM' }
-    bool thresholdBreached = false;
 
     final now = DateTime.now();
     
@@ -872,7 +740,7 @@ class _MedicationManagementScreenState
             
             // Check if created after this date, if so, skip counting it for this past date
             final createdAtTimestamp = med['createdAt'] as Timestamp?;
-            final createdAt = createdAtTimestamp?.toDate() ?? DateTime(1970);
+            final createdAt = createdAtTimestamp?.toDate() ?? DateTime.now(); // If null, assume added today so we don't punish historical empty arrays.
             final createdDateStr = DateFormat('yyyy-MM-dd').format(createdAt);
             
             // If the date we are checking (dateStr) is BEFORE the creation date (createdDateStr), skip it.
@@ -940,10 +808,6 @@ class _MedicationManagementScreenState
     // Sort missed counts descending
     var sortedMissedEntryList = medicineMissedCount.entries.toList()
         ..sort((a, b) => b.value.compareTo(a.value));
-        
-    if (sortedMissedEntryList.isNotEmpty && sortedMissedEntryList.first.value > 3) {
-        thresholdBreached = true;
-    }
 
     double adherence = 100.0;
     if (totalPillsPastDays > 0) {
@@ -953,51 +817,6 @@ class _MedicationManagementScreenState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (thresholdBreached) ...[
-            Container(
-                margin: const EdgeInsets.only(bottom: 24),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                    color: Colors.red.shade900,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                        BoxShadow(
-                            color: Colors.red.shade200,
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
-                        )
-                    ]
-                ),
-                child: Row(
-                    children: [
-                        const Icon(Icons.warning, color: Colors.white, size: 36),
-                        const SizedBox(width: 16),
-                        Expanded(
-                            child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                    const Text('CRITICAL ALERT', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                                    const Text('A medication has been missed >3 times recently.', style: TextStyle(color: Colors.white70, fontSize: 14)),
-                                    const SizedBox(height: 8),
-                                    ElevatedButton.icon(
-                                        onPressed: () => _sendReminderToElderly(),
-                                        icon: const Icon(Icons.notifications_active, size: 16),
-                                        label: const Text('Send Reminder'),
-                                        style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.white,
-                                            foregroundColor: Colors.red.shade900,
-                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                            minimumSize: Size.zero,
-                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                        ),
-                                    )
-                                ]
-                            )
-                        )
-                    ]
-                )
-            )
-        ],
         Text(
           isMonthly ? 'Monthly Adherence Report' : 'Weekly Adherence Report',
           style: const TextStyle(
