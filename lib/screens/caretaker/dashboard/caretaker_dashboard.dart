@@ -47,6 +47,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
 
   // Cached futures so they don't reset on every rebuild
   Future<Map<String, dynamic>>? _cognitiveHealthFuture;
+  Stream<List<Map<String, dynamic>>>? _recentActivityStream;
   Future<List<Map<String, dynamic>>>? _recentActivityFuture;
   Future<Map<String, dynamic>>? _overallStatsFuture;
 
@@ -150,8 +151,9 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
         elderlyUserGender = loadedGender;
         caretakerId = cId;
         _cognitiveHealthFuture = _dataService.getCognitiveHealthFuture(dataId);
-        _recentActivityFuture = _dataService.getRecentActivityFuture(dataId);
-        _overallStatsFuture = _dataService.getOverallStatisticsFuture(dataId);
+        _recentActivityStream = _dataService.getGameSessionHistory(dataId);
+        _recentActivityFuture = _dataService.getRecentActivityFuture(dataId, elderlyUid: storedUid ?? uid ?? '');
+        _overallStatsFuture = _dataService.getOverallStatisticsFuture(dataId, elderlyUid: storedUid ?? uid ?? '');
         _isLoading = false;
       });
     } catch (e) {
@@ -820,7 +822,8 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return _buildLoadingCard("Loading activity...");
         }
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+        final sessions = snapshot.data ?? [];
+        if (sessions.isEmpty) {
           return Container(
             padding: const EdgeInsets.all(20),
             decoration: _buildCardDecoration(),
@@ -828,10 +831,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
               children: [
                 Icon(Icons.inbox_outlined, size: 48, color: Colors.grey.shade400),
                 const SizedBox(height: 12),
-                Text(
-                  'No recent activity',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
-                ),
+                Text('No recent activity', style: TextStyle(color: Colors.grey.shade600, fontSize: 14)),
                 const SizedBox(height: 8),
                 Text(
                   'Activity will appear here once games are played',
@@ -843,7 +843,6 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
           );
         }
 
-        final sessions = snapshot.data!;
         return Container(
           padding: const EdgeInsets.all(20),
           decoration: _buildCardDecoration(),
@@ -853,13 +852,19 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'Recent Activity',
-                    style: CaretakerTextStyles.cardTitle,
-                  ),
-                  Text(
-                    '${sessions.length} sessions',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  const Text('Recent Activity', style: CaretakerTextStyles.cardTitle),
+                  Row(
+                    children: [
+                      Text('${sessions.length} sessions', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                      const SizedBox(width: 8),
+                      // Refresh button to reload live data
+                      GestureDetector(
+                        onTap: () => setState(() {
+                          _recentActivityFuture = _dataService.getRecentActivityFuture(elderlyUserId);
+                        }),
+                        child: Icon(Icons.refresh, size: 18, color: Colors.grey.shade500),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -1030,12 +1035,15 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
         return Row(
           children: [
             Expanded(
-              child: _buildSmallStatCard(
-                title: "Games Played",
-                value: "$totalGames",
-                subtext: "Total sessions",
-                icon: Icons.videogame_asset,
-                color: CaretakerColors.highlightBlue,
+              child: GestureDetector(
+                onTap: () => _showFullGameHistory(context),
+                child: _buildSmallStatCard(
+                  title: "Games Played",
+                  value: "$totalGames",
+                  subtext: "Tap to view all sessions",
+                  icon: Icons.videogame_asset,
+                  color: CaretakerColors.highlightBlue,
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -1051,6 +1059,121 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
           ],
         );
       },
+    );
+  }
+
+  void _showFullGameHistory(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.85,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        builder: (_, scrollCtrl) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'All Game Sessions',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Sorted newest to oldest',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+              ),
+              const Divider(height: 24),
+              Expanded(
+                child: FutureBuilder<List<Map<String, dynamic>>>(
+                  future: _dataService.getRecentActivityFuture(
+                    elderlyUserId,
+                    elderlyUid: elderlyUserUid,
+                    limit: null, // fetch ALL sessions for the full history view
+                  ),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    final allSessions = snapshot.data ?? [];
+                    if (allSessions.isEmpty) {
+                      return Center(
+                        child: Text(
+                          'No game sessions yet',
+                          style: TextStyle(color: Colors.grey.shade500),
+                        ),
+                      );
+                    }
+                    return ListView.separated(
+                      controller: scrollCtrl,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: allSessions.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final session = allSessions[index];
+                        final gameType = session['gameType'] as String? ?? 'Game';
+                        final score = (session['score'] as num?)?.toInt() ?? 0;
+                        final ts = (session['createdAt'] as num?)?.toInt() ?? 0;
+                        final dt = ts > 0
+                            ? DateTime.fromMillisecondsSinceEpoch(ts)
+                            : null;
+                        final dateStr = dt != null
+                            ? '${dt.day}/${dt.month}/${dt.year}  ${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}'
+                            : 'Unknown time';
+
+                        IconData gameIcon;
+                        Color gameColor;
+                        switch (gameType) {
+                          case 'Color Tap': gameIcon = Icons.touch_app; gameColor = Colors.blue; break;
+                          case 'Flip Card': gameIcon = Icons.flip; gameColor = Colors.purple; break;
+                          case 'City Atlas': gameIcon = Icons.map; gameColor = Colors.teal; break;
+                          case 'Event Ordering': gameIcon = Icons.history_edu; gameColor = Colors.orange; break;
+                          case 'Routine Recall': gameIcon = Icons.schedule; gameColor = Colors.green; break;
+                          case 'Monument Recall': gameIcon = Icons.location_city; gameColor = Colors.indigo; break;
+                          default: gameIcon = Icons.sports_esports; gameColor = Colors.grey;
+                        }
+
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: gameColor.withOpacity(0.15),
+                            child: Icon(gameIcon, color: gameColor, size: 20),
+                          ),
+                          title: Text(gameType, style: const TextStyle(fontWeight: FontWeight.w600)),
+                          subtitle: Text(dateStr, style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                          trailing: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: gameColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '$score pts',
+                              style: TextStyle(fontWeight: FontWeight.bold, color: gameColor, fontSize: 13),
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

@@ -23,9 +23,32 @@ class AiCognitiveReportsScreen extends StatefulWidget {
   _AiCognitiveReportsScreenState createState() => _AiCognitiveReportsScreenState();
 }
 
-class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen> {
+class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
+    with SingleTickerProviderStateMixin {
   bool _isGenerating = false;
-  bool _showAllReports = false;
+  late TabController _tabController;
+
+  // Calendar state
+  late int _selectedYear;
+  late int _selectedMonth;
+
+  static const _tabLabels = ['Daily', 'Weekly', 'Monthly', 'Yearly'];
+  static const _tabTypes = ['daily', 'weekly', 'monthly', 'yearly'];
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 4, vsync: this);
+    final now = DateTime.now();
+    _selectedYear = now.year;
+    _selectedMonth = now.month;
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,144 +74,390 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen> {
                   : CaretakerColors.primaryGreen,
             ),
             onPressed: _isGenerating ? null : _generateReportNow,
-            tooltip: "Generate report now",
-          ),
-          IconButton(
-            icon: Icon(
-              Icons.bolt,
-              color: _isGenerating
-                  ? CaretakerColors.primaryGreen.withOpacity(0.5)
-                  : CaretakerColors.primaryGreen,
-            ),
-            onPressed: _isGenerating ? null : _forceGenerateReport,
-            tooltip: "Force generate",
+            tooltip: "Generate report",
           ),
           IconButton(
             icon: const Icon(Icons.info_outline, color: CaretakerColors.primaryGreen),
             onPressed: () => _showInfoDialog(),
           ),
         ],
-      ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('users')
-            .doc(widget.caretakerId)
-            .collection('cognitive_reports')
-            .orderBy('date', descending: true)
-            .limit(100)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (snapshot.hasError) {
-            return Center(child: Text("Error: ${snapshot.error}"));
-          }
-
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return _buildEmptyState(context);
-          }
-
-          final reports = snapshot.data!.docs;
-          final filtered = reports.where((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-            final id = data['elderlyId']?.toString();
-            final name = data['elderlyName']?.toString();
-            final matchId = id == widget.elderlyId;
-            final matchName = widget.elderlyName != null && name == widget.elderlyName;
-            final matchIdToName = widget.elderlyName != null && id == widget.elderlyName;
-            return matchId || matchName || matchIdToName;
-          }).toList();
-
-          if (filtered.isEmpty && !_showAllReports) {
-            final sample = reports.take(3).map((d) {
-              final data = d.data() as Map<String, dynamic>;
-              return "${data['elderlyId'] ?? '-'} / ${data['elderlyName'] ?? '-'}";
-            }).join(', ');
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.description_outlined, size: 80, color: Colors.grey.shade300),
-                  const SizedBox(height: 16),
-                  const Text(
-                    "No AI reports for this elderly yet.",
-                    style: TextStyle(color: Colors.grey, fontSize: 16),
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 40, vertical: 8),
-                    child: Text(
-                      "If you just played a game, tap Generate Report Now.",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey, fontSize: 13),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    "Debug: caretaker=${widget.caretakerId}, elderlyId=${widget.elderlyId}, name=${widget.elderlyName ?? '-'}",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey, fontSize: 11),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    "Debug: total reports=${reports.length}. Sample: $sample",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey, fontSize: 11),
-                  ),
-                  const SizedBox(height: 12),
-                  TextButton(
-                    onPressed: reports.isEmpty
-                        ? null
-                        : () => setState(() => _showAllReports = true),
-                    child: const Text("Show all reports (debug)"),
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => _GlobalReportsDebugScreen(
-                            elderlyId: widget.elderlyId,
-                            elderlyName: widget.elderlyName,
-                          ),
-                        ),
-                      );
-                    },
-                    child: const Text("Open global reports (debug)"),
-                  ),
-                ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(96),
+          child: Column(
+            children: [
+              _buildCalendarHeader(),
+              TabBar(
+                controller: _tabController,
+                labelColor: CaretakerColors.primaryGreen,
+                unselectedLabelColor: Colors.grey,
+                indicatorColor: CaretakerColors.primaryGreen,
+                indicatorWeight: 3,
+                labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                tabs: _tabLabels.map((l) => Tab(text: l)).toList(),
               ),
-            );
-          }
-
-          final list = _showAllReports ? reports : filtered;
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: list.length,
-            itemBuilder: (context, index) {
-              final reportData = list[index].data() as Map<String, dynamic>;
-              final report = CognitiveReport.fromMap(reportData, list[index].id);
-              return _buildReportCard(report);
-            },
-          );
-        },
+            ],
+          ),
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: _tabTypes.map((type) => _buildReportsTab(type)).toList(),
       ),
     );
   }
 
+  // ─── Calendar Header ───────────────────────────────────────────
+
+  Widget _buildCalendarHeader() {
+    final monthName = DateFormat('MMMM yyyy').format(
+      DateTime(_selectedYear, _selectedMonth),
+    );
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.chevron_left, color: CaretakerColors.primaryGreen),
+            onPressed: _previousMonth,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: _showMonthYearPicker,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: CaretakerColors.primaryGreen.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.calendar_month,
+                    size: 18,
+                    color: CaretakerColors.primaryGreen,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    monthName,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: CaretakerColors.primaryGreen,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            icon: const Icon(Icons.chevron_right, color: CaretakerColors.primaryGreen),
+            onPressed: _nextMonth,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _previousMonth() {
+    setState(() {
+      _selectedMonth--;
+      if (_selectedMonth < 1) {
+        _selectedMonth = 12;
+        _selectedYear--;
+      }
+    });
+  }
+
+  void _nextMonth() {
+    setState(() {
+      _selectedMonth++;
+      if (_selectedMonth > 12) {
+        _selectedMonth = 1;
+        _selectedYear++;
+      }
+    });
+  }
+
+  void _showMonthYearPicker() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        int tempYear = _selectedYear;
+        int tempMonth = _selectedMonth;
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text("Select Month & Year"),
+              content: SizedBox(
+                width: 300,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Year selector
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.chevron_left),
+                          onPressed: () => setDialogState(() => tempYear--),
+                        ),
+                        Text(
+                          "$tempYear",
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.chevron_right),
+                          onPressed: () => setDialogState(() => tempYear++),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    // Month grid
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        childAspectRatio: 2.0,
+                        mainAxisSpacing: 8,
+                        crossAxisSpacing: 8,
+                      ),
+                      itemCount: 12,
+                      itemBuilder: (context, index) {
+                        final month = index + 1;
+                        final isSelected = month == tempMonth;
+                        return GestureDetector(
+                          onTap: () => setDialogState(() => tempMonth = month),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? CaretakerColors.primaryGreen
+                                  : Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              DateFormat('MMM').format(DateTime(2000, month)),
+                              style: TextStyle(
+                                color: isSelected ? Colors.white : Colors.black87,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Cancel"),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: CaretakerColors.primaryGreen,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _selectedYear = tempYear;
+                      _selectedMonth = tempMonth;
+                    });
+                    Navigator.pop(context);
+                  },
+                  child: const Text("Select", style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ─── Reports Tab ────────────────────────────────────────────────
+
+  Widget _buildReportsTab(String type) {
+    // For yearly tab, query the whole year; otherwise filter by selected month
+    DateTime rangeStart;
+    DateTime rangeEnd;
+
+    if (type == 'yearly') {
+      rangeStart = DateTime(_selectedYear, 1, 1);
+      rangeEnd = DateTime(_selectedYear + 1, 1, 1);
+    } else {
+      rangeStart = DateTime(_selectedYear, _selectedMonth, 1);
+      rangeEnd = DateTime(_selectedYear, _selectedMonth + 1, 1);
+    }
+
+    return Stack(
+      children: [
+        StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('users')
+              .doc(widget.caretakerId)
+              .collection('cognitive_reports')
+              .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(rangeStart))
+              .where('date', isLessThan: Timestamp.fromDate(rangeEnd))
+              .orderBy('date', descending: true)
+              .snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            if (snapshot.hasError) {
+              return Center(child: Text("Error: ${snapshot.error}"));
+            }
+
+            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+              return _buildEmptyTabState(type);
+            }
+
+            // Filter by elderlyId and type
+            final filtered = snapshot.data!.docs.where((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+              final id = data['elderlyId']?.toString();
+              final name = data['elderlyName']?.toString();
+              final reportType = data['type']?.toString() ?? 'daily';
+              final matchId = id == widget.elderlyId;
+              final matchName = widget.elderlyName != null && name == widget.elderlyName;
+              final matchIdToName = widget.elderlyName != null && id == widget.elderlyName;
+              final matchType = reportType == type;
+              return (matchId || matchName || matchIdToName) && matchType;
+            }).toList();
+
+            if (filtered.isEmpty) {
+              return _buildEmptyTabState(type);
+            }
+
+            return ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: filtered.length,
+              itemBuilder: (context, index) {
+                final reportData = filtered[index].data() as Map<String, dynamic>;
+                final report = CognitiveReport.fromMap(reportData, filtered[index].id);
+                return _buildReportCard(report);
+              },
+            );
+          },
+        ),
+        // Generate button for non-daily tabs
+        if (type != 'daily')
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: FloatingActionButton.extended(
+              heroTag: 'generate_$type',
+              backgroundColor: _isGenerating
+                  ? Colors.grey
+                  : type == 'weekly'
+                      ? CaretakerColors.primaryGreen
+                      : type == 'monthly'
+                          ? Colors.deepPurple
+                          : Colors.indigo,
+              onPressed: _isGenerating
+                  ? null
+                  : () => _generateReportForType(type),
+              icon: _isGenerating
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Icon(Icons.auto_awesome, color: Colors.white),
+              label: Text(
+                'Generate ${type[0].toUpperCase()}${type.substring(1)}',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyTabState(String type) {
+    final typeLabel = type[0].toUpperCase() + type.substring(1);
+    String hint;
+    if (type == 'daily') {
+      hint = 'Play games to generate daily reports, or tap the ✨ button to generate now.';
+    } else if (type == 'weekly') {
+      hint = 'Tap the Generate Weekly button below to create a combined report from this week\'s daily reports.';
+    } else if (type == 'monthly') {
+      hint = 'Tap the Generate Monthly button below to create a summary from this month\'s daily reports.';
+    } else {
+      hint = 'Tap the Generate Yearly button below to create a summary from this year\'s daily reports.';
+    }
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.description_outlined, size: 80, color: Colors.grey.shade300),
+          const SizedBox(height: 16),
+          Text(
+            "No $typeLabel reports for this period.",
+            style: const TextStyle(color: Colors.grey, fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40),
+            child: Text(
+              hint,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.grey, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Report Card ────────────────────────────────────────────────
+
   Widget _buildReportCard(CognitiveReport report) {
     final bool isWeekly = report.type == 'weekly';
-    final bool isHourly = report.type == 'hourly';
-    final bool isTenMinute = report.type == 'ten_minute';
-    final color = isWeekly
-        ? CaretakerColors.primaryGreen
-        : (isHourly ? Colors.deepPurple : Colors.blue);
+    final bool isMonthly = report.type == 'monthly';
+    final bool isYearly = report.type == 'yearly';
+
+    Color color;
+    String label;
+    IconData icon;
+
+    if (isWeekly) {
+      color = CaretakerColors.primaryGreen;
+      label = 'WEEKLY TREND';
+      icon = Icons.assessment;
+    } else if (isMonthly) {
+      color = Colors.deepPurple;
+      label = 'MONTHLY SUMMARY';
+      icon = Icons.calendar_month;
+    } else if (isYearly) {
+      color = Colors.indigo;
+      label = 'YEARLY SUMMARY';
+      icon = Icons.date_range;
+    } else {
+      color = Colors.blue;
+      label = 'DAILY ANALYSIS';
+      icon = Icons.today;
+    }
+
     final dateStr = DateFormat('EEEE, MMM d').format(report.date);
-    final label = isWeekly
-        ? 'WEEKLY TREND'
-        : (isHourly ? 'HOURLY SUMMARY' : (isTenMinute ? '10-MIN REPORT' : 'DAILY ANALYSIS'));
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -229,10 +498,7 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen> {
                     color: color.withOpacity(0.1),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    isWeekly ? Icons.assessment : Icons.today,
-                    color: color,
-                  ),
+                  child: Icon(icon, color: color),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -332,25 +598,114 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen> {
     return Colors.red;
   }
 
-  void _showInfoDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("About AI Reports"),
-        content: const Text(
-          "These reports are generated using advanced AI (Groq/Llama-3) that analyzes "
-          "daily game performance. It looks at reaction times, accuracy, and efficiency "
-          "across multiple cognitive domains to provide actionable insights for caregivers.",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Understood"),
-          ),
-        ],
-      ),
+  // ─── Generate Report ────────────────────────────────────────────
+
+  Future<void> _generateReportNow() async {
+    setState(() {
+      _isGenerating = true;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Generating report... this may take a moment.')),
     );
+
+    try {
+      final service = CognitiveReportService(groqApiKey: AppConfig.groqApiKey);
+      final status = await service.generateDailyCognitiveReportWithStatus(
+        widget.elderlyId,
+        caretakerIdOverride: widget.caretakerId,
+      );
+      if (!mounted) return;
+      String message;
+      switch (status) {
+        case 'generated':
+          message = 'Report generated successfully.';
+          break;
+        case 'updated':
+          message = 'Existing report updated with latest data.';
+          break;
+        case 'no_sessions':
+          message = 'No game sessions in the last 24 hours.';
+          break;
+        case 'no_caretaker':
+          message = 'No caretaker linked for this user.';
+          break;
+        case 'user_not_found':
+          message = 'User not found.';
+          break;
+        default:
+          message = 'Failed to generate report.';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to generate report: $e')),
+      );
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _isGenerating = false;
+      });
+    }
   }
+
+  // ─── Generate Report for Type (Weekly/Monthly/Yearly) ───────────
+
+  Future<void> _generateReportForType(String type) async {
+    setState(() {
+      _isGenerating = true;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Generating ${type} report... this may take a moment.')),
+    );
+
+    try {
+      final service = CognitiveReportService(groqApiKey: AppConfig.groqApiKey);
+
+      if (type == 'weekly') {
+        final now = DateTime.now();
+        DateTime? targetDate;
+        if (_selectedYear != now.year || _selectedMonth != now.month) {
+          // If viewing a different month, generate for a week within that month
+          targetDate = DateTime(_selectedYear, _selectedMonth, 7);
+        }
+        await service.generateWeeklyCognitiveReport(
+          widget.elderlyId,
+          periodEnd: targetDate, // If null, service uses DateTime.now()
+        );
+      } else if (type == 'monthly') {
+        await service.generateMonthlyCognitiveReport(
+          widget.elderlyId,
+          month: _selectedMonth,
+          year: _selectedYear,
+        );
+      } else if (type == 'yearly') {
+        await service.generateYearlyCognitiveReport(
+          widget.elderlyId,
+          year: _selectedYear,
+        );
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${type[0].toUpperCase()}${type.substring(1)} report generated!')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to generate ${type} report: $e')),
+      );
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _isGenerating = false;
+      });
+    }
+  }
+
+  // ─── Delete ─────────────────────────────────────────────────────
 
   Future<void> _confirmDelete(CognitiveReport report) async {
     final result = await showDialog<bool>(
@@ -365,7 +720,7 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text("Delete"),
+            child: const Text("Delete", style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -381,203 +736,28 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen> {
         .delete();
   }
 
-  Future<void> _generateReportNow() async {
-    setState(() {
-      _isGenerating = true;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Generating report...')),
-    );
+  // ─── Info Dialog ────────────────────────────────────────────────
 
-    try {
-      final service = CognitiveReportService(groqApiKey: AppConfig.groqApiKey);
-      final status = await service.generateDailyCognitiveReportWithStatus(
-        widget.elderlyId,
-        caretakerIdOverride: widget.caretakerId,
-      );
-      if (!mounted) return;
-      String message;
-      switch (status) {
-        case 'generated':
-          message = 'Report generated.';
-          break;
-        case 'updated':
-          message = 'Report updated.';
-          break;
-        case 'already_exists':
-          message = 'Report already exists for today.';
-          break;
-        case 'no_sessions':
-          message = 'No sessions in the last 24 hours.';
-          break;
-        case 'no_caretaker':
-          message = 'No caretaker linked for this user.';
-          break;
-        case 'user_not_found':
-          message = 'User not found.';
-          break;
-        default:
-          message = 'Failed to generate report.';
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to generate report: $e')),
-      );
-    } finally {
-      if (!mounted) return;
-      setState(() {
-        _isGenerating = false;
-      });
-    }
-  }
-
-  Future<void> _forceGenerateReport() async {
-    setState(() {
-      _isGenerating = true;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Force generating report...')),
-    );
-
-    try {
-      final service = CognitiveReportService(groqApiKey: AppConfig.groqApiKey);
-      final status = await service.generateDailyCognitiveReportWithStatus(
-        widget.elderlyId,
-        caretakerIdOverride: widget.caretakerId,
-        force: true,
-      );
-      if (!mounted) return;
-      String message;
-      switch (status) {
-        case 'generated':
-          message = 'Report generated.';
-          break;
-        case 'updated':
-          message = 'Report updated.';
-          break;
-        case 'no_sessions':
-          message = 'No sessions in the last 24 hours.';
-          break;
-        case 'no_caretaker':
-          message = 'No caretaker linked for this user.';
-          break;
-        case 'user_not_found':
-          message = 'User not found.';
-          break;
-        default:
-          message = 'Failed to generate report.';
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to generate report: $e')),
-      );
-    } finally {
-      if (!mounted) return;
-      setState(() {
-        _isGenerating = false;
-      });
-    }
-  }
-
-  Widget _buildEmptyState(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.description_outlined, size: 80, color: Colors.grey.shade300),
-          const SizedBox(height: 16),
-          const Text(
-            "No AI reports generated yet.",
-            style: TextStyle(color: Colors.grey, fontSize: 16),
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 40, vertical: 8),
-            child: Text(
-              "No report is generated when no sessions are played. Play a game to generate the next report.",
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey, fontSize: 13),
-            ),
-          ),
-          const SizedBox(height: 8),
+  void _showInfoDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("About AI Reports"),
+        content: const Text(
+          "These reports are generated using advanced AI (Groq/Llama-3) that analyzes "
+          "daily game performance. It looks at reaction times, accuracy, and efficiency "
+          "across multiple cognitive domains to provide actionable insights for caregivers.\n\n"
+          "• Daily reports are generated from game sessions\n"
+          "• Weekly reports combine all daily reports (auto-generated on Sundays)\n"
+          "• Monthly reports summarize the entire month\n"
+          "• Yearly reports provide long-term cognitive health trends",
+        ),
+        actions: [
           TextButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => _GlobalReportsDebugScreen(
-                    elderlyId: widget.elderlyId,
-                    elderlyName: widget.elderlyName,
-                  ),
-                ),
-              );
-            },
-            child: const Text("Open global reports (debug)"),
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Understood"),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _GlobalReportsDebugScreen extends StatelessWidget {
-  final String elderlyId;
-  final String? elderlyName;
-
-  const _GlobalReportsDebugScreen({
-    required this.elderlyId,
-    required this.elderlyName,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Global Reports (Debug)")),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('cognitive_reports')
-            .orderBy('date', descending: true)
-            .limit(100)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(child: Text("No global reports found."));
-          }
-          final reports = snapshot.data!.docs.where((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-            final id = data['elderlyId']?.toString();
-            final name = data['elderlyName']?.toString();
-            final matchId = id == elderlyId;
-            final matchName = elderlyName != null && name == elderlyName;
-            final matchIdToName = elderlyName != null && id == elderlyName;
-            return matchId || matchName || matchIdToName;
-          }).toList();
-
-          if (reports.isEmpty) {
-            return const Center(child: Text("No matching reports in global collection."));
-          }
-
-          return ListView.builder(
-            itemCount: reports.length,
-            itemBuilder: (context, index) {
-              final data = reports[index].data() as Map<String, dynamic>;
-              return ListTile(
-                title: Text("${data['type'] ?? 'daily'} • ${data['elderlyName'] ?? data['elderlyId']}"),
-                subtitle: Text("caretaker=${data['caretakerId'] ?? '-'}"),
-              );
-            },
-          );
-        },
       ),
     );
   }

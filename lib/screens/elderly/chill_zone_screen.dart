@@ -2,11 +2,13 @@
 import 'package:flutter/material.dart';
 import '../../games/chill_zone/color_tap/color_tap_game.dart';
 import '../../games/chill_zone/flip_card_match/flip_card_game.dart';
+import '../../services/user_id_helper.dart';
 
 class ChillZoneScreen extends StatelessWidget {
-  final String userId;
+  final String userId; // kept for compatibility but games now use Firebase UID
 
   const ChillZoneScreen({Key? key, required this.userId}) : super(key: key);
+
 
   @override
   Widget build(BuildContext context) {
@@ -166,14 +168,16 @@ class ChillZoneScreen extends StatelessWidget {
     IconData icon,
   ) {
     return ElevatedButton(
-      onPressed: () {
+      onPressed: () async {
         Navigator.pop(context); // Close dialog
+        final uid = await UserIdHelper.getCurrentUserId() ?? userId;
+        if (!context.mounted) return;
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => ColorTapGame(
               difficultyLevel: difficultyLevel,
-              userId: userId,
+              userId: uid,
             ),
           ),
         );
@@ -224,14 +228,16 @@ class ChillZoneScreen extends StatelessWidget {
     IconData icon,
   ) {
     return ElevatedButton(
-      onPressed: () {
+      onPressed: () async {
         Navigator.pop(context); // Close dialog
+        final uid = await UserIdHelper.getCurrentUserId() ?? userId;
+        if (!context.mounted) return;
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => FlipCardGame(
               difficultyLevel: difficultyLevel,
-              userId: userId,
+              userId: uid,
             ),
           ),
         );

@@ -670,7 +670,7 @@ class CaretakerDataService {
                 'icon': 'sports_esports',
                 'color': 'teal',
                 'score': (data['score'] as num?)?.toInt() ?? 0,
-                'createdAt': _parseTimestamp(data['timestamp']), // Use timestamp or createdAt
+                'createdAt': _parseTimestamp(data['timestamp'] ?? data['createdAt']),
                 'metrics': data['metrics'] ?? {},
                 'cognitive_contributions': data['cognitive_contributions'] ?? {},
               };
@@ -712,112 +712,129 @@ class CaretakerDataService {
   }
 
   /// Future-based version of getGameSessionHistory — fetches once, no stream complexity.
-  Future<List<Map<String, dynamic>>> getRecentActivityFuture(String userId) async {
+  /// [userId] = name-based ID (used by ColorTap/FlipCard)
+  /// [elderlyUid] = Firebase UID (used by City Atlas, Monument Recall, etc.)
+  /// [limit] = max results to return (null = all)
+  Future<List<Map<String, dynamic>>> getRecentActivityFuture(String userId, {String? elderlyUid, int? limit = 20}) async {
     final List<Map<String, dynamic>> all = [];
+    // Build list of unique IDs to query
+    final ids = <String>{userId};
+    if (elderlyUid != null && elderlyUid.isNotEmpty && elderlyUid != userId) ids.add(elderlyUid);
 
-    try {
-      final ctSnap = await _firestore
-          .collection('colorTapGameSessions')
-          .where('userId', isEqualTo: userId)
-          .limit(20)
-          .get();
-      for (final d in ctSnap.docs) {
-        final data = d.data();
-        all.add({
-          'gameType': 'Color Tap',
-          'icon': 'touch_app',
-          'color': 'blue',
-          'score': data['score'] ?? 0,
-          'createdAt': _parseTimestamp(data['createdAt']),
-          'correct_taps': data['correct_taps'] ?? 0,
-          'false_taps': data['false_taps'] ?? 0,
-          'average_reaction_time': (data['average_reaction_time'] as num?)?.toDouble() ?? 0.0,
-        });
-      }
-    } catch (_) {}
-
-    try {
-      final fcSnap = await _firestore
-          .collection('flipCardGameSessions')
-          .where('userId', isEqualTo: userId)
-          .limit(20)
-          .get();
-      for (final d in fcSnap.docs) {
-        final data = d.data();
-        all.add({
-          'gameType': 'Flip Card',
-          'icon': 'flip',
-          'color': 'purple',
-          'score': data['score'] ?? 0,
-          'createdAt': _parseTimestamp(data['createdAt']),
-          'efficiency': (data['efficiency'] as num?)?.toDouble() ?? 0.0,
-        });
-      }
-    } catch (_) {}
-
-    try {
-      final ogSnap = await _firestore
-          .collection('game_sessions')
-          .where('userId', isEqualTo: userId)
-          .limit(20)
-          .get();
-      for (final d in ogSnap.docs) {
-        final data = d.data();
-        final gameType = data['gameType'] as String? ?? 'Unknown';
-        String label;
-        switch (gameType) {
-          case 'city_atlas': label = 'City Atlas'; break;
-          case 'event_ordering': label = 'Event Ordering'; break;
-          case 'daily_routine_recall': label = 'Routine Recall'; break;
-          case 'monument_recall': label = 'Monument Recall'; break;
-          default: label = gameType;
+    for (final id in ids) {
+      try {
+        var ctQuery = _firestore
+            .collection('colorTapGameSessions')
+            .where('userId', isEqualTo: id);
+        final ctSnap = await (limit != null ? ctQuery.limit(limit) : ctQuery).get();
+        for (final d in ctSnap.docs) {
+          final data = d.data();
+          all.add({
+            'gameType': 'Color Tap',
+            'icon': 'touch_app',
+            'color': 'blue',
+            'score': data['score'] ?? 0,
+            'createdAt': _parseTimestamp(data['createdAt']),
+            'correct_taps': data['correct_taps'] ?? 0,
+            'false_taps': data['false_taps'] ?? 0,
+            'average_reaction_time': (data['average_reaction_time'] as num?)?.toDouble() ?? 0.0,
+          });
         }
-        all.add({
-          'gameType': label,
-          'icon': 'sports_esports',
-          'color': 'teal',
-          'score': (data['score'] as num?)?.toInt() ?? 0,
-          'createdAt': _parseTimestamp(data['timestamp']),
-          'metrics': data['metrics'] ?? {},
-          'cognitive_contributions': data['cognitive_contributions'] ?? {},
-        });
-      }
-    } catch (_) {}
+      } catch (_) {}
 
+      try {
+        var fcQuery = _firestore
+            .collection('flipCardGameSessions')
+            .where('userId', isEqualTo: id);
+        final fcSnap = await (limit != null ? fcQuery.limit(limit) : fcQuery).get();
+        for (final d in fcSnap.docs) {
+          final data = d.data();
+          all.add({
+            'gameType': 'Flip Card',
+            'icon': 'flip',
+            'color': 'purple',
+            'score': data['score'] ?? 0,
+            'createdAt': _parseTimestamp(data['createdAt']),
+            'efficiency': (data['efficiency'] as num?)?.toDouble() ?? 0.0,
+          });
+        }
+      } catch (_) {}
+
+      try {
+        var ogQuery = _firestore
+            .collection('game_sessions')
+            .where('userId', isEqualTo: id);
+        final ogSnap = await (limit != null ? ogQuery.limit(limit) : ogQuery).get();
+        for (final d in ogSnap.docs) {
+          final data = d.data();
+          final gameType = data['gameType'] as String? ?? 'Unknown';
+          String label;
+          switch (gameType) {
+            case 'city_atlas': label = 'City Atlas'; break;
+            case 'event_ordering': label = 'Event Ordering'; break;
+            case 'daily_routine_recall': label = 'Routine Recall'; break;
+            case 'monument_recall': label = 'Monument Recall'; break;
+            default: label = gameType;
+          }
+          all.add({
+            'gameType': label,
+            'icon': 'sports_esports',
+            'color': 'teal',
+            'score': (data['score'] as num?)?.toInt() ?? 0,
+            'createdAt': _parseTimestamp(data['timestamp'] ?? data['createdAt']),
+            'metrics': data['metrics'] ?? {},
+            'cognitive_contributions': data['cognitive_contributions'] ?? {},
+          });
+        }
+      } catch (_) {}
+    }
+
+    // Sort newest first, deduplicate by (gameType + createdAt)
     all.sort((a, b) => (b['createdAt'] as int).compareTo(a['createdAt'] as int));
-    return all.take(10).toList();
+    final seen = <String>{};
+    final deduped = <Map<String, dynamic>>[];
+    for (final s in all) {
+      final key = '${s['gameType']}_${s['createdAt']}';
+      if (seen.add(key)) deduped.add(s);
+    }
+    return limit != null ? deduped.take(limit).toList() : deduped;
   }
 
   /// Future-based version of getOverallStatistics — fetches once.
-  Future<Map<String, dynamic>> getOverallStatisticsFuture(String userId) async {
+  Future<Map<String, dynamic>> getOverallStatisticsFuture(String userId, {String? elderlyUid}) async {
+    final ids = <String>{userId};
+    if (elderlyUid != null && elderlyUid.isNotEmpty && elderlyUid != userId) ids.add(elderlyUid);
+
     int ct = 0, fc = 0, og = 0;
 
-    try {
-      final ctSnap = await _firestore
-          .collection('colorTapGameSessions')
-          .where('userId', isEqualTo: userId)
-          .get();
-      ct = ctSnap.docs.length;
-    } catch (_) {}
+    for (final id in ids) {
+      try {
+        final ctSnap = await _firestore
+            .collection('colorTapGameSessions')
+            .where('userId', isEqualTo: id)
+            .get();
+        ct += ctSnap.docs.length;
+      } catch (_) {}
 
-    try {
-      final fcSnap = await _firestore
-          .collection('flipCardGameSessions')
-          .where('userId', isEqualTo: userId)
-          .get();
-      fc = fcSnap.docs.length;
-    } catch (_) {}
+      try {
+        final fcSnap = await _firestore
+            .collection('flipCardGameSessions')
+            .where('userId', isEqualTo: id)
+            .get();
+        fc += fcSnap.docs.length;
+      } catch (_) {}
 
-    try {
-      final ogSnap = await _firestore
-          .collection('game_sessions')
-          .where('userId', isEqualTo: userId)
-          .get();
-      og = ogSnap.docs.where((d) {
-        final type = d.data()['gameType'] as String? ?? '';
-        return !['Color Tap', 'Color Tap (Reaction)', 'Flip Card', 'Flip Card Match'].contains(type);
-      }).length;
-    } catch (_) {}
+      try {
+        final ogSnap = await _firestore
+            .collection('game_sessions')
+            .where('userId', isEqualTo: id)
+            .get();
+        og += ogSnap.docs.where((d) {
+          final type = d.data()['gameType'] as String? ?? '';
+          return !['Color Tap', 'Color Tap (Reaction)', 'Flip Card', 'Flip Card Match'].contains(type);
+        }).length;
+      } catch (_) {}
+    }
 
     return {
       'totalGames': ct + fc + og,
