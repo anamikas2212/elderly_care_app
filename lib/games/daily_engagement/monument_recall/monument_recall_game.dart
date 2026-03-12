@@ -482,7 +482,7 @@ class _MonumentRecallGameState extends State<MonumentRecallGame> {
       // Set A
       [
         MonumentQuestion("Identify this monument", ["Taj Mahal", "Red Fort", "Qutub Minar"], "Taj Mahal", "Monuments", true,
-          imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Taj_Mahal%2C_Agra%2C_India_edit3.jpg?width=400"),
+            imageUrl: "https://images.unsplash.com/photo-1564507592227-0b0efa862ced?w=400&q=80"),
         MonumentQuestion("Where is the Gateway of India?", ["Mumbai", "Delhi", "Kolkata"], "Mumbai", "Monuments", false),
         MonumentQuestion("Who built the Red Fort?", ["Shah Jahan", "Akbar", "Aurangzeb"], "Shah Jahan", "Forts", false),
         MonumentQuestion("Hawa Mahal is in which city?", ["Jaipur", "Jodhpur", "Udaipur"], "Jaipur", "Palaces", false),
@@ -491,7 +491,7 @@ class _MonumentRecallGameState extends State<MonumentRecallGame> {
       // Set B
       [
         MonumentQuestion("Identify this monument", ["Qutub Minar", "India Gate", "Victoria Memorial"], "Qutub Minar", "Monuments", true,
-          imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Qutb_Minar_in_Delhi_03-2016.jpg?width=400"),
+            imageUrl: "https://images.unsplash.com/photo-1587474260584-136574528ed5?w=400&q=80"),
         MonumentQuestion("Victoria Memorial is in?", ["Kolkata", "Mumbai", "Chennai"], "Kolkata", "Monuments", false),
         MonumentQuestion("Mysore Palace is in which state?", ["Karnataka", "Tamil Nadu", "Kerala"], "Karnataka", "Palaces", false),
         MonumentQuestion("Where is Konark Sun Temple?", ["Odisha", "Rajasthan", "Madhya Pradesh"], "Odisha", "Temples", false),
@@ -524,16 +524,16 @@ class _MonumentRecallGameState extends State<MonumentRecallGame> {
       [
         MonumentQuestion("Where is the Eiffel Tower?", ["Paris", "London", "New York"], "Paris", "Monuments", true,
           // FIXED: using a proper thumbnail URL with contain fit
-          imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Tour_Eiffel_Wikimedia_Commons.jpg?width=400",
+          imageUrl: "https://images.unsplash.com/photo-1511739001486-6bfe10ce785f?w=400&q=80",
           hint: "This iconic iron lattice tower is a symbol of France"),
         MonumentQuestion("The Great Wall is in which country?", ["China", "Japan", "Korea"], "China", "Monuments", false),
         MonumentQuestion("Machu Picchu is in?", ["Peru", "Brazil", "Mexico"], "Peru", "Historical", false),
-        MonumentQuestion("Colosseum is in which city?", ["Rome", "Athens", "Istanbul"], "Rome", "Monuments", false),
+        MonumentQuestion("Colosseum is in which citysensing", ["Rome", "Athens", "Istanbul"], "Rome", "Monuments", false),
       ],
       // Set B
       [
         MonumentQuestion("Where is the Statue of Liberty?", ["New York", "Washington D.C.", "Los Angeles"], "New York", "Monuments", true,
-          imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Statue_of_Liberty_7.jpg?width=400"),
+            imageUrl: "https://images.unsplash.com/photo-1605130284535-11dd9eedc58a?w=400&q=80"),
         MonumentQuestion("Pyramids of Giza are in?", ["Egypt", "Iraq", "Sudan"], "Egypt", "Historical", false),
         MonumentQuestion("Big Ben is in which city?", ["London", "Paris", "Dublin"], "London", "Monuments", false),
         MonumentQuestion("Where is the Leaning Tower of Pisa?", ["Italy", "Spain", "Greece"], "Italy", "Monuments", false),
