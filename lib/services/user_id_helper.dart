@@ -11,35 +11,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 class UserIdHelper {
   /// Returns the userId to use for Firestore operations, or null if none found.
   static Future<String?> getCurrentUserId() async {
-    // 1. Prefer the live Firebase Auth user
-    final authUser = FirebaseAuth.instance.currentUser;
-    if (authUser != null) return authUser.uid;
-
-    // 2. Fall back to the UID saved in SharedPreferences during login
+    // 1. Prefer the name-based ID saved in SharedPreferences
     try {
       final prefs = await SharedPreferences.getInstance();
-      final uid = prefs.getString('elderly_user_uid') ??
-          prefs.getString('elderly_user_id');
-      if (uid != null && uid.isNotEmpty) {
-        // Attempt to re-sign-in anonymously so future Firebase calls work
-        try {
-          final cred = await FirebaseAuth.instance.signInAnonymously();
-          // Note: this creates a NEW anonymous user if the old one is gone.
-          // For production, use persistent auth. For now, save the new UID.
-          if (cred.user != null) {
-            final newUid = cred.user!.uid;
-            // If the new UID differs, update prefs so the dashboard stays in sync
-            if (newUid != uid) {
-              final p = await SharedPreferences.getInstance();
-              await p.setString('elderly_user_uid', newUid);
-              await p.setString('elderly_user_id', newUid);
-              return newUid;
-            }
-          }
-        } catch (_) {}
-        return uid;
-      }
+      final name = prefs.getString('elderly_user_name');
+      if (name != null && name.isNotEmpty) return name;
+      final uid = prefs.getString('elderly_user_id') ??
+          prefs.getString('elderly_user_uid');
+      if (uid != null && uid.isNotEmpty) return uid;
     } catch (_) {}
+
+    // 2. Fall back to the live Firebase Auth user (if any)
+    final authUser = FirebaseAuth.instance.currentUser;
+    if (authUser != null) return authUser.uid;
 
     return null;
   }

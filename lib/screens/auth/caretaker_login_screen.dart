@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/auth_service.dart';
+import '../../services/caretaker_notification_service.dart';
 import '../caretaker/patient_selection_screen.dart';
 import 'caretaker_registration_screen.dart';
 
@@ -14,6 +16,7 @@ class _CaretakerLoginScreenState extends State<CaretakerLoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _authService = AuthService();
+  final _notificationService = CaretakerNotificationService();
   bool _isLoading = false;
   bool _obscurePassword = true;
 
@@ -28,6 +31,11 @@ class _CaretakerLoginScreenState extends State<CaretakerLoginScreen> {
       final isLoggedIn = await _authService.isCaretakerLoggedIn();
       print('🔍 Auto-login check: $isLoggedIn');
       if (isLoggedIn && mounted) {
+        final prefs = await SharedPreferences.getInstance();
+        final caretakerId = prefs.getString('caretaker_uid');
+        if (caretakerId != null && caretakerId.isNotEmpty) {
+          await _notificationService.initializeForCaretaker(caretakerId);
+        }
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const PatientSelectionScreen()),
@@ -50,7 +58,9 @@ class _CaretakerLoginScreenState extends State<CaretakerLoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await _authService.loginCaretaker(email: email, password: password);
+      final caretakerId =
+          await _authService.loginCaretaker(email: email, password: password);
+      await _notificationService.initializeForCaretaker(caretakerId);
       if (!mounted) return;
       Navigator.pushReplacement(
         context,

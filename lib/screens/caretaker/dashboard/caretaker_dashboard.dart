@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+﻿//caretaker_dashboard.dart
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../services/caretaker_id_helper.dart';
@@ -22,6 +23,9 @@ import '../analytics/event_ordering_analytics_screen.dart';
 import '../analytics/daily_routine_analytics_screen.dart';
 import '../analytics/monument_recall_analytics_screen.dart';
 
+import '../../../services/sos_service.dart';
+import '../../../services/safety_alert_listener_service.dart';
+
 class CaretakerDashboard extends StatefulWidget {
   final String? elderlyUserId;
   const CaretakerDashboard({Key? key, this.elderlyUserId}) : super(key: key);
@@ -32,6 +36,10 @@ class CaretakerDashboard extends StatefulWidget {
 
 class _CaretakerDashboardState extends State<CaretakerDashboard> {
   final CaretakerDataService _dataService = CaretakerDataService();
+
+  final SafetyAlertListenerService _alertListenerService =
+      SafetyAlertListenerService();
+
   final CaretakerNotificationService _notificationService =
       CaretakerNotificationService();
 
@@ -45,7 +53,13 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
   bool _isLoading = true;
   String? _errorMessage;
 
-  // Cached futures so they don't reset on every rebuild
+  final SOSService _sosService = SOSService();
+  bool _hasActiveSOS = false;
+  bool _isHome = false;
+  bool _hasHomeLocation = false;
+  DateTime? _lastHomeStatusChangedAt;
+
+  // Cached cognitive health future so it doesn't reset on every rebuild
   Future<Map<String, dynamic>>? _cognitiveHealthFuture;
   Stream<List<Map<String, dynamic>>>? _recentActivityStream;
   Future<List<Map<String, dynamic>>>? _recentActivityFuture;
@@ -55,6 +69,16 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
   void initState() {
     super.initState();
     _loadElderlyUserId();
+    //Live Location
+    //_listenToElderlyLocation();
+    // Listen to SOS alerts
+    //_listenToSOSAlerts();
+  }
+
+  @override
+  void dispose() {
+    _alertListenerService.stop();
+    super.dispose();
   }
 
   Future<void> _loadElderlyUserId() async {
@@ -156,6 +180,25 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
         _overallStatsFuture = _dataService.getOverallStatisticsFuture(dataId, elderlyUid: storedUid ?? uid ?? '');
         _isLoading = false;
       });
+
+      setState(() {
+        elderlyUserId = dataId;
+        elderlyUserName = name;
+        elderlyUserAge = loadedAge;
+        elderlyUserGender = loadedGender;
+        _cognitiveHealthFuture = _dataService.getCognitiveHealthFuture(dataId);
+        _recentActivityFuture = _dataService.getRecentActivityFuture(dataId);
+        _overallStatsFuture = _dataService.getOverallStatisticsFuture(dataId);
+        _isLoading = false;
+      });
+
+      _listenToElderlyLocation();
+      _listenToSafeZoneConfig();
+      _listenToSOSAlerts();
+      _checkSOSStatus();
+      await _alertListenerService.start(elderlyUserId);
+      //_checkLocationStatus();
+
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -163,9 +206,85 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
         _isLoading = false;
       });
     }
+    // Check SOS status
+    //_checkSOSStatus();
+    
+    // Check location status
+    //_checkLocationStatus();
+  }
+
+  void _listenToElderlyLocation() {
+    if (elderlyUserId.isEmpty) return;
+
+    FirebaseFirestore.instance
+        .collection('users')
+        .doc(elderlyUserId)   // using name as ID
+        .snapshots()
+        .listen((snapshot) {
+
+      if (!snapshot.exists) return;
+
+      final data = snapshot.data() as Map<String, dynamic>;
+
+      if (!mounted) return;
+
+      final newIsHome = data['isHome'] ?? false;
+      final lastUpdate = (data['lastLocationUpdate'] as Timestamp?)?.toDate();
+      setState(() {
+        if (_lastHomeStatusChangedAt == null && lastUpdate != null) {
+          _lastHomeStatusChangedAt = lastUpdate;
+        }
+        if (newIsHome != _isHome) {
+          _lastHomeStatusChangedAt = lastUpdate ?? DateTime.now();
+        }
+        _isHome = newIsHome;
+      });
+    });
+  }
+
+  void _listenToSafeZoneConfig() {
+    if (elderlyUserId.isEmpty) return;
+
+    FirebaseFirestore.instance
+        .collection('safe_zones')
+        .doc(elderlyUserId)
+        .snapshots()
+        .listen((snapshot) {
+      if (!mounted) return;
+      bool hasHome = false;
+      if (snapshot.exists) {
+        final data = snapshot.data() as Map<String, dynamic>;
+        hasHome =
+            data['homeLatitude'] != null && data['homeLongitude'] != null;
+      }
+      setState(() {
+        _hasHomeLocation = hasHome;
+      });
+    });
+  }
+
+  void _listenToSOSAlerts() {
+    if (elderlyUserId.isEmpty) return;
+    
+    _sosService.getActiveSOSAlerts(elderlyUserId).listen((snapshot) {
+      if (!mounted) return;
+      setState(() {
+        _hasActiveSOS = snapshot.docs.isNotEmpty;
+      });
+    });
   }
 
 
+  Future<void> _checkSOSStatus() async {
+    if (elderlyUserId.isEmpty) return;
+    
+    final hasActiveSOS = await _sosService.hasActiveSOS(elderlyUserId);
+    
+    if (!mounted) return;
+    setState(() {
+      _hasActiveSOS = hasActiveSOS;
+    });
+  }
 
   // ── Build ─────────────────────────────────────────────────────────────────
 
@@ -301,104 +420,109 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
   // ── Patient Header Card (uses getUserProfile stream from File 2) ──────────
 
   Widget _buildPatientHeaderCard(BuildContext context) {
-    return StreamBuilder<Map<String, dynamic>>(
-      stream: _dataService.getUserProfile(elderlyUserId),
-      builder: (context, snapshot) {
-        String name = elderlyUserName.isNotEmpty ? elderlyUserName : elderlyUserId;
-        String age = elderlyUserAge;
-        String gender = elderlyUserGender;
-        String location = "Home";
-        String lastActive = "";
-        String status = "Active";
+    final name = elderlyUserName.isNotEmpty ? elderlyUserName : elderlyUserId;
+    final age = elderlyUserAge;
+    final gender = elderlyUserGender;
+    
+    // UPDATED: Dynamic gradient based on SOS
+    final gradientColors = _hasActiveSOS
+        ? [Colors.red.shade400, Colors.red.shade600]
+        : [CaretakerColors.primaryGreen, Color(0xFF2DBE91)];
 
-        if (snapshot.hasData && snapshot.data != null) {
-          final profile = snapshot.data!;
-          name = profile['name'] as String? ?? name;
-          age = profile['age']?.toString() ?? age;
-          gender = profile['gender'] as String? ?? gender;
-          location = profile['location'] as String? ?? location;
-          lastActive = profile['lastActive'] as String? ?? "";
-          status = profile['status'] as String? ?? status;
-        }
-
-        final statusColor = _getStatusColor(status);
-
-        return Container(
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [CaretakerColors.primaryGreen, Color(0xFF2DBE91)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: CaretakerLayout.cardRadius,
-          ),
-          padding: const EdgeInsets.all(20),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      "Age $age • $gender",
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.white.withOpacity(0.9),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Icon(Icons.location_on, size: 14, color: Colors.white),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            lastActive.isNotEmpty
-                                ? "$location • $lastActive"
-                                : location,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.white.withOpacity(0.9),
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: gradientColors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: CaretakerLayout.cardRadius,
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                const SizedBox(height: 4),
+                Text('Age $age • $gender', style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.9))),
+                const SizedBox(height: 8),
+                
+                // NEW: Show SOS icon if active
+                if (_hasActiveSOS) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.warning, size: 16, color: Colors.white),
+                      const SizedBox(width: 4),
+                      Text(
+                        'EMERGENCY ALERT ACTIVE',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
                         ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.2),
+                  color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: Colors.white, width: 1.5),
                 ),
                 child: Text(
-                  status,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
+                  _hasHomeLocation
+                      ? (_isHome ? 'Home' : 'Away from Home')
+                      : 'Set Home Location',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                  textAlign: TextAlign.center,
                 ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                _hasHomeLocation && _lastHomeStatusChangedAt != null
+                    ? _formatStatusTimestamp(_lastHomeStatusChangedAt!)
+                    : '',
+                style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 10),
+                textAlign: TextAlign.center,
               ),
             ],
           ),
-        );
-      },
+        ],
+      ),
     );
+  }
+
+  String _formatStatusTimestamp(DateTime dt) {
+    final hour = dt.hour.toString().padLeft(2, '0');
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final second = dt.second.toString().padLeft(2, '0');
+
+    final day = dt.day;
+    String suffix = 'th';
+    if (day % 10 == 1 && day % 100 != 11) suffix = 'st';
+    if (day % 10 == 2 && day % 100 != 12) suffix = 'nd';
+    if (day % 10 == 3 && day % 100 != 13) suffix = 'rd';
+
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    final month = months[dt.month - 1];
+
+    return '$hour:$minute:$second, $day$suffix $month ${dt.year}';
   }
 
   Color _getStatusColor(String status) {
@@ -1238,7 +1362,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
           Icons.security,
           Colors.red.shade100,
           Colors.red,
-          const SafetyMonitorScreen(),
+          SafetyMonitorScreen(elderlyUserId: elderlyUserId),
         ),
         _buildNavCard(
           context,

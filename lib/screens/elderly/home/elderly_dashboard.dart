@@ -1,3 +1,5 @@
+// lib/screens/elderly/home/elderly_dashboard.dart
+
 /*import 'package:elderly_care_app/screens/elderly/medication/AddMedicationScreen.dart';
 import 'package:flutter/material.dart';
 import '../../auth/login_screen.dart';
@@ -2243,22 +2245,22 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
 }
    */*/
 
-
-   import 'package:elderly_care_app/screens/elderly/medication/AddMedicationScreen.dart';
+import 'package:elderly_care_app/screens/elderly/medication/AddMedicationScreen.dart';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../auth/login_screen.dart';
 import '../medication/medication_list_screen.dart';
 import '../location_screen.dart';
 import '../games_screen.dart';
 import '../buddy_chat_screen.dart';
 import '../zone_selection_screen.dart';
+import '../../../services/sos_service.dart';
+import '../../../services/user_id_helper.dart';
+import 'dart:async'; // For Timer
 import '../visionguardian/vision_guardian_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-final _firestore = FirebaseFirestore.instance;
-final _auth = FirebaseAuth.instance;
+late String userId;
 
 class ElderlyDashboard extends StatefulWidget {
   final String? currentUserId;
@@ -2269,21 +2271,27 @@ class ElderlyDashboard extends StatefulWidget {
 }
 
 class _ElderlyDashboardState extends State<ElderlyDashboard> {
+  final SOSService _sosService = SOSService();
   double zoomLevel = 1.0;
   int currentTab = 0;
   bool showDemo = true;
   int demoStep = 0;
+  bool _triggeringSOS = false;
   String? _careCode;
+
+  Timer? _autoConfirmTimer;
+  Timer? _autoDismissTimer;
 
   @override
   void initState() {
     super.initState();
     _loadCareCode();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (showDemo) _showDemoOverlay();
+      if (showDemo) {
+        _showDemoOverlay();
+      }
     });
   }
-
   Future<void> _loadCareCode() async {
     final prefs = await SharedPreferences.getInstance();
     final code = prefs.getString('care_code');
@@ -2293,22 +2301,239 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
     }
   }
 
-  // ── Active Alert Count (from File 1) ──────────────────────────────────────
-
-  Future<int> _getActiveAlertCount() async {
-    try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('alerts')
-          .where('userId', isEqualTo: widget.currentUserId ?? '')
-          .where('isActive', isEqualTo: true)
-          .get();
-      return snapshot.docs.length;
-    } catch (e) {
-      return 0;
-    }
+  @override
+  void dispose() {
+    // ✅ Cancel any active timers
+    _autoConfirmTimer?.cancel();
+    _autoDismissTimer?.cancel();
+    super.dispose();
   }
 
-  // ── Demo Overlay (6 steps from File 1, with File 2's cleaner structure) ───
+  /// Trigger SOS Alert with Timer Features
+  Future<void> _triggerSOSAlert() async {
+    if (_triggeringSOS) return;
+
+    setState(() => _triggeringSOS = true);
+
+    try {
+      // Get current user ID
+      final elderlyUserId =
+          widget.currentUserId ?? await UserIdHelper.getCurrentUserId();
+
+      if (elderlyUserId == null || elderlyUserId.isEmpty) {
+        throw Exception('User ID not found');
+      }
+
+      // ✅ ADDED: Get location status BEFORE showing dialog
+      final locationStatus = await _sosService.getLocationStatus(elderlyUserId);
+      final isHome = locationStatus['isHome'] as bool? ?? false;
+      final position = locationStatus['position'] as Position?;
+
+      if (!mounted) return;
+
+      // ✅ ADDED: Auto-confirm after 6 seconds
+      bool? confirmed;
+
+      // Start auto-confirm timer
+      _autoConfirmTimer = Timer(const Duration(seconds: 6), () {
+        if (mounted && Navigator.canPop(context)) {
+          Navigator.pop(context, true); // Auto-confirm as YES
+        }
+      });
+
+      // Show confirmation dialog with auto-confirm message
+      confirmed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(25),
+            ),
+            child: Container(
+              padding: const EdgeInsets.all(30),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.warning_amber_rounded,
+                      size: 100, color: Colors.red),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Emergency SOS',
+                    style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 15),
+                  const Text(
+                    'This will alert your caretakers immediately. Are you in an emergency?',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 20, color: Colors.black54),
+                  ),
+                  const SizedBox(height: 10),
+                  // ✅ ADDED: Auto-confirm countdown message
+                  Text(
+                    'Auto-confirming in 6 seconds...',
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 30),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.grey.shade300,
+                            foregroundColor: Colors.black87,
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                          ),
+                          child: const Text(
+                            'No',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                          ),
+                          child: const Text(
+                            'Yes, Send SOS',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+
+      // ✅ ADDED: Cancel auto-confirm timer if user clicked
+      _autoConfirmTimer?.cancel();
+
+      // ✅ ADDED: If null (dialog dismissed by timer), treat as confirmed
+      if (confirmed == null) {
+        confirmed = true;
+      }
+
+      // ✅ ADDED: Handle false alarm
+      if (confirmed == false) {
+        // User clicked "No" - log false alarm
+        await _sosService.triggerFalseAlarm(
+          elderlyUserId: elderlyUserId,
+          elderlyUserName: elderlyUserId,
+        );
+
+        if (!mounted) return;
+
+        // Show false alarm message briefly
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('False alarm logged'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+
+        setState(() => _triggeringSOS = false);
+        return;
+      }
+
+      // Get current location (fallback if not already loaded)
+      Position? currentLocation = position;
+      if (currentLocation == null) {
+        try {
+          currentLocation = await Geolocator.getCurrentPosition(
+            desiredAccuracy: LocationAccuracy.high,
+          );
+        } catch (e) {
+          print('Could not get location: $e');
+        }
+      }
+
+      // ✅ MODIFIED: Trigger SOS with location status
+      await _sosService.triggerSOS(
+        elderlyUserId: elderlyUserId,
+        elderlyUserName: widget.currentUserId ?? 'Elderly User',
+        currentLocation: currentLocation,
+        isInsideSafeZone: isHome, // ✅ Pass safe zone status
+      );
+
+      if (!mounted) return;
+
+      // ✅ MODIFIED: Show success dialog without OK button
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(25),
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(30),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.check_circle, size: 100, color: Colors.green),
+                const SizedBox(height: 20),
+                const Text(
+                  'SOS Alert Sent!',
+                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 15),
+                const Text(
+                  'Your caretakers have been notified. Help is on the way.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 20, color: Colors.black54),
+                ),
+                const SizedBox(height: 15),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      // ✅ ADDED: Auto-dismiss success dialog after 5 seconds
+      _autoDismissTimer = Timer(const Duration(seconds: 5), () {
+        if (mounted && Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to send SOS: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _triggeringSOS = false);
+      }
+    }
+  }
 
   void _showDemoOverlay() {
     showDialog(
@@ -2319,7 +2544,6 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
           builder: (context, setDialogState) {
             return Stack(
               children: [
-                // Semi-transparent background
                 Positioned.fill(
                   child: GestureDetector(
                     onTap: () {},
@@ -2368,12 +2592,9 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                       ],
                     ),
                   ),
-
-                // Demo content
                 SafeArea(
                   child: Column(
                     children: [
-                      // Step counter + Skip button
                       Padding(
                         padding: const EdgeInsets.all(20),
                         child: Row(
@@ -2429,10 +2650,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                           ],
                         ),
                       ),
-
                       const Spacer(),
-
-                      // Demo instruction card
                       Container(
                         margin: const EdgeInsets.symmetric(horizontal: 20),
                         padding: const EdgeInsets.all(30),
@@ -2485,10 +2703,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                           ],
                         ),
                       ),
-
                       const SizedBox(height: 25),
-
-                      // Navigation buttons
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
                         child: Row(
@@ -2496,8 +2711,9 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                             if (demoStep > 0)
                               Expanded(
                                 child: ElevatedButton.icon(
-                                  onPressed: () =>
-                                      setDialogState(() => demoStep--),
+                                  onPressed: () {
+                                    setDialogState(() => demoStep--);
+                                  },
                                   icon: const Icon(Icons.arrow_back, size: 28),
                                   label: const Text(
                                     'Back',
@@ -2557,7 +2773,6 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                           ],
                         ),
                       ),
-
                       const SizedBox(height: 25),
 
                       // Page indicators (5 dots)
@@ -2569,9 +2784,10 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                             width: index == demoStep ? 35 : 12,
                             height: 12,
                             decoration: BoxDecoration(
-                              color: index == demoStep
-                                  ? Colors.white
-                                  : Colors.white.withAlpha(77),
+                              color:
+                                  index == demoStep
+                                      ? Colors.white
+                                      : Colors.white.withAlpha(77),
                               borderRadius: BorderRadius.circular(6),
                               border: Border.all(
                                 color: Colors.white.withAlpha(128),
@@ -2581,7 +2797,6 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                           );
                         }),
                       ),
-
                       const SizedBox(height: 25),
                     ],
                   ),
@@ -2791,14 +3006,16 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
     );
   }
 
-  // ── Zoom Controls ─────────────────────────────────────────────────────────
-
   void increaseZoom() {
-    if (zoomLevel < 1.5) setState(() => zoomLevel += 0.1);
+    if (zoomLevel < 1.5) {
+      setState(() => zoomLevel += 0.1);
+    }
   }
 
   void decreaseZoom() {
-    if (zoomLevel > 0.8) setState(() => zoomLevel -= 0.1);
+    if (zoomLevel > 0.8) {
+      setState(() => zoomLevel -= 0.1);
+    }
   }
 
   void _showZoomDialog(BuildContext context) {
@@ -2890,8 +3107,6 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
     );
   }
 
-  // ── Build ─────────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -2906,8 +3121,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-              const SizedBox(height: 12),
-
+                  const SizedBox(height: 12),
               // ─── Dashboard Title Bubble ────────────────────────────────
               Center(
                 child: Container(
@@ -3143,7 +3357,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () {},
+                  onPressed: _triggeringSOS ? null : _triggerSOSAlert,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFD32F2F),
                     padding: const EdgeInsets.symmetric(vertical: 18),
@@ -3152,23 +3366,31 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                     ),
                     elevation: 4,
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
-                      Icon(Icons.phone, size: 28, color: Colors.white),
-                      SizedBox(width: 12),
-                      Text(
-                        'SOS Emergency',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                  child: _triggeringSOS
+                      ? const SizedBox(
+                          height: 28,
+                          width: 28,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 3,
+                          ),
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: const [
+                            Icon(Icons.phone, size: 28, color: Colors.white),
+                            SizedBox(width: 12),
+                            Text(
+                              'SOS Emergency',
+                              style: TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                            SizedBox(width: 12),
+                          ],
                         ),
-                      ),
-                      SizedBox(width: 12),
-                      Icon(Icons.favorite_border, size: 28, color: Colors.white),
-                    ],
-                  ),
                 ),
               ),
 

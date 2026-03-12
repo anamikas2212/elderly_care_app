@@ -565,6 +565,213 @@ class _EnhancedMedicationScreenState extends State<EnhancedMedicationScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
+          'Today\'s Schedule',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Weekly Average: ${adherencePercentage.toStringAsFixed(0)}%',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: Colors.teal.shade700,
+          ),
+        const SizedBox(height: 16),
+        ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: medicines.length,
+          separatorBuilder: (context, index) => const SizedBox(height: 12),
+          itemBuilder: (context, index) {
+            return _buildMedicationCard(index);
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMedicationCard(int index) {
+    final med = medicines[index];
+    final bool isTaken = med['taken'] == true;
+    final bool isOverdue = med['status'] == 'overdue';
+    final bool isUpcoming = med['status'] == 'upcoming';
+
+    Color statusColor = Colors.grey;
+    Color bgColor = Colors.grey.shade50;
+    Widget statusIcon = const Icon(
+      Icons.radio_button_unchecked,
+      color: Colors.grey,
+    );
+    String statusText = 'Upcoming';
+
+    if (isTaken) {
+      statusColor = Colors.green;
+      bgColor = Colors.green.shade50;
+      statusIcon = Icon(Icons.check_circle, color: Colors.green.shade700);
+      statusText = 'Taken';
+    } else if (isOverdue) {
+      statusColor = Colors.red;
+      bgColor = Colors.red.shade50;
+      statusIcon = Icon(Icons.cancel, color: Colors.red.shade700);
+      statusText = 'Overdue';
+    }
+
+    return GestureDetector(
+      onLongPress: () {
+        // Show edit/delete options on long press
+        _showMedicationOptions(index);
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: statusColor.withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            GestureDetector(
+              onTap: () => _toggleMedicationTaken(index),
+              child: statusIcon,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${med['name']} ${med['dose']}',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                      decoration: isTaken ? TextDecoration.lineThrough : null,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    med['time'],
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+            ),
+            // Action buttons
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: Icon(
+                    Icons.edit_outlined,
+                    color: Colors.blue.shade700,
+                    size: 20,
+                  ),
+                  onPressed: () => _editMedicine(index),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  tooltip: 'Edit',
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: Icon(
+                    Icons.delete_outline,
+                    color: Colors.red.shade700,
+                    size: 20,
+                  ),
+                  onPressed: () => _deleteMedicine(index),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  tooltip: 'Delete',
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    statusText,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: statusColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showMedicationOptions(int index) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext context) {
+        return Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                medicines[index]['name'],
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 20),
+              ListTile(
+                leading: Icon(Icons.edit, color: Colors.blue.shade700),
+                title: const Text('Edit Medicine'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _editMedicine(index);
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.delete, color: Colors.red.shade700),
+                title: const Text('Delete Medicine'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _deleteMedicine(index);
+                },
+              ),
+              const SizedBox(height: 10),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildWeeklyAdherence() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
           'Weekly Adherence',
           style: TextStyle(
             fontSize: 18,

@@ -23,26 +23,28 @@ class AuthService {
       user = credential.user;
     }
     final uid = user!.uid;
+    final elderlyId = name.trim();
 
     // Save profile to Firestore
-    await _firestore.collection('users').doc(uid).set({
+    await _firestore.collection('users').doc(elderlyId).set({
       'name': name,
       'age': age,
       'gender': gender,
       'role': 'elderly',
+      'authUid': uid,
       'lastActive': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 
     // Save locally for auto-login
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('elderly_user_uid', uid);
-    await prefs.setString('elderly_user_id', uid);
-    await prefs.setString('elderly_user_name', name);
+    await prefs.setString('elderly_user_uid', elderlyId);
+    await prefs.setString('elderly_user_id', elderlyId);
+    await prefs.setString('elderly_user_name', elderlyId);
     await prefs.setString('elderly_user_age', age);
     await prefs.setString('elderly_user_gender', gender);
     await prefs.setString('user_role', 'elderly');
 
-    return uid;
+    return elderlyId;
   }
 
   /// Checks if an elderly user is already logged in locally.
@@ -50,8 +52,9 @@ class AuthService {
     final prefs = await SharedPreferences.getInstance();
     final role = prefs.getString('user_role');
     if (role != 'elderly') return null;
-    return prefs.getString('elderly_user_uid') ??
-        prefs.getString('elderly_user_id');
+    return prefs.getString('elderly_user_name') ??
+        prefs.getString('elderly_user_id') ??
+        prefs.getString('elderly_user_uid');
   }
 
   // ── Caretaker Auth (Email/Password) ───────────────────────────────────────
@@ -65,7 +68,7 @@ class AuthService {
     required String email,
     required String password,
     required String familyRole,
-  }) async {
+    }) async {
     // Sign out any existing anonymous session first
     if (_auth.currentUser != null && _auth.currentUser!.isAnonymous) {
       await _auth.signOut();

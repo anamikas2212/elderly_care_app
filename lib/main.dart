@@ -9,12 +9,21 @@ import 'package:elderly_care_app/services/report_scheduler_service.dart'; // Add
 import 'package:elderly_care_app/config/app_config.dart';
 import 'package:elderly_care_app/services/notification_service.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'services/push_notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   if (!kIsWeb) {
     await NotificationService.instance.init();
+  }
+
+  if (!kIsWeb) {
+    FirebaseMessaging.onBackgroundMessage(
+      PushNotificationService.firebaseMessagingBackgroundHandler,
+    );
+    await PushNotificationService.initialize();
   }
 
   // Added: initialize report scheduler
