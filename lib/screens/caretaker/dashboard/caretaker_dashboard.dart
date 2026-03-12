@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../services/caretaker_id_helper.dart';
@@ -10,6 +10,7 @@ import 'safety_monitor_screen.dart';
 import 'medication_management_screen.dart';
 import 'buddy_activity_log_screen.dart';
 import 'connect_screens.dart';
+import 'patient_overview_screen.dart';
 import '../../auth/login_screen.dart';
 import 'enhanced_buddy_activity_screen.dart';
 import '../reports/ai_cognitive_reports_screen.dart';
@@ -217,6 +218,8 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
             sliver: SliverList(
               delegate: SliverChildListDelegate([
                 _buildPatientHeaderCard(context),
+                const SizedBox(height: 12),
+                _buildPatientOverviewBanner(context),
                 const SizedBox(height: 16),
                 _buildCognitiveHealthCard(),
                 const SizedBox(height: 16),
@@ -410,6 +413,83 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
     }
   }
 
+  // ── Patient Overview Banner ───────────────────────────────────────────────
+
+  Widget _buildPatientOverviewBanner(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PatientOverviewScreen(
+            elderlyUid: elderlyUserUid,
+            elderlyId: elderlyUserId,
+            elderlyName: elderlyUserName,
+          ),
+        ),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: CaretakerColors.cardWhite,
+          borderRadius: CaretakerLayout.cardRadius,
+          border: Border.all(
+            color: CaretakerColors.primaryGreen.withOpacity(0.25),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: CaretakerColors.lightGreen,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.person_search,
+                color: CaretakerColors.primaryGreen,
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Patient Overview',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: CaretakerColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Medical history, conditions, emergency contact & notes',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right,
+              color: Colors.grey.shade400,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   // ── Cognitive Health Score Card ───────────────────────────────────────────
 
@@ -1044,7 +1124,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
           Colors.blue.shade100,
           Colors.blue,
           MedicationManagementScreen(userId: elderlyUserId),
-        ),
+        ),/*
         _buildNavCard(
           context,
           "Care Connect",
@@ -1052,7 +1132,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
           Colors.purple.shade100,
           Colors.purple,
           const VisionGuardianScreen(),
-        ),
+        ),*/
 
         // Enhanced buddy activity screen
         GestureDetector(
@@ -1080,6 +1160,19 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
           Colors.amber.shade700,
           AiCognitiveReportsScreen(
             caretakerId: caretakerId,
+            elderlyId: elderlyUserId,
+            elderlyName: elderlyUserName,
+          ),
+        ),
+
+        _buildNavCard(
+          context,
+          "Patient Overview",
+          Icons.person_search,
+          Colors.green.shade100,
+          Colors.green.shade700,
+          PatientOverviewScreen(
+            elderlyUid: elderlyUserUid,
             elderlyId: elderlyUserId,
             elderlyName: elderlyUserName,
           ),

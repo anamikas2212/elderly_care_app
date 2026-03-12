@@ -931,88 +931,85 @@ class _BuddyChatScreenState extends State<BuddyChatScreen> {
     _initializeChat();
   }
 
-  Future<void> _initializeChat() async {
-    // Load user's memories
-    await _loadUserMemories();
+  /// Builds the unified system prompt used both on init and on every refresh.
+  /// Keeping a single source of truth ensures the buddy NEVER reverts to
+  /// the old "ACTIVELY reference past details" behaviour between messages.
+  String _buildSystemPrompt(String memoryContext) {
+    return '''You are "Buddy", a warm, empathetic emotional companion for an elderly person.
 
-    // Initialize chat with system prompt including memories
-    _chatHistory.add({
-      'role': 'system',
-      'content':
-          '''You are "Buddy", a warm, empathetic emotional companion AI with a perfect memory.
+$memoryContext
 
-$_userMemoryContext
+Your role:
+1. Provide emotional support and genuine companionship.
+2. Use the person's name naturally when you know it.
+3. Help the user process feelings and offer gentle encouragement.
+4. Listen carefully and ask thoughtful follow-up questions when the user shares something meaningful.
 
-Your role is to:
-1. Provide emotional support and companionship
-2. Use information from past conversations when it is clearly relevant or when the user refers to it
-3. Use the person's name and other known details naturally when appropriate
-4. Ask thoughtful follow-up questions when the user shares something meaningful
-5. Help users process their feelings
-6. Offer gentle encouragement and positivity
-7. Show attentiveness and care in conversations
-
-MEMORY USAGE GUIDELINES:
-- Reference past conversations ONLY when the user mentions them or when it clearly adds helpful context
-- Avoid bringing up past details unnecessarily
-- When relevant, acknowledge specific names, events, or details naturally
-- Do not force connections to past memories if they are unrelated to the current topic
+MEMORY GUIDELINES — very important:
+- Reference past conversations or personal details (family names, events, etc.) ONLY when the user explicitly brings them up first, or when a memory is unambiguously directly relevant to what the user just said.
+- Do NOT volunteer information about children, grandchildren, or any significant personal events unless the user mentions them first.
+- If you are unsure whether a memory is relevant, stay quiet about it and focus on the current message.
+- When a memory IS relevant, weave it in naturally — never as a list or a recap.
 
 Always start your response with a sentiment tag:
 [SENTIMENT:positive/negative/neutral/anxious/sad/happy/angry]
 
-Keep responses conversational, supportive, and around 2–4 sentences unless more detail is needed.
-Be natural and context-aware when referencing memories—only include them when they meaningfully contribute to the conversation.''',
+Keep responses conversational and supportive — around 2–4 sentences unless the user needs more.''';
+  }
+
+  Future<void> _initializeChat() async {
+    await _loadUserMemories();
+
+    _chatHistory.add({
+      'role': 'system',
+      'content': _buildSystemPrompt(_userMemoryContext),
     });
 
-    setState(() {
-      _isLoadingMemories = false;
-    });
-
-    // Welcome message with personalization
+    setState(() => _isLoadingMemories = false);
     _addWelcomeMessage();
+  }
+
+  // Refresh memory context after every exchange — uses the SAME restrained
+  // prompt so the buddy never silently reverts to aggressive behaviour.
+  Future<void> _refreshMemoryContext() async {
+    try {
+      final context = await _memoryService.loadUserMemoryContext(widget.userId);
+
+      if (_chatHistory.isNotEmpty && _chatHistory[0]['role'] == 'system') {
+        _chatHistory[0]['content'] = _buildSystemPrompt(context);
+      }
+    } catch (e) {
+      print('Error refreshing memory context: $e');
+    }
   }
 
   Future<void> _loadUserMemories() async {
     try {
-      // Load memory context
       final context = await _memoryService.loadUserMemoryContext(widget.userId);
-      setState(() {
-        _userMemoryContext = context;
-      });
-
-      // Get personalized questions
-      final questions = await _memoryService.getPersonalizedQuestions(
-        widget.userId,
-      );
-      setState(() {
-        _personalizedQuestions = questions;
-      });
+      setState(() => _userMemoryContext = context);
+      final questions =
+          await _memoryService.getPersonalizedQuestions(widget.userId);
+      setState(() => _personalizedQuestions = questions);
     } catch (e) {
       print('Error loading memories: $e');
-      setState(() {
-        _userMemoryContext = 'This is a new user. No previous memories.';
-      });
+      setState(() =>
+          _userMemoryContext = 'This is a new user. No previous memories.');
     }
   }
 
   void _addWelcomeMessage() {
-    String welcomeText = 'Hello! I\'m your friendly buddy. ';
-
+    String welcomeText = "Hello! I'm your friendly buddy. ";
     if (_userMemoryContext.contains('new user')) {
       welcomeText += 'How are you feeling today? 😊';
     } else {
-      welcomeText += 'It\'s great to see you again! How have you been? 💙';
+      welcomeText += "It's great to see you again! How have you been? 💙";
     }
-
-    _messages.add(
-      ChatMessage(
-        text: welcomeText,
-        isUser: false,
-        timestamp: DateTime.now(),
-        sentiment: 'positive',
-      ),
-    );
+    _messages.add(ChatMessage(
+      text: welcomeText,
+      isUser: false,
+      timestamp: DateTime.now(),
+      sentiment: 'positive',
+    ));
   }
 
   @override
@@ -1026,30 +1023,25 @@ Be natural and context-aware when referencing memories—only include them when 
     if (_messageController.text.trim().isEmpty) return;
 
     final userMessage = _messageController.text.trim();
-    final userChatMessage = ChatMessage(
-      text: userMessage,
-      isUser: true,
-      timestamp: DateTime.now(),
-    );
-
     setState(() {
-      _messages.add(userChatMessage);
+      _messages.add(ChatMessage(
+        text: userMessage,
+        isUser: true,
+        timestamp: DateTime.now(),
+      ));
       _isTyping = true;
     });
     _messageController.clear();
     _scrollToBottom();
 
     try {
-      // IMPORTANT: Get relevant memories for this specific message
       final dynamicContext = await _memoryService.buildDynamicContext(
         userId: widget.userId,
         currentMessage: userMessage,
       );
 
-      // Create a temporary message list with dynamic context
-      final messagesWithContext = List<Map<String, dynamic>>.from(_chatHistory);
-
-      // Add dynamic context to the user message if we have relevant memories
+      final messagesWithContext =
+          List<Map<String, dynamic>>.from(_chatHistory);
       if (dynamicContext.isNotEmpty) {
         messagesWithContext.add({
           'role': 'user',
@@ -1059,7 +1051,6 @@ Be natural and context-aware when referencing memories—only include them when 
         messagesWithContext.add({'role': 'user', 'content': userMessage});
       }
 
-      // Call Groq API
       final response = await http.post(
         Uri.parse(_baseUrl),
         headers: {
@@ -1077,34 +1068,27 @@ Be natural and context-aware when referencing memories—only include them when 
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final responseText =
-            data['choices'][0]['message']['content'] ??
-            'I\'m here for you. Tell me more about how you\'re feeling.';
+        final responseText = data['choices'][0]['message']['content'] ??
+            "I'm here for you. Tell me more about how you're feeling.";
 
-        // Add to permanent chat history (without the dynamic context)
         _chatHistory.add({'role': 'user', 'content': userMessage});
-
         _chatHistory.add({'role': 'assistant', 'content': responseText});
 
-        // Extract sentiment
         final sentiment = _extractSentiment(responseText);
         final cleanedText = _cleanResponseText(responseText);
 
-        final aiChatMessage = ChatMessage(
-          text: cleanedText,
-          isUser: false,
-          timestamp: DateTime.now(),
-          sentiment: sentiment,
-        );
-
         setState(() {
-          _messages.add(aiChatMessage);
+          _messages.add(ChatMessage(
+            text: cleanedText,
+            isUser: false,
+            timestamp: DateTime.now(),
+            sentiment: sentiment,
+          ));
           _currentMood = sentiment;
           _isTyping = false;
         });
         _scrollToBottom();
 
-        // Extract and save memories — EnhancedMemoryService also notifies caretaker
         print('🔄 Starting memory extraction process...');
         try {
           await _memoryService.extractAndSaveMemories(
@@ -1114,15 +1098,12 @@ Be natural and context-aware when referencing memories—only include them when 
             aiResponse: cleanedText,
           );
           print('✅ Memory extraction completed');
-
-          // Refresh memory context after saving new memories
           await _refreshMemoryContext();
           print('✅ Memory context refreshed');
         } catch (e) {
           print('❌ Error in memory extraction: $e');
         }
 
-        // Update emotional profile
         try {
           await _memoryService.updateEmotionalProfile(
             userId: widget.userId,
@@ -1138,57 +1119,17 @@ Be natural and context-aware when referencing memories—only include them when 
       }
     } catch (e) {
       setState(() {
-        _messages.add(
-          ChatMessage(
-            text:
-                'I\'m having trouble connecting right now, but I\'m still here with you. Could you try again? 💙',
-            isUser: false,
-            timestamp: DateTime.now(),
-            sentiment: 'neutral',
-          ),
-        );
+        _messages.add(ChatMessage(
+          text:
+              "I'm having trouble connecting right now, but I'm still here with you. Could you try again? 💙",
+          isUser: false,
+          timestamp: DateTime.now(),
+          sentiment: 'neutral',
+        ));
         _isTyping = false;
       });
       _scrollToBottom();
       print('Error: $e');
-    }
-  }
-
-  // NEW: Refresh memory context periodically
-  Future<void> _refreshMemoryContext() async {
-    try {
-      final context = await _memoryService.loadUserMemoryContext(widget.userId);
-
-      // Update the system message with new context
-      if (_chatHistory.isNotEmpty && _chatHistory[0]['role'] == 'system') {
-        _chatHistory[0]['content'] =
-            '''You are "Buddy", a warm, empathetic emotional companion AI with a perfect memory.
-
-$context
-
-Your role is to:
-1. Provide emotional support and companionship
-2. ACTIVELY reference past conversations and specific details you remember
-3. Use the person's name and other details when you know them
-4. Ask thoughtful follow-up questions about things previously mentioned
-5. Help users process their feelings
-6. Offer gentle encouragement and positivity
-7. Show that you genuinely remember and care about their life
-
-IMPORTANT MEMORY USAGE:
-- When the user mentions something you've discussed before, ACKNOWLEDGE it
-- Reference specific names, events, and details from previous conversations
-- If you know someone's name or other personal details, use them naturally
-- Connect current conversations to past memories when relevant
-
-Always start your response with a sentiment tag:
-[SENTIMENT:positive/negative/neutral/anxious/sad/happy/angry]
-
-Keep responses conversational, supportive, and around 2-4 sentences unless more detail is needed.
-BE SPECIFIC when referencing memories - use actual names and details, not generic statements.''';
-      }
-    } catch (e) {
-      print('Error refreshing memory context: $e');
     }
   }
 

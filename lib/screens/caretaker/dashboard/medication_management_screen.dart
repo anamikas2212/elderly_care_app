@@ -21,6 +21,18 @@ class MedicationManagementScreen extends StatefulWidget {
 class _MedicationManagementScreenState
     extends State<MedicationManagementScreen> {
   bool _isMonthlyReport = false;
+  late Stream<QuerySnapshot> _medicationsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _medicationsStream = _firestore
+        .collection('users')
+        .doc(widget.userId)
+        .collection('medications')
+        .snapshots();
+  }
+
   TimeOfDay? _parse12hTime(String timeStr) {
     try {
       final parts = timeStr.trim().split(' ');
@@ -174,13 +186,14 @@ class _MedicationManagementScreenState
   }
   
   // ─── Send Gentle Reminder ────────────────────────────────────────────────
-  Future<void> _sendReminderToElderly() async {
+  Future<void> _sendReminderToElderly({String? medName}) async {
       try {
+          String msg = medName != null ? 'You have missed a dose of $medName. Please take it as soon as possible.' : 'You have missed some of your medicine recently. Please try to take your medicine on time.';
           final alertRef = _firestore.collection('alerts').doc();
           await alertRef.set({
               'userId': widget.userId,
               'title': 'Medication Reminder',
-              'message': 'You have missed some of your medicine recently. Please try to take your medicine on time.',
+              'message': msg,
               'type': 'medication_reminder',
               'isActive': true,
               'createdAt': FieldValue.serverTimestamp(),
@@ -188,7 +201,7 @@ class _MedicationManagementScreenState
 
           await _firestore.collection('users').doc(widget.userId).collection('notifications').add({
               'title': 'Medication Reminder',
-              'message': 'You have missed some of your medicine recently. Please try to take your medicine on time.',
+              'message': msg,
               'type': 'medication_reminder',
               'isRead': false,
               'createdAt': FieldValue.serverTimestamp(),
@@ -260,13 +273,7 @@ class _MedicationManagementScreenState
         ],
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream:
-            _firestore
-                .collection('users')
-                .doc(widget.userId)
-                .collection('medications')
-                .orderBy('time', descending: false)
-                .snapshots(),
+        stream: _medicationsStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -526,7 +533,7 @@ class _MedicationManagementScreenState
             ),
           ),
           ElevatedButton(
-            onPressed: () {},
+            onPressed: () => _sendReminderToElderly(medName: med['name']),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red.shade600,
               shape: RoundedRectangleBorder(

@@ -335,6 +335,8 @@ class AddPatientBottomSheet extends StatefulWidget {
 class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
   final _pairingService = PairingService();
   bool _isLoading = false;
+  bool _isFetchingProfile = false; // spinner while looking up the code
+  bool _profileFetched = false;    // true = name/age/gender locked from Firestore
 
   final _formKey = GlobalKey<FormState>();
   final _codeController = TextEditingController();
@@ -344,7 +346,7 @@ class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
   final _occupationController = TextEditingController();
   final _medicalConditionController = TextEditingController();
   final _phoneController = TextEditingController();
-  
+
   // Emergency Contact
   final _emgNameController = TextEditingController();
   final _emgRelationController = TextEditingController();
@@ -352,9 +354,94 @@ class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
   final _emgOccupationController = TextEditingController();
   final _emgPhoneController = TextEditingController();
 
+  @override
+  void initState() {
+    super.initState();
+    // Trigger lookup as soon as 6 digits have been entered
+    _codeController.addListener(_onCodeChanged);
+  }
+
+  @override
+  void dispose() {
+    _codeController.removeListener(_onCodeChanged);
+    for (final c in [
+      _codeController, _nameController, _ageController, _occupationController,
+      _medicalConditionController, _phoneController, _emgNameController,
+      _emgRelationController, _emgAgeController, _emgOccupationController,
+      _emgPhoneController,
+    ]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  // ── Code autofetch logic ─────────────────────────────────────────────────
+
+  void _onCodeChanged() {
+    final code = _codeController.text.trim();
+    if (code.length == 6) {
+      _fetchProfileForCode(code);
+    } else if (_profileFetched) {
+      // User edited the code — clear the pre-filled data
+      setState(() {
+        _profileFetched = false;
+        _nameController.clear();
+        _ageController.clear();
+        _selectedGender = 'Male';
+      });
+    }
+  }
+
+  Future<void> _fetchProfileForCode(String code) async {
+    if (_isFetchingProfile) return;
+    setState(() => _isFetchingProfile = true);
+
+    try {
+      final profile = await _pairingService.lookupElderlyByCode(code);
+      if (!mounted) return;
+
+      if (profile != null) {
+        final name   = profile['name']   as String? ?? '';
+        final age    = profile['age']    as String? ?? '';
+        final gender = profile['gender'] as String? ?? '';
+
+        setState(() {
+          _nameController.text = name;
+          _ageController.text  = age;
+          if (['Male', 'Female', 'Other'].contains(gender)) {
+            _selectedGender = gender;
+          } else if (gender.toLowerCase().startsWith('m')) {
+            _selectedGender = 'Male';
+          } else if (gender.toLowerCase().startsWith('f')) {
+            _selectedGender = 'Female';
+          } else if (gender.isNotEmpty) {
+            _selectedGender = 'Other';
+          }
+          _profileFetched = true;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ Profile found: $name'),
+            backgroundColor: Colors.green.shade600,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      } else {
+        setState(() => _profileFetched = false);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _profileFetched = false);
+    } finally {
+      if (mounted) setState(() => _isFetchingProfile = false);
+    }
+  }
+
+  // ── Submit ───────────────────────────────────────────────────────────────
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
     final code = _codeController.text.trim();
     if (code.length != 6) {
       _showSnack('Please enter a valid 6-digit code.', isError: true);
@@ -368,18 +455,18 @@ class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
       if (caretakerUid == null) throw Exception('Not logged in.');
 
       final elderlyDetails = {
-        'name': _nameController.text.trim(),
-        'age': _ageController.text.trim(),
-        'gender': _selectedGender,
-        'occupation': _occupationController.text.trim(),
+        'name':             _nameController.text.trim(),
+        'age':              _ageController.text.trim(),
+        'gender':           _selectedGender,
+        'occupation':       _occupationController.text.trim(),
         'medicalCondition': _medicalConditionController.text.trim(),
-        'phone': _phoneController.text.trim(),
+        'phone':            _phoneController.text.trim(),
         'emergencyContact': {
-          'name': _emgNameController.text.trim(),
-          'relation': _emgRelationController.text.trim(),
-          'age': _emgAgeController.text.trim(),
+          'name':       _emgNameController.text.trim(),
+          'relation':   _emgRelationController.text.trim(),
+          'age':        _emgAgeController.text.trim(),
           'occupation': _emgOccupationController.text.trim(),
-          'phone': _emgPhoneController.text.trim(),
+          'phone':      _emgPhoneController.text.trim(),
         }
       };
 
@@ -393,7 +480,7 @@ class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
       Navigator.pop(context);
       widget.onSuccess();
       _showSnack('Elderly linked successfully!');
-      
+
     } catch (e) {
       if (!mounted) return;
       _showSnack(e.toString().replaceAll('Exception: ', ''), isError: true);
@@ -408,21 +495,44 @@ class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
     ));
   }
 
-  Widget _buildField(TextEditingController ctrl, String label, {bool isNumber = false, bool required = false}) {
+  // ── Builders ─────────────────────────────────────────────────────────────
+
+  Widget _buildField(
+    TextEditingController ctrl,
+    String label, {
+    bool isNumber = false,
+    bool required = false,
+    bool readOnly = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: TextFormField(
         controller: ctrl,
+        readOnly: readOnly,
         keyboardType: isNumber ? TextInputType.phone : TextInputType.text,
         validator: required ? (v) => v!.trim().isEmpty ? 'Required' : null : null,
+        style: TextStyle(
+          color: readOnly ? Colors.grey.shade700 : Colors.black87,
+        ),
         decoration: InputDecoration(
           labelText: required ? '$label *' : label,
           filled: true,
-          fillColor: Colors.grey.shade100,
+          fillColor: readOnly ? Colors.green.shade50 : Colors.grey.shade100,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
+            borderSide: readOnly
+                ? BorderSide(color: Colors.green.shade300, width: 1.2)
+                : BorderSide.none,
           ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: readOnly
+                ? BorderSide(color: Colors.green.shade300, width: 1.2)
+                : BorderSide.none,
+          ),
+          suffixIcon: readOnly
+              ? Icon(Icons.lock_rounded, size: 16, color: Colors.green.shade400)
+              : null,
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
       ),
@@ -467,102 +577,211 @@ class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Care Code
-                    const Text('Care Code', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 8),
-                    TextFormField(
-                      controller: _codeController,
-                      keyboardType: TextInputType.number,
-                      maxLength: 6,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 28, letterSpacing: 10, fontWeight: FontWeight.bold),
-                      decoration: InputDecoration(
-                        hintText: '000000',
-                        counterText: '',
-                        filled: true,
-                        fillColor: Colors.blue.shade50,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: BorderSide(color: Colors.blue.shade200),
-                        ),
-                      ),
-                      validator: (v) => v!.trim().length != 6 ? 'Code required' : null,
-                    ),
-                    const SizedBox(height: 20),
 
-                    // Elderly Profile
-                    const Text('Patient Profile', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    // ── Care Code ──────────────────────────────────────────
+                    const Text('Care Code',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const SizedBox(height: 8),
+                    Stack(
+                      alignment: Alignment.centerRight,
+                      children: [
+                        TextFormField(
+                          controller: _codeController,
+                          keyboardType: TextInputType.number,
+                          maxLength: 6,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 28,
+                            letterSpacing: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          decoration: InputDecoration(
+                            hintText: '000000',
+                            counterText: '',
+                            filled: true,
+                            fillColor: Colors.blue.shade50,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: BorderSide(color: Colors.blue.shade200),
+                            ),
+                          ),
+                          validator: (v) =>
+                              v!.trim().length != 6 ? 'Enter the 6-digit code' : null,
+                        ),
+                        if (_isFetchingProfile)
+                          Positioned(
+                            right: 16,
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.blue.shade500,
+                              ),
+                            ),
+                          ),
+                        if (_profileFetched)
+                          Positioned(
+                            right: 16,
+                            child: Icon(Icons.check_circle_rounded,
+                                color: Colors.green.shade500, size: 24),
+                          ),
+                      ],
+                    ),
+
+                    // Hint text beneath code field
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6, bottom: 16),
+                      child: _profileFetched
+                          ? Row(
+                              children: [
+                                Icon(Icons.auto_fix_high,
+                                    size: 14, color: Colors.green.shade600),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Name, age & gender auto-filled from the elderly\'s profile',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.green.shade700,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Text(
+                              'Enter code to auto-fill patient info',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade500,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                    ),
+
+                    // ── Patient Profile ────────────────────────────────────
+                    const Text('Patient Profile',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 12),
-                    _buildField(_nameController, 'Full Name', required: true),
+
+                    _buildField(_nameController, 'Full Name',
+                        required: true, readOnly: _profileFetched),
+
                     Row(
                       children: [
-                        Expanded(child: _buildField(_ageController, 'Age / DOB', required: true)),
+                        Expanded(
+                          child: _buildField(_ageController, 'Age / DOB',
+                              required: true, readOnly: _profileFetched),
+                        ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Container(
                             margin: const EdgeInsets.only(bottom: 12),
                             padding: const EdgeInsets.symmetric(horizontal: 12),
                             decoration: BoxDecoration(
-                              color: Colors.grey.shade100,
+                              color: _profileFetched
+                                  ? Colors.green.shade50
+                                  : Colors.grey.shade100,
                               borderRadius: BorderRadius.circular(12),
+                              border: _profileFetched
+                                  ? Border.all(
+                                      color: Colors.green.shade300, width: 1.2)
+                                  : null,
                             ),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String>(
-                                value: _selectedGender,
-                                isExpanded: true,
-                                items: ['Male', 'Female', 'Other'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                                onChanged: (v) => setState(() => _selectedGender = v!),
-                              ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      value: _selectedGender,
+                                      isExpanded: true,
+                                      // Lock the dropdown when profile is fetched
+                                      onChanged: _profileFetched
+                                          ? null
+                                          : (v) => setState(
+                                              () => _selectedGender = v!),
+                                      items: ['Male', 'Female', 'Other']
+                                          .map((s) => DropdownMenuItem(
+                                              value: s, child: Text(s)))
+                                          .toList(),
+                                    ),
+                                  ),
+                                ),
+                                if (_profileFetched)
+                                  Icon(Icons.lock_rounded,
+                                      size: 16,
+                                      color: Colors.green.shade400),
+                              ],
                             ),
                           ),
                         ),
                       ],
                     ),
+
                     _buildField(_occupationController, 'Occupation (Optional)'),
                     _buildField(_medicalConditionController, 'Medical Condition(s)'),
-                    _buildField(_phoneController, 'Phone Number', isNumber: true, required: true),
-                    
+                    _buildField(_phoneController, 'Phone Number',
+                        isNumber: true, required: true),
+
+                    // ── Emergency Contact ──────────────────────────────────
                     const SizedBox(height: 12),
-                    const Text('Emergency Contact', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const Text('Emergency Contact',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 12),
                     _buildField(_emgNameController, 'Name', required: true),
-                    _buildField(_emgRelationController, 'Relation to Patient', required: true),
+                    _buildField(_emgRelationController, 'Relation to Patient',
+                        required: true),
                     Row(
                       children: [
                         Expanded(child: _buildField(_emgAgeController, 'Age')),
                         const SizedBox(width: 12),
-                        Expanded(child: _buildField(_emgOccupationController, 'Occupation')),
+                        Expanded(
+                            child: _buildField(
+                                _emgOccupationController, 'Occupation')),
                       ],
                     ),
-                    _buildField(_emgPhoneController, 'Phone Number', isNumber: true, required: true),
+                    _buildField(_emgPhoneController, 'Phone Number',
+                        isNumber: true, required: true),
                     const SizedBox(height: 20),
                   ],
                 ),
               ),
             ),
           ),
-          
-          // Submit Bottom Bar
+
+          // ── Submit Button ────────────────────────────────────────────────
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: Colors.white,
-              boxShadow: [BoxShadow(color: Colors.black.withAlpha(10), blurRadius: 10, offset: const Offset(0, -4))],
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withAlpha(10),
+                  blurRadius: 10,
+                  offset: const Offset(0, -4),
+                )
+              ],
             ),
             child: SafeArea(
               child: SizedBox(
                 width: double.infinity,
                 height: 50,
                 child: ElevatedButton(
-                  onPressed: _isLoading ? null : _submit,
+                  onPressed: (_isLoading || _isFetchingProfile) ? null : _submit,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue.shade600,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: _isLoading 
-                      ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white))
-                      : const Text('Link & Save Patient', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  child: _isLoading
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child:
+                              CircularProgressIndicator(color: Colors.white))
+                      : const Text('Link & Save Patient',
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold)),
                 ),
               ),
             ),
@@ -572,3 +791,6 @@ class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
     );
   }
 }
+
+
+
