@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../screens/elderly/chat_message.dart';
 
 class EnhancedMemoryService {
@@ -328,8 +329,19 @@ Extract important memories with emphasis on emotional state and any concerning p
       final elderlyDoc =
           await _firestore.collection('users').doc(elderlyId).get();
 
-      final caretakerId = elderlyDoc.data()?['caretakerId'];
-      if (caretakerId == null) return;
+      String? caretakerId = elderlyDoc.data()?['caretakerId'];
+
+      if (caretakerId == null || caretakerId.isEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        caretakerId = prefs.getString('caretaker_id');
+        if (caretakerId != null && caretakerId.isNotEmpty) {
+          await _firestore.collection('users').doc(elderlyId).set({
+            'caretakerId': caretakerId,
+          }, SetOptions(merge: true));
+        }
+      }
+
+      if (caretakerId == null || caretakerId.isEmpty) return;
 
       // Create notification
       await _createCaretakerNotification(

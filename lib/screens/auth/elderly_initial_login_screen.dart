@@ -86,6 +86,7 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
           .set(userData, SetOptions(merge: true));
       print('✅ Elderly user profile saved to Firestore');
 
+
       // Generate 6-digit pairing code for caretaker linking
       try {
         final code = await _pairingService.generatePairingCode(uid);

@@ -20,6 +20,7 @@ class MedicationManagementScreen extends StatefulWidget {
 
 class _MedicationManagementScreenState
     extends State<MedicationManagementScreen> {
+  bool _isMonthlyReport = false;
   TimeOfDay? _parse12hTime(String timeStr) {
     try {
       final parts = timeStr.trim().split(' ');
@@ -175,6 +176,16 @@ class _MedicationManagementScreenState
   // ─── Send Gentle Reminder ────────────────────────────────────────────────
   Future<void> _sendReminderToElderly() async {
       try {
+          final alertRef = _firestore.collection('alerts').doc();
+          await alertRef.set({
+              'userId': widget.userId,
+              'title': 'Medication Reminder',
+              'message': 'You have missed some of your medicine recently. Please try to take your medicine on time.',
+              'type': 'medication_reminder',
+              'isActive': true,
+              'createdAt': FieldValue.serverTimestamp(),
+          });
+
           await _firestore.collection('users').doc(widget.userId).collection('notifications').add({
               'title': 'Medication Reminder',
               'message': 'You have missed some of your medicine recently. Please try to take your medicine on time.',
@@ -854,7 +865,7 @@ class _MedicationManagementScreenState
             
             // Check if created after this date, if so, skip counting it for this past date
             final createdAtTimestamp = med['createdAt'] as Timestamp?;
-            final createdAt = createdAtTimestamp?.toDate() ?? now; 
+            final createdAt = createdAtTimestamp?.toDate() ?? DateTime(1970);
             final createdDateStr = DateFormat('yyyy-MM-dd').format(createdAt);
             
             // If the date we are checking (dateStr) is BEFORE the creation date (createdDateStr), skip it.
@@ -868,23 +879,38 @@ class _MedicationManagementScreenState
                 // Determine total timings for this med
                 final times = med['times'] as List<dynamic>?;
                 int timesCount = (times != null && times.isNotEmpty) ? times.length : 1;
-                
-                totalPillsPastDays += timesCount;
-                if (i == 0) todayTotal += timesCount;
-                
+
                 final takenDates = med['takenDates'] as List<dynamic>? ?? [];
+                final legacyDayTaken = takenDates.contains(dateStr);
                 for (int tIdx = 0; tIdx < timesCount; tIdx++) {
+                    final scheduleTimeStr = (times != null && times.isNotEmpty)
+                        ? times[tIdx].toString()
+                        : (med['time'] as String? ?? '');
+                    final tObj = _parse12hTime(scheduleTimeStr);
+
+                    // Only count today's doses once they're due (not in the future)
+                    if (i == 0) {
+                        final isDue = tObj == null
+                            ? true
+                            : (now.hour > tObj.hour ||
+                                (now.hour == tObj.hour && now.minute >= tObj.minute));
+                        if (!isDue) {
+                            continue;
+                        }
+                        todayTotal++;
+                    }
+
+                    totalPillsPastDays++;
+
                     // Legacy takenToday only applies to today (i == 0)
-                    final legacyTaken = (tIdx == 0) && (takenDates.contains(dateStr) || (i == 0 && med['takenToday'] == true));
-                    final isTaken = takenDates.contains('${dateStr}_$tIdx') || legacyTaken;
+                    final legacyTaken =
+                        legacyDayTaken || (i == 0 && med['takenToday'] == true);
+                    final isTaken =
+                        takenDates.contains('${dateStr}_$tIdx') || legacyTaken;
                     
                     if (!isTaken) {
-                        String scheduleTimeStr = (times != null && times.isNotEmpty) ? times[tIdx].toString() : (med['time'] as String? ?? '');
-                        
                         // If checking today, only count as missed if the time has passed
                         if (i == 0) {
-                            final tObj = _parse12hTime(scheduleTimeStr);
-                            
                             // Check if overdue
                             if (tObj != null && (now.hour > tObj.hour || (now.hour == tObj.hour && now.minute > tObj.minute + 30))) {
                                 todayMissed++;
@@ -942,9 +968,9 @@ class _MedicationManagementScreenState
                         Expanded(
                             child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
-                                children: const [
-                                    Text('CRITICAL ALERT', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                                    Text('A medication has been missed >3 times recently.', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                                children: [
+                                    const Text('CRITICAL ALERT', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                                    const Text('A medication has been missed >3 times recently.', style: TextStyle(color: Colors.white70, fontSize: 14)),
                                     const SizedBox(height: 8),
                                     ElevatedButton.icon(
                                         onPressed: () => _sendReminderToElderly(),

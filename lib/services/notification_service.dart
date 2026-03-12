@@ -23,6 +23,48 @@ class NotificationService {
       settings,
       onDidReceiveNotificationResponse: _onNotificationAction,
     );
+
+    final androidImpl =
+        _notifications
+            .resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin>();
+    if (androidImpl != null) {
+      await androidImpl.createNotificationChannel(
+        const AndroidNotificationChannel(
+          'general_channel',
+          'General Notifications',
+          importance: Importance.high,
+        ),
+      );
+      await androidImpl.createNotificationChannel(
+        const AndroidNotificationChannel(
+          'med_channel',
+          'Medication Reminders',
+          importance: Importance.max,
+        ),
+      );
+    }
+  }
+
+  Future<void> showImmediate({
+    required String title,
+    required String body,
+    String? payload,
+  }) async {
+    await _notifications.show(
+      DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      title,
+      body,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'general_channel',
+          'General Notifications',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+      ),
+      payload: payload,
+    );
   }
 
   Future<void> scheduleMedication({

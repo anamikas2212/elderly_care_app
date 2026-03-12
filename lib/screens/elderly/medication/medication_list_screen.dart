@@ -237,6 +237,9 @@ class _MedicationListScreenState extends State<MedicationListScreen> {
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const SizedBox.shrink();
+        if (widget.role == UserRole.elderly && !kIsWeb) {
+          _triggerLocalAlertNotification(snapshot.data!.docs);
+        }
         return Container(
           color: Colors.grey.shade100,
           child: Column(
@@ -282,6 +285,30 @@ class _MedicationListScreenState extends State<MedicationListScreen> {
         );
       },
     );
+  }
+
+  Future<void> _triggerLocalAlertNotification(
+    List<QueryDocumentSnapshot> docs,
+  ) async {
+    if (docs.isEmpty) return;
+    final doc = docs.first;
+    final data = doc.data() as Map<String, dynamic>;
+    final isActive = data['isActive'] == true;
+    if (!isActive) return;
+
+    final title = _safeString(data['title'], fallback: 'Medication Reminder');
+    final message = _safeString(
+      data['message'],
+      fallback: 'Please check your medication schedule.',
+    );
+
+    try {
+      await NotificationService.instance.showImmediate(
+        title: title,
+        body: message,
+        payload: 'alert|${doc.id}',
+      );
+    } catch (_) {}
   }
 
   Widget _buildWeeklyCalendar() {

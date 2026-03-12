@@ -2,6 +2,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../services/caretaker_id_helper.dart';
+import '../../../services/caretaker_notification_service.dart';
 import '../../../theme/caretaker_theme.dart';
 import '../../../services/caretaker_data_service.dart';
 import 'cognitive_health_screen.dart';
@@ -30,8 +31,11 @@ class CaretakerDashboard extends StatefulWidget {
 
 class _CaretakerDashboardState extends State<CaretakerDashboard> {
   final CaretakerDataService _dataService = CaretakerDataService();
+  final CaretakerNotificationService _notificationService =
+      CaretakerNotificationService();
 
   String elderlyUserId = "";
+  String elderlyUserUid = "";
   String elderlyUserName = "";
   String elderlyUserAge = "--";
   String elderlyUserGender = "--";
@@ -58,6 +62,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
       String loadedAge = '--';
       String loadedGender = '--';
       String dataId = ''; // The ID used by SessionTracker for game data
+      String? storedUid;
 
       if (uid != null && uid.isNotEmpty) {
         // UID passed from PatientSelectionScreen → fetch profile from Firestore
@@ -99,9 +104,10 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
       } else {
         // Fallback: read from SharedPreferences (backwards compatibility)
         final prefs = await SharedPreferences.getInstance();
-        uid = prefs.getString('elderly_user_uid') ??
-            prefs.getString('elderly_user_id') ??
-            prefs.getString('elderly_user_name');
+        storedUid =
+            prefs.getString('elderly_user_uid') ??
+            prefs.getString('elderly_user_id');
+        uid = storedUid ?? prefs.getString('elderly_user_name');
         name = prefs.getString('elderly_user_name') ?? uid ?? '';
         loadedAge = prefs.getString('elderly_user_age') ?? '--';
         loadedGender = prefs.getString('elderly_user_gender') ?? '--';
@@ -120,9 +126,24 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
         return;
       }
 
+      // Ensure elderly profile is linked to the current caretaker UID.
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .set({'caretakerId': cId}, SetOptions(merge: true));
+        if (name.isNotEmpty && name != uid) {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(name)
+              .set({'caretakerId': cId}, SetOptions(merge: true));
+        }
+      } catch (_) {}
+
       if (!mounted) return;
       setState(() {
         elderlyUserId = dataId; // Use name-based ID for data queries
+        elderlyUserUid = storedUid ?? uid ?? '';
         elderlyUserName = name;
         elderlyUserAge = loadedAge;
         elderlyUserGender = loadedGender;
@@ -204,6 +225,8 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
                 _buildStatsCardsRow(context),
                 const SizedBox(height: 16),
                 _buildRecentActivityCard(),
+                const SizedBox(height: 16),
+                _buildBuddyAlertsCard(),
                 const SizedBox(height: 24),
                 _buildSectionTitle("Quick Access"),
                 const SizedBox(height: 12),
@@ -1068,9 +1091,13 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
 
   Future<Widget> _buildEnhancedBuddyScreen() async {
     final prefs = await SharedPreferences.getInstance();
+    final fallbackElderlyId =
+        prefs.getString('elderly_user_uid') ??
+        prefs.getString('elderly_user_id') ??
+        elderlyUserId;
     return EnhancedBuddyActivityScreen(
       caretakerId: await CaretakerIdHelper.getCurrentCaretakerId() ?? caretakerId,
-      elderlyId: prefs.getString('elderly_user_id') ?? elderlyUserId,
+      elderlyId: elderlyUserUid.isNotEmpty ? elderlyUserUid : fallbackElderlyId,
       elderlyName: prefs.getString('elderly_user_name') ?? elderlyUserName,
     );
   }
@@ -1127,6 +1154,168 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
 
   Widget _buildSectionTitle(String title) {
     return Text(title, style: CaretakerTextStyles.sectionTitle);
+  }
+
+  // ── Buddy Alerts Summary ──────────────────────────────────────────────────
+
+  Widget _buildBuddyAlertsCard() {
+    if (caretakerId.isEmpty) {
+      return _buildEmptyCard("No caretaker linked for alerts.");
+    }
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: _notificationService.getNotificationsStream(caretakerId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _buildLoadingCard("Loading buddy alerts...");
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return _buildEmptyCard(
+            "No buddy alerts yet. Alerts will appear here when attention is needed.",
+          );
+        }
+
+        final notifications = snapshot.data!.docs;
+        final unreadCount = notifications.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          return data['isRead'] != true;
+        }).length;
+
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: _buildCardDecoration(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Buddy Alerts', style: CaretakerTextStyles.cardTitle),
+                  if (unreadCount > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.red.shade200),
+                      ),
+                      child: Text(
+                        '$unreadCount unread',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.red.shade800,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              ...notifications.take(3).map((doc) {
+                final data = doc.data() as Map<String, dynamic>;
+                return _buildBuddyAlertItem(data);
+              }),
+              if (notifications.length > 3)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Open Buddy Activity to view all alerts.',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildBuddyAlertItem(Map<String, dynamic> notification) {
+    final severity = notification['severity'] ?? 'info';
+    final title = notification['title'] ?? 'Alert';
+    final message = notification['message'] ?? '';
+    final timestamp = notification['createdAt'] as Timestamp?;
+
+    IconData icon;
+    Color color;
+    switch (severity) {
+      case 'urgent':
+        icon = Icons.warning;
+        color = Colors.red;
+        break;
+      case 'moderate':
+        icon = Icons.info;
+        color = Colors.orange;
+        break;
+      default:
+        icon = Icons.notifications;
+        color = Colors.blue;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 18, color: color),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  message,
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            _formatAlertTimestamp(timestamp),
+            style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatAlertTimestamp(Timestamp? timestamp) {
+    if (timestamp == null) return '';
+    final dateTime = timestamp.toDate();
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+
+    if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m';
+    }
+    if (difference.inHours < 24) {
+      return '${difference.inHours}h';
+    }
+    if (difference.inDays < 7) {
+      return '${difference.inDays}d';
+    }
+    return '${dateTime.month}/${dateTime.day}';
   }
 
   // ── Card Helpers ──────────────────────────────────────────────────────────
