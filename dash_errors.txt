@@ -1,0 +1,10 @@
+﻿Analyzing caretaker_dashboard.dart...
+
+warning - caretaker_dashboard.dart:6:8 - Unused import: 'cognitive_health_screen.dart'. Try removing the import directive. - unused_import
+warning - caretaker_dashboard.dart:8:8 - Unused import: 'medication_screen.dart'. Try removing the import directive. - unused_import
+warning - caretaker_dashboard.dart:11:8 - Unused import: 'connect_screens.dart'. Try removing the import directive. - unused_import
+   info - caretaker_dashboard.dart:21:9 - Parameter 'key' could be a super parameter. Trying converting 'key' to a super parameter. - use_super_parameters
+   info - caretaker_dashboard.dart:121:7 - Don't invoke 'print' in production code. Try using a logging framework. - avoid_print
+   info - caretaker_dashboard.dart:585:18 - Unnecessary use of 'toList' in a spread. Try removing the invocation of 'toList'. - unnecessary_to_list_in_spreads
+
+6 issues found.
