@@ -484,23 +484,55 @@ Extract important memories with emphasis on emotional state and any concerning p
         sentimentData: sentimentData,
       );
 
-      // Save report
-      await _firestore
+      // Check for existing weekly report
+      String? existingWeeklyDocId;
+      final existingWeeklySnapshot = await _firestore
           .collection('users')
           .doc(caretakerId)
           .collection('weekly_reports')
-          .add({
-            'elderlyId': elderlyId,
-            'elderlyName': elderlyName,
-            'reportPeriod': {
-              'start': Timestamp.fromDate(weekAgo),
-              'end': Timestamp.now(),
-            },
-            'sentimentData': sentimentData,
-            'summary': reportSummary,
-            'createdAt': FieldValue.serverTimestamp(),
-            'isRead': false,
-          });
+          .where('elderlyId', isEqualTo: elderlyId)
+          .orderBy('createdAt', descending: true)
+          .limit(10)
+          .get();
+
+      final targetDate = DateTime.now();
+      for (final doc in existingWeeklySnapshot.docs) {
+          final data = doc.data();
+          final ts = data['createdAt'] as Timestamp?;
+          if (ts != null && ts.toDate().year == targetDate.year && ts.toDate().month == targetDate.month && (ts.toDate().day - targetDate.day).abs() <= 3) {
+              existingWeeklyDocId = doc.id;
+              break;
+          }
+      }
+
+      final reportData = {
+        'elderlyId': elderlyId,
+        'elderlyName': elderlyName,
+        'reportPeriod': {
+          'start': Timestamp.fromDate(weekAgo),
+          'end': Timestamp.now(),
+        },
+        'sentimentData': sentimentData,
+        'summary': reportSummary,
+        'createdAt': FieldValue.serverTimestamp(),
+        'isRead': false,
+      };
+
+      // Save report
+      if (existingWeeklyDocId != null) {
+          await _firestore
+              .collection('users')
+              .doc(caretakerId)
+              .collection('weekly_reports')
+              .doc(existingWeeklyDocId)
+              .set(reportData, SetOptions(merge: true));
+      } else {
+          await _firestore
+              .collection('users')
+              .doc(caretakerId)
+              .collection('weekly_reports')
+              .add(reportData);
+      }
 
       // Send notification about new report
       await _firestore
@@ -559,23 +591,53 @@ Extract important memories with emphasis on emotional state and any concerning p
         sentimentData: sentimentData,
       );
 
-      await _firestore
+      final reportData = {
+        'elderlyId': elderlyId,
+        'elderlyName': elderlyName,
+        'reportPeriod': {
+          'start': Timestamp.fromDate(periodStart),
+          'end': Timestamp.fromDate(periodEnd),
+        },
+        'sentimentData': sentimentData,
+        'summary': reportSummary,
+        'createdAt': Timestamp.fromDate(periodEnd), // date it as week end for ordering
+        'isRead': false,
+        'isBackfilled': true,
+      };
+
+      String? existingWeeklyDocId;
+      final existingWeeklySnapshot = await _firestore
           .collection('users')
           .doc(caretakerId)
           .collection('weekly_reports')
-          .add({
-            'elderlyId': elderlyId,
-            'elderlyName': elderlyName,
-            'reportPeriod': {
-              'start': Timestamp.fromDate(periodStart),
-              'end': Timestamp.fromDate(periodEnd),
-            },
-            'sentimentData': sentimentData,
-            'summary': reportSummary,
-            'createdAt': Timestamp.fromDate(periodEnd), // date it as week end for ordering
-            'isRead': false,
-            'isBackfilled': true,
-          });
+          .where('elderlyId', isEqualTo: elderlyId)
+          .orderBy('createdAt', descending: true)
+          .limit(10)
+          .get();
+
+      for (final doc in existingWeeklySnapshot.docs) {
+          final data = doc.data();
+          final ts = data['createdAt'] as Timestamp?;
+          if (ts != null && ts.toDate().year == periodEnd.year && ts.toDate().month == periodEnd.month && (ts.toDate().day - periodEnd.day).abs() <= 3) {
+              existingWeeklyDocId = doc.id;
+              break;
+          }
+      }
+
+      if (existingWeeklyDocId != null) {
+          await _firestore
+              .collection('users')
+              .doc(caretakerId)
+              .collection('weekly_reports')
+              .doc(existingWeeklyDocId)
+              .set(reportData, SetOptions(merge: true));
+      } else {
+          await _firestore
+              .collection('users')
+              .doc(caretakerId)
+              .collection('weekly_reports')
+              .add(reportData);
+      }
 
       print('✅ Backfill sentiment report saved for $elderlyName ($periodStart)');
     } catch (e) {

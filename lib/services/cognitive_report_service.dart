@@ -264,6 +264,26 @@ class CognitiveReportService {
           })
           .map((doc) => doc.data())
           .toList();
+          
+      String? existingWeeklyDocId;
+      final existingWeeklySnapshot = await _firestore
+          .collection('users')
+          .doc(caretakerId)
+          .collection('cognitive_reports')
+          .where('elderlyId', isEqualTo: elderlyId)
+          .where('type', isEqualTo: 'weekly')
+          .orderBy('date', descending: true)
+          .limit(10)
+          .get();
+          
+      for (final doc in existingWeeklySnapshot.docs) {
+          final data = doc.data();
+          final ts = data['date'] as Timestamp?;
+          if (ts != null && ts.toDate().year == effectiveEnd.year && ts.toDate().month == effectiveEnd.month && (ts.toDate().day - effectiveEnd.day).abs() <= 3) {
+              existingWeeklyDocId = doc.id;
+              break;
+          }
+      }
 
       if (dailyReports.isEmpty) {
         // Generate a placeholder report
@@ -294,13 +314,23 @@ class CognitiveReportService {
 
         final reportMap = placeholder.toMap();
         reportMap['caretakerId'] = caretakerId;
-        await _firestore
-            .collection('users')
-            .doc(caretakerId)
-            .collection('cognitive_reports')
-            .add(reportMap);
+        
+        if (existingWeeklyDocId != null) {
+            await _firestore
+                .collection('users')
+                .doc(caretakerId)
+                .collection('cognitive_reports')
+                .doc(existingWeeklyDocId)
+                .set(reportMap, SetOptions(merge: true));
+        } else {
+            await _firestore
+                .collection('users')
+                .doc(caretakerId)
+                .collection('cognitive_reports')
+                .add(reportMap);
+        }
 
-        print('✅ Placeholder weekly report generated for $userName');
+        print('✅ Placeholder weekly report updated/generated for $userName');
         return;
       }
 
@@ -351,13 +381,25 @@ class CognitiveReportService {
         createdAt: effectiveEnd,
       );
 
-      await _firestore
-          .collection('users')
-          .doc(caretakerId)
-          .collection('cognitive_reports')
-          .add(report.toMap());
+      final reportMap = report.toMap();
+      reportMap['caretakerId'] = caretakerId;
 
-      print('✅ Weekly cognitive trend report generated for $userName ($effectiveStart)');
+      if (existingWeeklyDocId != null) {
+          await _firestore
+              .collection('users')
+              .doc(caretakerId)
+              .collection('cognitive_reports')
+              .doc(existingWeeklyDocId)
+              .set(reportMap, SetOptions(merge: true));
+      } else {
+          await _firestore
+              .collection('users')
+              .doc(caretakerId)
+              .collection('cognitive_reports')
+              .add(reportMap);
+      }
+
+      print('✅ Weekly cognitive trend report updated/generated for $userName ($effectiveStart)');
     } catch (e) {
       print('❌ Error generating weekly cognitive report: $e');
     }
