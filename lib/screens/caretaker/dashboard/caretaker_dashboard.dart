@@ -126,6 +126,18 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
         return;
       }
 
+      // Persist the selected elderly identity for other caretaker tabs (e.g. Safety Monitor)
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        if (name.isNotEmpty) {
+          await prefs.setString('elderly_user_name', name);
+        }
+        if (dataId.isNotEmpty) {
+          await prefs.setString('elderly_user_id', dataId);
+          await prefs.setString('elderly_user_uid', dataId);
+        }
+      } catch (_) {}
+
       if (!mounted) return;
       setState(() {
         elderlyUserId = dataId; // Use name-based ID for data queries

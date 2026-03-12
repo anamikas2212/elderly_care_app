@@ -261,17 +261,48 @@ class _SafetyMonitorScreenState extends State<SafetyMonitorScreen> with WidgetsB
             _buildActiveAlertsSection(),
             const SizedBox(height: 24),
 
-            // SOS Logs
-            const Text(
-              'SOS History',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: CaretakerColors.textPrimary,
-              ),
+            // SOS History
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'SOS History',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: CaretakerColors.textPrimary,
+                  ),
+                ),
+                TextButton(
+                  onPressed: _showAllSOSHistory,
+                  child: const Text('View All'),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
-            _buildSOSLogsSection(),
+            _buildSOSLogsSection(limit: 3),
+            const SizedBox(height: 24),
+
+            // Safe Zone History
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Safe Zone History',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: CaretakerColors.textPrimary,
+                  ),
+                ),
+                TextButton(
+                  onPressed: _showAllSafeZoneHistory,
+                  child: const Text('View All'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _buildSafeZoneLogsSection(limit: 3),
           ],
         ),
       ),
@@ -279,95 +310,153 @@ class _SafetyMonitorScreenState extends State<SafetyMonitorScreen> with WidgetsB
   }
 
   Widget _buildActiveAlertsSection() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: _sosService.getActiveSOSAlerts(elderlyUserId),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting && 
-            !snapshot.hasData) {
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(20),
-              child: CircularProgressIndicator(),
-            ),
-          );
-        }
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(elderlyUserId)
+          .snapshots(),
+      builder: (context, userSnapshot) {
+        return StreamBuilder<QuerySnapshot>(
+          stream: _sosService.getActiveSOSAlerts(elderlyUserId),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting && 
+                !snapshot.hasData && 
+                (userSnapshot.connectionState == ConnectionState.waiting && !userSnapshot.hasData)) {
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(20),
+                  child: CircularProgressIndicator(),
+                ),
+              );
+            }
 
-        if (snapshot.hasError) {
-          return Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.red.shade50,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              children: [
-                Text(
-                  'Error loading alerts: ${snapshot.error}',
-                  style: const TextStyle(color: Colors.red),
+            if (snapshot.hasError) {
+              return Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                const SizedBox(height: 8),
-                ElevatedButton(
-                  onPressed: () {
-                    setState(() => _isLoading = true);
-                    _loadElderlyUserId();
-                  },
-                  child: const Text('Retry'),
+                child: Column(
+                  children: [
+                    Text(
+                      'Error loading alerts: ${snapshot.error}',
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                    const SizedBox(height: 8),
+                    ElevatedButton(
+                      onPressed: () {
+                        setState(() => _isLoading = true);
+                        _loadElderlyUserId();
+                      },
+                      child: const Text('Retry'),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          );
-        }
+              );
+            }
 
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
+            final safeZoneAlert = _buildSafeZoneAlertCard(userSnapshot.data);
+            final activeDocs = snapshot.data?.docs ?? [];
+            final hasSOS = activeDocs.isNotEmpty;
+            final hasSafeZone = safeZoneAlert != null;
+
+            if (!hasSOS && !hasSafeZone) {
+              return Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.check_circle, size: 48, color: Colors.green),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text(
-                        'All Clear',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle, size: 48, color: Colors.green),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text(
+                            'All Clear',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'No active emergencies',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ],
                       ),
-                      SizedBox(height: 4),
-                      Text(
-                        'No active emergencies',
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
+              );
+            }
+
+            return Column(
+              children: [
+                if (safeZoneAlert != null) safeZoneAlert,
+                ...activeDocs.map((doc) => _buildAlertCard(doc)).toList(),
               ],
-            ),
-          );
-        }
-
-        final activeDocs = snapshot.data!.docs;
-
-        return Column(
-          children: activeDocs.map((doc) {
-            return _buildAlertCard(doc);
-          }).toList(),
+            );
+          },
         );
       },
+    );
+  }
+
+  Widget? _buildSafeZoneAlertCard(DocumentSnapshot? snapshot) {
+    if (snapshot == null || !snapshot.exists) return null;
+    final data = snapshot.data() as Map<String, dynamic>;
+    final isHome = data['isHome'] as bool?;
+
+    if (isHome == null || isHome) return null;
+
+    final distance = (data['distanceFromHome'] as num?)?.toDouble();
+    final lastUpdate = (data['lastLocationUpdate'] as Timestamp?)?.toDate();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.orange,
+          width: 2,
+        ),
+      ),
+      child: SizedBox(
+        width: double.infinity,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'OUTSIDE SAFE ZONE',
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.orange,
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (distance != null)
+              Text('Distance from home: ${distance.toStringAsFixed(0)} m'),
+            if (lastUpdate != null)
+              Text('Last update: ${_formatDateTime(lastUpdate)}'),
+          ],
+        ),
+      ),
     );
   }
 
@@ -476,10 +565,12 @@ class _SafetyMonitorScreenState extends State<SafetyMonitorScreen> with WidgetsB
     );
   }
 
-  Widget _buildSOSLogsSection() {
+  Widget _buildSOSLogsSection({required int limit}) {
     return StreamBuilder<QuerySnapshot>(
       stream: _sosService.getSOSLogs(elderlyUserId),
       builder: (context, snapshot) {
+        final docs = snapshot.data?.docs ?? [];
+        final limitedDocs = docs.take(limit).toList();
         if (snapshot.connectionState == ConnectionState.waiting && 
             !snapshot.hasData) {
           return const Center(
@@ -504,7 +595,7 @@ class _SafetyMonitorScreenState extends State<SafetyMonitorScreen> with WidgetsB
           );
         }
 
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+        if (docs.isEmpty) {
           return Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -518,7 +609,7 @@ class _SafetyMonitorScreenState extends State<SafetyMonitorScreen> with WidgetsB
         }
 
         return Column(
-          children: snapshot.data!.docs.map((doc) {
+          children: limitedDocs.map((doc) {
             final data = doc.data() as Map<String, dynamic>;
             final action = data['action'] ?? 'unknown';
             final timestamp = data['triggeredAt'] as Timestamp?;
@@ -614,6 +705,194 @@ class _SafetyMonitorScreenState extends State<SafetyMonitorScreen> with WidgetsB
               ),
             );
           }).toList(),
+        );
+      },
+    );
+  }
+
+  Widget _buildSafeZoneLogsSection({required int limit}) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('safezone_logs')
+          .doc(elderlyUserId)
+          .collection('logs')
+          .orderBy('triggeredAt', descending: true)
+          .limit(limit)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting && 
+            !snapshot.hasData) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Text(
+              'Error loading history: ${snapshot.error}',
+              style: const TextStyle(color: Colors.red),
+            ),
+          );
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Center(
+              child: Text('No safe zone history'),
+            ),
+          );
+        }
+
+        return Column(
+          children: snapshot.data!.docs.map((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final timestamp = data['triggeredAt'] as Timestamp?;
+            final distance = (data['distanceFromHome'] as num?)?.toDouble();
+            final location = data['location'] as Map<String, dynamic>?;
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.warning, color: Colors.orange, size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Outside Safe Zone',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        if (timestamp != null)
+                          Text(
+                            _formatDateTime(timestamp.toDate()),
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 14,
+                            ),
+                          ),
+                        if (distance != null)
+                          Text(
+                            'Distance: ${distance.toStringAsFixed(0)} m',
+                            style: TextStyle(
+                              color: Colors.grey.shade500,
+                              fontSize: 12,
+                            ),
+                          ),
+                        if (location != null)
+                          Text(
+                            'Lat: ${location['latitude']?.toStringAsFixed(4)}, Lng: ${location['longitude']?.toStringAsFixed(4)}',
+                            style: TextStyle(
+                              color: Colors.grey.shade500,
+                              fontSize: 12,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        );
+      },
+    );
+  }
+
+  void _showAllSOSHistory() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'SOS History',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: CaretakerColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildSOSLogsSection(limit: 50),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showAllSafeZoneHistory() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Safe Zone History',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: CaretakerColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildSafeZoneLogsSection(limit: 50),
+                ],
+              ),
+            ),
+          ),
         );
       },
     );

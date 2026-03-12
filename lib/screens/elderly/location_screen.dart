@@ -38,6 +38,7 @@ class _LocationScreenState extends State<LocationScreen> {
   
   // Stream subscription for location updates
   StreamSubscription<Position>? _positionStreamSubscription;
+  Timer? _positionPollTimer;
   
   // Distance from home
   double? _distanceFromHome;
@@ -49,6 +50,12 @@ class _LocationScreenState extends State<LocationScreen> {
   bool _showRoute = false;
   double? _routeDistance;
   String? _routeDuration;
+  LatLng? _lastRouteOrigin;
+  LatLng? _lastRouteDestination;
+  DateTime? _lastRouteFetchAt;
+  final double _routeRefreshDistanceMeters = 25.0;
+  final Duration _minRouteRefreshInterval = Duration(seconds: 15);
+  final double _elderlyWalkingSpeedMps = 1.0; // ~3.6 km/h
   
   // ✅ NEW: Pin-drop mode for setting home
   bool _isSettingHomeMode = false;
@@ -66,6 +73,7 @@ class _LocationScreenState extends State<LocationScreen> {
   @override
   void dispose() {
     _positionStreamSubscription?.cancel();
+    _positionPollTimer?.cancel();
     _mapController.dispose();
     super.dispose();
   }
@@ -165,6 +173,16 @@ class _LocationScreenState extends State<LocationScreen> {
     ).listen((Position position) {
       _updateLocation(position);
     });
+
+    // Fallback poll to keep UI status fresh even when stream throttles (e.g., web)
+    _positionPollTimer?.cancel();
+    _positionPollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      ).then(_updateLocation).catchError((error) {
+        print('Error polling position: $error');
+      });
+    });
   }
 
   Future<void> _updateLocation(Position position) async {
@@ -183,8 +201,8 @@ class _LocationScreenState extends State<LocationScreen> {
         position.longitude,
       );
 
+      final wasInside = _isInsideSafeZone;
       bool isInside = distance <= _safeZoneRadius;
-      bool wasOutside = !_isInsideSafeZone;
 
       setState(() {
         _distanceFromHome = distance;
@@ -196,9 +214,10 @@ class _LocationScreenState extends State<LocationScreen> {
       print('🏠 Inside safe zone: $isInside');
 
       // Auto-generate route when leaving safe zone
-      if (!isInside && wasOutside != !isInside) {
+      if (!isInside && wasInside) {
         print('⚠️ User left safe zone - generating route home');
-        _fetchRoute();
+        _logSafeZoneExit(position, distance);
+        _fetchRoute(force: true);
       } else if (!isInside && _showRoute) {
         _fetchRoute();
       } else if (isInside && _showRoute) {
@@ -206,6 +225,9 @@ class _LocationScreenState extends State<LocationScreen> {
           _showRoute = false;
           _routePoints.clear();
         });
+        _lastRouteOrigin = null;
+        _lastRouteDestination = null;
+        _lastRouteFetchAt = null;
         print('✅ User back in safe zone - clearing route');
       }
 
@@ -229,6 +251,29 @@ class _LocationScreenState extends State<LocationScreen> {
       }, SetOptions(merge: true));
     } catch (e) {
       print('❌ Error sending location to Firebase: $e');
+    }
+  }
+
+  Future<void> _logSafeZoneExit(Position position, double distance) async {
+    try {
+      if (_elderlyUserName == null || _elderlyUserName!.isEmpty) return;
+
+      await FirebaseFirestore.instance
+          .collection('safezone_logs')
+          .doc(_elderlyUserName)
+          .collection('logs')
+          .add({
+        'action': 'outside_safezone',
+        'triggeredAt': FieldValue.serverTimestamp(),
+        'distanceFromHome': distance,
+        'location': {
+          'latitude': position.latitude,
+          'longitude': position.longitude,
+          'accuracy': position.accuracy,
+        },
+      });
+    } catch (e) {
+      print('❌ Error logging safe zone exit: $e');
     }
   }
 
@@ -302,6 +347,9 @@ class _LocationScreenState extends State<LocationScreen> {
       );
 
       print('✅ Home location set: ${_homeLocation!.latitude}, ${_homeLocation!.longitude}');
+      if (_currentLocation != null) {
+        _fetchRoute(force: true);
+      }
     } catch (e) {
       setState(() => _isSavingHome = false);
       print('❌ Error setting home location: $e');
@@ -316,8 +364,40 @@ class _LocationScreenState extends State<LocationScreen> {
     }
   }
 
-  Future<void> _fetchRoute() async {
+  bool _shouldRefreshRoute({required LatLng origin, required LatLng destination}) {
+    if (_lastRouteOrigin == null || _lastRouteDestination == null || _lastRouteFetchAt == null) {
+      return true;
+    }
+
+    final now = DateTime.now();
+    if (now.difference(_lastRouteFetchAt!) < _minRouteRefreshInterval) {
+      return false;
+    }
+
+    final movedFromLastOrigin = Geolocator.distanceBetween(
+      _lastRouteOrigin!.latitude,
+      _lastRouteOrigin!.longitude,
+      origin.latitude,
+      origin.longitude,
+    );
+
+    final movedFromLastDestination = Geolocator.distanceBetween(
+      _lastRouteDestination!.latitude,
+      _lastRouteDestination!.longitude,
+      destination.latitude,
+      destination.longitude,
+    );
+
+    return movedFromLastOrigin >= _routeRefreshDistanceMeters ||
+        movedFromLastDestination >= _routeRefreshDistanceMeters;
+  }
+
+  Future<void> _fetchRoute({bool force = false}) async {
     if (_currentLocation == null || _homeLocation == null) return;
+
+    if (!force && !_shouldRefreshRoute(origin: _currentLocation!, destination: _homeLocation!)) {
+      return;
+    }
 
     setState(() => _isLoadingRoute = true);
 
@@ -346,9 +426,12 @@ class _LocationScreenState extends State<LocationScreen> {
             }).toList();
             
             _routeDistance = distance.toDouble();
-            _routeDuration = _formatDuration(duration.toInt());
+            _routeDuration = _estimateWalkingDuration(distance.toDouble());
             _showRoute = true;
             _isLoadingRoute = false;
+            _lastRouteOrigin = _currentLocation;
+            _lastRouteDestination = _homeLocation;
+            _lastRouteFetchAt = DateTime.now();
           });
 
           print('✅ Route fetched: ${_routePoints.length} points');
@@ -371,12 +454,21 @@ class _LocationScreenState extends State<LocationScreen> {
     return '$hours hr $remainingMinutes min';
   }
 
+  String _estimateWalkingDuration(double? distanceMeters) {
+    if (distanceMeters == null) return '';
+    final seconds = (distanceMeters / _elderlyWalkingSpeedMps).round();
+    return _formatDuration(seconds);
+  }
+
   void _toggleRoute() {
     if (_showRoute) {
       setState(() {
         _showRoute = false;
         _routePoints.clear();
       });
+      _lastRouteOrigin = null;
+      _lastRouteDestination = null;
+      _lastRouteFetchAt = null;
     } else {
       _fetchRoute();
     }
@@ -690,21 +782,25 @@ class _LocationScreenState extends State<LocationScreen> {
                     decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
                     child: Column(
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.straighten, size: 20),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Distance from home: ${_formatDistance(_distanceFromHome)}',
-                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                            ),
-                          ],
-                        ),
+                        if (_isInsideSafeZone) ...[
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.straighten, size: 20),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Distance from home: ${_formatDistance(_distanceFromHome)}',
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                        ],
                         if (_showRoute && _routeDistance != null) ...[
-                          const SizedBox(height: 8),
-                          const Divider(),
-                          const SizedBox(height: 8),
+                          if (_isInsideSafeZone) ...[
+                            const SizedBox(height: 8),
+                            const Divider(),
+                            const SizedBox(height: 8),
+                          ],
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceAround,
                             children: [

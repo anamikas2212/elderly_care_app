@@ -41,6 +41,7 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
     // Always sign out first to avoid reusing the caretaker's session or
     // a previous elderly user's anonymous session.
     String uid = '';
+    final elderlyId = _nameController.text.trim();
     try {
       final existingUser = FirebaseAuth.instance.currentUser;
       if (existingUser != null) {
@@ -50,14 +51,14 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
       uid = credential.user?.uid ?? '';
     } catch (e) {
       // Firebase not available — fall back to name-based ID
-      uid = _nameController.text.trim();
+      uid = elderlyId;
     }
 
     // Save details locally
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('elderly_user_uid', uid);
-    await prefs.setString('elderly_user_id', uid);
-    await prefs.setString('elderly_user_name', _nameController.text.trim());
+    await prefs.setString('elderly_user_uid', elderlyId);
+    await prefs.setString('elderly_user_id', elderlyId);
+    await prefs.setString('elderly_user_name', elderlyId);
     await prefs.setString('elderly_user_age', _ageController.text.trim());
     await prefs.setString('elderly_user_gender', _genderController.text.trim());
     await prefs.setString('user_role', 'elderly');
@@ -66,21 +67,22 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
     // can look up the caretakerId when sending notifications.
     try {
       final Map<String, dynamic> userData = {
-        'name': _nameController.text.trim(),
+        'name': elderlyId,
         'age': _ageController.text.trim(),
         'gender': _genderController.text.trim(),
         'role': 'elderly',
+        'authUid': uid,
         'lastActive': FieldValue.serverTimestamp(),
       };
       await FirebaseFirestore.instance
           .collection('users')
-          .doc(uid)
+          .doc(elderlyId)
           .set(userData, SetOptions(merge: true));
       print('✅ Elderly user profile saved to Firestore');
 
       // Generate 6-digit pairing code for caretaker linking
       try {
-        final code = await _pairingService.generatePairingCode(uid);
+        final code = await _pairingService.generatePairingCode(elderlyId);
         await prefs.setString('care_code', code);
         print('✅ Care Code generated and saved: $code');
       } catch (e) {
@@ -359,8 +361,9 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
       _isAnimating = true;
     });
 
-    // Sign in anonymously to get a Firebase UID for Firestore queries
+    // Sign in anonymously (auth), but use name as the app-level UID
     String uid = '';
+    final elderlyId = _nameController.text.trim();
     try {
       final existingUser = FirebaseAuth.instance.currentUser;
       if (existingUser != null) {
@@ -371,14 +374,14 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
       }
     } catch (e) {
       // Firebase not available — fall back to name-based ID
-      uid = _nameController.text.trim();
+      uid = elderlyId;
     }
 
     // Save details locally
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('elderly_user_uid', uid);   // Firebase UID for Firestore
-    await prefs.setString('elderly_user_id', uid);    // Keep backwards compat
-    await prefs.setString('elderly_user_name', _nameController.text.trim());
+    await prefs.setString('elderly_user_uid', elderlyId);
+    await prefs.setString('elderly_user_id', elderlyId);
+    await prefs.setString('elderly_user_name', elderlyId);
     await prefs.setString('elderly_user_age', _ageController.text.trim());
     await prefs.setString('elderly_user_gender', _genderController.text.trim());
 
