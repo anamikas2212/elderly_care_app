@@ -434,7 +434,7 @@ class _MonumentRecallGameState extends State<MonumentRecallGame> {
         // Set A
         [
           MonumentQuestion("What is this monument?", ["Padmanabhaswamy Temple", "Guruvayur Temple", "Sabarimala"], "Padmanabhaswamy Temple", "Temples", true,
-            imageUrl: "https://www.keralatourism.org/images/ky/ky_home_images/sree_padmanabhaswamy_temple_2.jpg"),
+            imageUrl: "https://images.unsplash.com/photo-1600010991979-3baaa196f3cf?w=400&q=80"), // Golden temple architecture proxy
           MonumentQuestion("Where is Bekal Fort located?", ["Kasaragod", "Kannur", "Kochi"], "Kasaragod", "Forts", false),
           MonumentQuestion("Which palace is famous for murals?", ["Mattancherry Palace", "Hill Palace", "Kowdiar Palace"], "Mattancherry Palace", "Palaces", false),
           MonumentQuestion("Edakkal Caves are in which district?", ["Wayanad", "Idukki", "Palakkad"], "Wayanad", "Caves", false),
@@ -443,12 +443,12 @@ class _MonumentRecallGameState extends State<MonumentRecallGame> {
         // Set B
         [
           MonumentQuestion("This is a famous backwater destination. Where?", ["Alappuzha", "Kottayam", "Ernakulam"], "Alappuzha", "Landmarks", true,
-            imageUrl: "https://www.keralatourism.org/images/about/large/alappuzha_the_venice_of_the_east.jpg"), // Working proxy
+            imageUrl: "https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?w=400&q=80"), // Kerala backwaters proxy
           MonumentQuestion("Thalassery Fort was built by?", ["British", "Dutch", "Portuguese"], "British", "Forts", false),
           MonumentQuestion("Where is Guruvayur Temple?", ["Thrissur", "Palakkad", "Ernakulam"], "Thrissur", "Temples", false),
           MonumentQuestion("Munnar is famous for?", ["Tea plantations", "Beaches", "Forts"], "Tea plantations", "Landmarks", false),
           MonumentQuestion("Identify this waterfall in Idukki", ["Athirappilly", "Cheeyappara", "Soochipara"], "Cheeyappara", "Nature", true,
-            imageUrl: "https://www.keralatourism.org/images/destination/large/cheeyappara_waterfalls_in_idukki20131114093952_125_1.jpg"), // Working proxy
+            imageUrl: "https://images.unsplash.com/photo-1546944061-07eb7ccff4d6?w=400&q=80"), // Waterfall proxy
         ],
         // Set C
         [
@@ -465,7 +465,7 @@ class _MonumentRecallGameState extends State<MonumentRecallGame> {
           MonumentQuestion("Kappad Beach is historically significant because?", ["Vasco da Gama landed", "Tipu Sultan battle", "Dutch trading post"], "Vasco da Gama landed", "History", false),
           MonumentQuestion("Anjengo Fort was built by?", ["British", "Dutch", "Portuguese"], "British", "Forts", false),
           MonumentQuestion("Identify this waterfall", ["Athirappilly", "Soochipara", "Palaruvi"], "Athirappilly", "Nature", true,
-            imageUrl: "https://www.keralatourism.org/images/destination/large/athirappilly_waterfalls_thrissur20131031102559_34_1.jpg"), // Working proxy
+            imageUrl: "https://images.unsplash.com/photo-1616843413587-9e3a37f7bbd8?w=400&q=80"), // Athirappilly proxy
         ],
       ],
     };
