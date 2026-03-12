@@ -1,3 +1,181 @@
+﻿/*import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+
+class ReportSchedulerService {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseMessaging _messaging = FirebaseMessaging.instance;
+
+  // Initialize notification service for caretaker
+  Future<void> initializeForCaretaker(String caretakerId) async {
+    try {
+      // Request permission
+      NotificationSettings settings = await _messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+        provisional: false,
+      );
+
+      if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+        //print('âœ… Notification permission granted');
+
+        // Get FCM token
+        String? token = await _messaging.getToken();
+        if (token != null) {
+          // Save token to caretaker's profile
+          await _firestore.collection('users').doc(caretakerId).set({
+            'fcmToken': token,
+            'notificationsEnabled': true,
+          }, SetOptions(merge: true));
+
+          //print('âœ… FCM Token saved: $token');
+        }
+
+        // Listen for token refresh
+        _messaging.onTokenRefresh.listen((newToken) {
+          _firestore.collection('users').doc(caretakerId).update({
+            'fcmToken': newToken,
+          });
+        });
+      } else {
+        //print('âŒ Notification permission denied');
+      }
+    } catch (e) {
+      //print('Error initializing notifications: $e');
+    }
+  }
+
+  // Listen to caretaker's notifications in real-time
+  Stream<QuerySnapshot> getNotificationsStream(String caretakerId) {
+    return _firestore
+        .collection('users')
+        .doc(caretakerId)
+        .collection('notifications')
+        .orderBy('createdAt', descending: true)
+        .limit(50)
+        .snapshots();
+  }
+
+  // Get unread notification count
+  Stream<int> getUnreadNotificationCount(String caretakerId) {
+    return _firestore
+        .collection('users')
+        .doc(caretakerId)
+        .collection('notifications')
+        .where('isRead', isEqualTo: false)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.length);
+  }
+
+  // Mark notification as read
+  Future<void> markAsRead(String caretakerId, String notificationId) async {
+    await _firestore
+        .collection('users')
+        .doc(caretakerId)
+        .collection('notifications')
+        .doc(notificationId)
+        .update({'isRead': true});
+  }
+
+  // Mark notification as resolved
+  Future<void> markAsResolved(String caretakerId, String notificationId) async {
+    await _firestore
+        .collection('users')
+        .doc(caretakerId)
+        .collection('notifications')
+        .doc(notificationId)
+        .update({
+      'isResolved': true,
+      'resolvedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  // Get buddy activity log
+  Stream<QuerySnapshot> getBuddyActivityStream(String elderlyId) {
+    return _firestore
+        .collection('users')
+        .doc(elderlyId)
+        .collection('buddy_activities')
+        .orderBy('timestamp', descending: true)
+        .limit(30)
+        .snapshots();
+  }
+
+  // Get weekly reports
+  Stream<QuerySnapshot> getWeeklyReportsStream(String caretakerId) {
+    return _firestore
+        .collection('users')
+        .doc(caretakerId)
+        .collection('weekly_reports')
+        .orderBy('createdAt', descending: true)
+        .limit(10)
+        .snapshots();
+  }
+
+  // Mark weekly report as read
+  Future<void> markReportAsRead(String caretakerId, String reportId) async {
+    await _firestore
+        .collection('users')
+        .doc(caretakerId)
+        .collection('weekly_reports')
+        .doc(reportId)
+        .update({'isRead': true});
+  }
+
+  // Delete notification
+  Future<void> deleteNotification(String caretakerId, String notificationId) async {
+    await _firestore
+        .collection('users')
+        .doc(caretakerId)
+        .collection('notifications')
+        .doc(notificationId)
+        .delete();
+  }
+
+  // Clear all read notifications
+  Future<void> clearReadNotifications(String caretakerId) async {
+    final snapshot = await _firestore
+        .collection('users')
+        .doc(caretakerId)
+        .collection('notifications')
+        .where('isRead', isEqualTo: true)
+        .get();
+
+    final batch = _firestore.batch();
+    for (var doc in snapshot.docs) {
+      batch.delete(doc.reference);
+    }
+    await batch.commit();
+  }
+
+  // Get notification statistics
+  Future<Map<String, int>> getNotificationStats(String caretakerId) async {
+    final snapshot = await _firestore
+        .collection('users')
+        .doc(caretakerId)
+        .collection('notifications')
+        .get();
+
+    int urgent = 0;
+    int moderate = 0;
+    int info = 0;
+
+    for (var doc in snapshot.docs) {
+      final severity = doc.data()['severity'];
+      if (severity == 'urgent') urgent++;
+      else if (severity == 'moderate') moderate++;
+      else info++;
+    }
+
+    return {
+      'urgent': urgent,
+      'moderate': moderate,
+      'info': info,
+      'total': snapshot.docs.length,
+    };
+  }
+}*/
+
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:elderly_care_app/services/enhanced_memory_service.dart';
@@ -7,24 +185,25 @@ class ReportSchedulerService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   Timer? _weeklyReportTimer;
   Timer? _dailyReportTimer;
-  Timer? _monthlyReportTimer;
 
   // Initialize the scheduler
   void initializeScheduler(String groqApiKey) {
+    // Catch up immediately on app start (last 24h daily + Sunday weekly)
     _runCatchUp(groqApiKey);
+
+    // Run weekly reports every Sunday at midnight
     _scheduleWeeklyReports(groqApiKey);
+    // Run daily reports every night at midnight
     _scheduleDailyReports(groqApiKey);
-    _scheduleMonthlyReports(groqApiKey);
   }
 
-  // ─── Daily Reports ──────────────────────────────────────────────
-
+  // Schedule daily cognitive reports
   void _scheduleDailyReports(String groqApiKey) {
     final now = DateTime.now();
     final nextRun = DateTime(now.year, now.month, now.day + 1, 0, 0, 0);
     final timeUntilNextRun = nextRun.difference(now);
 
-    print('📅 Next daily cognitive report scheduled for: $nextRun');
+    print('ðŸ“… Next daily cognitive report scheduled for: $nextRun');
 
     Future.delayed(timeUntilNextRun, () {
       _runDailyReports(groqApiKey, skipIfExists: true);
@@ -35,23 +214,29 @@ class ReportSchedulerService {
     });
   }
 
-  // ─── Weekly Reports (every Sunday) ──────────────────────────────
-
+  // Schedule weekly reports
   void _scheduleWeeklyReports(String groqApiKey) {
+    // Calculate time until next Sunday midnight
     final now = DateTime.now();
     final daysUntilSunday = (DateTime.sunday - now.weekday) % 7;
     final nextSunday = DateTime(
       now.year,
       now.month,
       now.day + (daysUntilSunday == 0 ? 7 : daysUntilSunday),
-      0, 0, 0,
+      0, // midnight
+      0,
+      0,
     );
 
     final timeUntilNextRun = nextSunday.difference(now);
-    print('📅 Next weekly report scheduled for: $nextSunday');
 
+    print('ðŸ“… Next weekly report scheduled for: $nextSunday');
+
+    // Schedule first run
     Future.delayed(timeUntilNextRun, () {
       _runWeeklyReports(groqApiKey, skipIfExists: true);
+
+      // Schedule recurring runs every 7 days
       _weeklyReportTimer = Timer.periodic(
         const Duration(days: 7),
         (_) => _runWeeklyReports(groqApiKey, skipIfExists: true),
@@ -59,90 +244,14 @@ class ReportSchedulerService {
     });
   }
 
-  // ─── Monthly Reports (1st of each month) ────────────────────────
-
-  void _scheduleMonthlyReports(String groqApiKey) {
-    final now = DateTime.now();
-    final nextMonth = DateTime(now.year, now.month + 1, 1, 1, 0, 0);
-    final timeUntilNextRun = nextMonth.difference(now);
-
-    print('📅 Next monthly report scheduled for: $nextMonth');
-
-    Future.delayed(timeUntilNextRun, () {
-      _runMonthlyReports(groqApiKey);
-      _monthlyReportTimer = Timer.periodic(
-        const Duration(days: 28), // approximate; will self-correct
-        (_) => _runMonthlyReports(groqApiKey),
-      );
-    });
-  }
-
-  // ─── Catch-up on app start ──────────────────────────────────────
-
   Future<void> _runCatchUp(String groqApiKey) async {
     await _runDailyReports(groqApiKey, skipIfExists: true);
-    await _runHistoricalBackfill(groqApiKey);
-  }
-
-  // ─── Historical backfill ────────────────────────────────────────
-
-  Future<void> _runHistoricalBackfill(String groqApiKey) async {
-    const weeksToCheck = 8;
-    print('🔄 Running historical weekly report backfill (last $weeksToCheck weeks)...');
-
-    try {
-      final memoryService = EnhancedMemoryService(groqApiKey: groqApiKey);
-      final cognitiveService = CognitiveReportService(groqApiKey: groqApiKey);
-
-      final usersSnapshot = await _firestore
-          .collection('users')
-          .where('caretakerId', isNull: false)
-          .get();
-
-      for (var userDoc in usersSnapshot.docs) {
-        final caretakerId = userDoc.data()['caretakerId'] as String?;
-        if (caretakerId == null) continue;
-
-        for (int w = weeksToCheck; w >= 1; w--) {
-          final now = DateTime.now();
-          final currentWeekStart = _startOfWeekSunday(now);
-          final weekStart = currentWeekStart.subtract(Duration(days: 7 * w));
-          final weekEnd = weekStart.add(const Duration(days: 7));
-
-          final exists = await _hasReportSince(
-            caretakerId: caretakerId,
-            elderlyId: userDoc.id,
-            type: 'weekly',
-            since: weekStart,
-            before: weekEnd,
-          );
-          if (exists) continue;
-
-          try {
-            await memoryService.generateWeeklySentimentReportForPeriod(
-              elderlyId: userDoc.id,
-              periodStart: weekStart,
-              periodEnd: weekEnd,
-            );
-            await cognitiveService.generateWeeklyCognitiveReport(
-              userDoc.id,
-              periodStart: weekStart,
-              periodEnd: weekEnd,
-            );
-            print('✅ Backfilled report for ${userDoc.id} week of ${weekStart.toIso8601String()}');
-          } catch (e) {
-            print('❌ Backfill failed for ${userDoc.id} week $weekStart: $e');
-          }
-        }
-      }
-      print('✅ Historical backfill complete.');
-    } catch (e) {
-      print('❌ Error in historical backfill: $e');
+    if (DateTime.now().weekday == DateTime.sunday) {
+      await _runWeeklyReports(groqApiKey, skipIfExists: true);
     }
   }
 
-  // ─── Run daily reports ──────────────────────────────────────────
-
+  // Run daily reports for all elderly users
   Future<void> _runDailyReports(
     String groqApiKey, {
     required bool skipIfExists,
@@ -150,7 +259,7 @@ class ReportSchedulerService {
     print('Running daily cognitive reports...');
     final cognitiveService = CognitiveReportService(groqApiKey: groqApiKey);
     final todayStart = _startOfDay(DateTime.now());
-
+    
     final usersSnapshot = await _firestore
         .collection('users')
         .where('caretakerId', isNull: false)
@@ -171,13 +280,12 @@ class ReportSchedulerService {
         }
         await cognitiveService.generateDailyCognitiveReport(userDoc.id);
       } catch (e) {
-        print('❌ Daily report failed for ${userDoc.id}: $e');
+        print('âŒ Daily report failed for ${userDoc.id}: $e');
       }
     }
   }
 
-  // ─── Run weekly reports ─────────────────────────────────────────
-
+  // Run weekly reports for all elderly users
   Future<void> _runWeeklyReports(
     String groqApiKey, {
     required bool skipIfExists,
@@ -189,10 +297,15 @@ class ReportSchedulerService {
       final cognitiveService = CognitiveReportService(groqApiKey: groqApiKey);
       final weekStart = _startOfWeekSunday(DateTime.now());
 
-      final usersSnapshot = await _firestore
-          .collection('users')
-          .where('caretakerId', isNull: false)
-          .get();
+      // Get all elderly users (users with a caretakerId field)
+      final usersSnapshot =
+          await _firestore
+              .collection('users')
+              .where('caretakerId', isNull: false)
+              .get();
+
+      int successCount = 0;
+      int errorCount = 0;
 
       for (var userDoc in usersSnapshot.docs) {
         try {
@@ -207,95 +320,68 @@ class ReportSchedulerService {
             );
             if (exists) continue;
           }
-          await memoryService.generateWeeklySentimentReport(elderlyId: userDoc.id);
+          // Sentiment report
+          await memoryService.generateWeeklySentimentReport(
+            elderlyId: userDoc.id,
+          );
+          
+          // Cognitive report
           await cognitiveService.generateWeeklyCognitiveReport(userDoc.id);
-          print('✅ Weekly reports generated for user: ${userDoc.id}');
+          
+          successCount++;
+          print('âœ… Reports generated for user: ${userDoc.id}');
         } catch (e) {
-          print('❌ Error generating weekly report for ${userDoc.id}: $e');
+          errorCount++;
+          print('âŒ Error generating report for ${userDoc.id}: $e');
         }
       }
+
+      print('Weekly reports complete: $successCount succeeded, $errorCount failed');
     } catch (e) {
       print('Error running weekly reports: $e');
     }
   }
 
-  // ─── Run monthly reports ────────────────────────────────────────
-
-  Future<void> _runMonthlyReports(String groqApiKey) async {
-    print('Running monthly reports...');
-
-    try {
-      final cognitiveService = CognitiveReportService(groqApiKey: groqApiKey);
-      final now = DateTime.now();
-      // Generate for previous month
-      final prevMonth = now.month == 1 ? 12 : now.month - 1;
-      final prevYear = now.month == 1 ? now.year - 1 : now.year;
-
-      final usersSnapshot = await _firestore
-          .collection('users')
-          .where('caretakerId', isNull: false)
-          .get();
-
-      for (var userDoc in usersSnapshot.docs) {
-        try {
-          await cognitiveService.generateMonthlyCognitiveReport(
-            userDoc.id,
-            month: prevMonth,
-            year: prevYear,
-          );
-          print('✅ Monthly report generated for ${userDoc.id} ($prevMonth/$prevYear)');
-        } catch (e) {
-          print('❌ Monthly report failed for ${userDoc.id}: $e');
-        }
-      }
-    } catch (e) {
-      print('Error running monthly reports: $e');
-    }
-  }
-
-  // ─── Manually trigger reports ───────────────────────────────────
-
+  // Manually trigger reports for a specific user (for testing)
   Future<void> triggerManualReport(String elderlyId, String groqApiKey) async {
     try {
-      print('🔄 Manually triggering reports for: $elderlyId');
+      print('ðŸ”„ Manually triggering reports for: $elderlyId');
       final memoryService = EnhancedMemoryService(groqApiKey: groqApiKey);
       final cognitiveService = CognitiveReportService(groqApiKey: groqApiKey);
-
+      
       await memoryService.generateWeeklySentimentReport(elderlyId: elderlyId);
       await cognitiveService.generateDailyCognitiveReport(elderlyId);
       await cognitiveService.generateWeeklyCognitiveReport(elderlyId);
-
-      print('✅ Manual reports generated successfully');
+      
+      print('âœ… manual reports generated successfully');
     } catch (e) {
-      print('❌ Error generating manual report: $e');
+      print('âŒ Error generating manual report: $e');
       rethrow;
     }
   }
-
-  // ─── Helpers ────────────────────────────────────────────────────
 
   Future<bool> _hasReportSince({
     required String caretakerId,
     required String elderlyId,
     required String type,
     required DateTime since,
-    DateTime? before,
   }) async {
-    var query = _firestore
+    final snapshot = await _firestore
         .collection('users')
         .doc(caretakerId)
         .collection('cognitive_reports')
-        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(since));
+        .where('elderlyId', isEqualTo: elderlyId)
+        .where('type', isEqualTo: type)
+        .orderBy('date', descending: true)
+        .limit(1)
+        .get();
 
-    if (before != null) {
-      query = query.where('date', isLessThan: Timestamp.fromDate(before));
-    }
-
-    final snapshot = await query.limit(50).get();
-    return snapshot.docs.any((doc) {
-      final data = doc.data();
-      return data['elderlyId'] == elderlyId && data['type'] == type;
-    });
+    if (snapshot.docs.isEmpty) return false;
+    final data = snapshot.docs.first.data();
+    final ts = data['date'] as Timestamp?;
+    if (ts == null) return false;
+    final reportDate = ts.toDate();
+    return !reportDate.isBefore(since);
   }
 
   DateTime _startOfDay(DateTime date) {
@@ -303,15 +389,16 @@ class ReportSchedulerService {
   }
 
   DateTime _startOfWeekSunday(DateTime date) {
-    final daysSinceSunday = date.weekday % 7;
+    final daysSinceSunday = date.weekday % 7; // Sunday=0, Monday=1, ...
     final sunday = date.subtract(Duration(days: daysSinceSunday));
     return DateTime(sunday.year, sunday.month, sunday.day);
   }
 
+  // Cancel scheduled reports (call this when disposing)
   void dispose() {
     _weeklyReportTimer?.cancel();
     _dailyReportTimer?.cancel();
-    _monthlyReportTimer?.cancel();
     print('Report scheduler stopped');
   }
 }
+

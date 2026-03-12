@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'push_notification_service.dart';
+import 'notification_service.dart';
 
 class SafetyAlertListenerService {
   StreamSubscription<QuerySnapshot>? _sosSub;
@@ -36,9 +36,9 @@ class SafetyAlertListenerService {
         final dt = ts.toDate();
         if (dt.isAfter(lastSosTime)) {
           final name = data['elderlyUserName'] ?? elderlyId;
-          await PushNotificationService.showLocalNotification(
-            'Emergency Alert',
-            'SOS from $name. Immediate action required.',
+          NotificationService.instance.showImmediate(
+            title: 'Emergency Alert',
+            body: 'SOS from $name. Immediate action required.',
           );
           if (dt.isAfter(newest)) newest = dt;
         }
@@ -62,9 +62,9 @@ class SafetyAlertListenerService {
         if (ts == null) continue;
         final dt = ts.toDate();
         if (dt.isAfter(lastSafeTime)) {
-          await PushNotificationService.showLocalNotification(
-            'Safe Zone Alert',
-            'Elderly has stepped out of the safe zone.',
+          NotificationService.instance.showImmediate(
+            title: 'Safe Zone Alert',
+            body: 'Elderly has stepped out of the safe zone.',
           );
           if (dt.isAfter(newest)) newest = dt;
         }

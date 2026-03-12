@@ -19,12 +19,6 @@ void main() async {
     await NotificationService.instance.init();
   }
 
-  if (!kIsWeb) {
-    FirebaseMessaging.onBackgroundMessage(
-      PushNotificationService.firebaseMessagingBackgroundHandler,
-    );
-    await PushNotificationService.initialize();
-  }
 
   // Added: initialize report scheduler
   final scheduler = ReportSchedulerService();

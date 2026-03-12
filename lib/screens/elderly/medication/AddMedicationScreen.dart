@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../../services/medicine_search_service.dart';
 
 final _firestore = FirebaseFirestore.instance;
 final _auth = FirebaseAuth.instance;
@@ -24,12 +27,26 @@ class AddMedicationScreen extends StatefulWidget {
 class _AddMedicationScreenState extends State<AddMedicationScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isSaving = false;
+  bool _isSearching = false;
+  static const bool _debugMedSearch = true;
+  String? _diagnosticBanner;
 
   // Controllers
   final _nameController = TextEditingController();
   final _dosageController = TextEditingController();
   final _doctorController = TextEditingController();
   final _noteController = TextEditingController();
+  final FocusNode _nameFocusNode = FocusNode();
+  Timer? _nameDebounce;
+  String _activeQuery = '';
+
+  final _medicineSearchService = MedicineSearchService(_firestore);
+  List<MedicineSuggestion> _nameSuggestions = [];
+  MedicineSuggestion? _selectedMedicine;
+  List<String> _dosageOptions = [];
+  String? _selectedDosage;
+  String? _medicineError;
+  String? _dosageError;
 
   // Selected values
   List<TimeOfDay> _selectedTimes = [];
@@ -90,6 +107,16 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
         if (parsed != null) _selectedTimes.add(parsed);
       }
     }
+
+    _nameController.addListener(_onNameChanged);
+    _nameFocusNode.addListener(_onNameFocusChange);
+
+    // Pre-load suggestions/dosages when editing an existing medicine.
+    if (med != null) {
+      _loadExistingMatch();
+    }
+
+    _runMedicineDiagnostics();
   }
 
   /// Strip the food timing prefix that was stored in note (e.g. "After Food - ...")
@@ -122,11 +149,270 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
 
   @override
   void dispose() {
+    _nameDebounce?.cancel();
+    _nameController.removeListener(_onNameChanged);
+    _nameFocusNode.removeListener(_onNameFocusChange);
+    _nameFocusNode.dispose();
     _nameController.dispose();
     _dosageController.dispose();
     _doctorController.dispose();
     _noteController.dispose();
     super.dispose();
+  }
+
+  void _onNameChanged() {
+    final text = _nameController.text.trim();
+
+    // If user edits after selection, clear selected medicine/dose.
+    if (_selectedMedicine != null &&
+        text.toLowerCase() != _selectedMedicine!.name.toLowerCase()) {
+      setState(() {
+        _selectedMedicine = null;
+        _dosageOptions = [];
+        _selectedDosage = null;
+        _medicineError = null;
+        _dosageError = null;
+      });
+    }
+
+    if (text.length < 3) {
+      setState(() {
+        _nameSuggestions = [];
+        _isSearching = false;
+        _medicineError = null;
+      });
+      return;
+    }
+
+    _nameDebounce?.cancel();
+    _nameDebounce = Timer(const Duration(milliseconds: 600), () async {
+      final query = _nameController.text.trim();
+      _activeQuery = query;
+      if (_debugMedSearch) {
+        debugPrint('[med-search] query="$query"');
+      }
+      setState(() => _isSearching = true);
+      try {
+        // Efficient query using indexed lower-case prefix fields.
+        final results = await _medicineSearchService.searchMedicines(query);
+        if (!mounted || _activeQuery != query) return;
+        if (_debugMedSearch) {
+          debugPrint('[med-search] results=${results.length}');
+          for (final r in results) {
+            debugPrint('[med-search] -> ${r.name} | ${r.shortComposition1}');
+          }
+        }
+        setState(() {
+          _nameSuggestions = results;
+          _isSearching = false;
+        });
+      } catch (e) {
+        if (_debugMedSearch) {
+          debugPrint('[med-search] error: $e');
+        }
+        if (!mounted) return;
+        setState(() {
+          _nameSuggestions = [];
+          _isSearching = false;
+        });
+      }
+    });
+  }
+
+  Future<void> _runMedicineDiagnostics() async {
+    try {
+      final snap = await _firestore.collection('medicines').limit(1).get();
+      if (!mounted) return;
+      if (snap.docs.isEmpty) {
+        setState(() {
+          _diagnosticBanner =
+              'Diagnostic: medicines collection is empty in this Firebase project.';
+        });
+        return;
+      }
+      final data = snap.docs.first.data();
+      final hasTokens = data.containsKey('search_tokens');
+      final hasNameLc = data.containsKey('name_lc');
+      final hasComp1Lc = data.containsKey('short_comp1_lc');
+      if (!hasTokens || !hasNameLc || !hasComp1Lc) {
+        setState(() {
+          _diagnosticBanner =
+              'Diagnostic: medicines docs missing search fields (search_tokens/name_lc). Run backfill.';
+        });
+        return;
+      }
+      setState(() => _diagnosticBanner = null);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _diagnosticBanner =
+            'Diagnostic: failed to read medicines collection. Check Firebase config and rules.';
+      });
+    }
+  }
+
+  Future<void> _onNameFocusChange() async {
+    if (_nameFocusNode.hasFocus) return;
+    // On blur, attempt exact-match validation so users can type full name
+    // without selecting a suggestion.
+    final name = _nameController.text.trim();
+    if (name.isEmpty) return;
+    if (_debugMedSearch) {
+      debugPrint('[med-search] blur validate="$name"');
+    }
+    final match = await _medicineSearchService.findExactMatch(name);
+    if (!mounted) return;
+    if (match == null) {
+      if (_debugMedSearch) {
+        debugPrint('[med-search] blur match NOT found');
+      }
+      setState(() {
+        _selectedMedicine = null;
+        _dosageOptions = [];
+        _selectedDosage = null;
+        _medicineError =
+            'Medicine not recognized. Please select a valid medicine from the dataset.';
+      });
+      return;
+    }
+
+    final options = MedicineDosageExtractor.extractDosages(
+      match.shortComposition1,
+      match.shortComposition2,
+    );
+    if (_debugMedSearch) {
+      debugPrint('[med-search] blur match found: ${match.name}');
+      debugPrint('[med-search] dosages=${options.length}');
+    }
+    setState(() {
+      _selectedMedicine = match;
+      _dosageOptions = options;
+      _medicineError = null;
+    });
+  }
+
+  Future<void> _loadExistingMatch() async {
+    final text = _nameController.text.trim();
+    if (text.isEmpty) return;
+    try {
+      final match = await _medicineSearchService.findExactMatch(text);
+      if (!mounted || match == null) return;
+      final options = MedicineDosageExtractor.extractDosages(
+        match.shortComposition1,
+        match.shortComposition2,
+      );
+      setState(() {
+        _selectedMedicine = match;
+        _dosageOptions = options;
+        final existingDose = _dosageController.text.trim().toLowerCase();
+        _selectedDosage =
+            _dosageOptions.contains(existingDose) ? existingDose : null;
+        if (_selectedDosage != null) {
+          _dosageController.text = _selectedDosage!;
+        }
+        _medicineError = null;
+        _dosageError = null;
+      });
+    } catch (_) {}
+  }
+
+  void _selectSuggestion(MedicineSuggestion suggestion) {
+    final options = MedicineDosageExtractor.extractDosages(
+      suggestion.shortComposition1,
+      suggestion.shortComposition2,
+    );
+    setState(() {
+      _selectedMedicine = suggestion;
+      _nameController.text = suggestion.name;
+      _nameSuggestions = [];
+      _dosageOptions = options;
+      _selectedDosage = null;
+      _dosageController.text = '';
+      _medicineError = null;
+      _dosageError = null;
+    });
+  }
+
+  Future<bool> _ensureValidMedicine() async {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      setState(() {
+        _medicineError =
+            'Medicine not recognized. Please select a valid medicine from the dataset.';
+      });
+      return false;
+    }
+
+    if (_selectedMedicine != null) {
+      return true;
+    }
+
+    // If user typed an exact medicine name/composition without selecting,
+    // validate it directly against Firestore.
+    final match = await _medicineSearchService.findExactMatch(name);
+    if (match == null) {
+      setState(() {
+        _medicineError =
+            'Medicine not recognized. Please select a valid medicine from the dataset.';
+      });
+      return false;
+    }
+
+    final options = MedicineDosageExtractor.extractDosages(
+      match.shortComposition1,
+      match.shortComposition2,
+    );
+
+    setState(() {
+      _selectedMedicine = match;
+      _dosageOptions = options;
+      _medicineError = null;
+    });
+
+    return true;
+  }
+
+  bool _validateDosage() {
+    final doseRaw = (_selectedDosage ?? _dosageController.text.trim());
+    if (doseRaw.isEmpty || _selectedMedicine == null) {
+      setState(() {
+        _dosageError =
+            'Dosage not recognized. Please enter a valid dosage for the selected medicine.';
+      });
+      return false;
+    }
+
+    // Match dosage against short_composition1/2 for the selected medicine.
+    final dose = _normalizeDose(doseRaw);
+    final comp1 = _normalizeComp(_selectedMedicine!.shortComposition1);
+    final comp2 = _normalizeComp(_selectedMedicine!.shortComposition2);
+
+    final matches =
+        comp1.contains(dose) || (comp2.isNotEmpty && comp2.contains(dose));
+
+    if (!matches) {
+      setState(() {
+        _dosageError =
+            'Dosage not recognized. Please enter a valid dosage for the selected medicine.';
+      });
+      return false;
+    }
+
+    setState(() => _dosageError = null);
+    return true;
+  }
+
+  String _normalizeDose(String value) {
+    return value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), '');
+  }
+
+  String _normalizeComp(String value) {
+    return value
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'\s+'), '')
+        .replaceAll('(', '')
+        .replaceAll(')', '');
   }
 
   // ─── Time picker ──────────────────────────────────────────────────────────
@@ -176,6 +462,9 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
   // ─── Save to Firestore ────────────────────────────────────────────────────
   Future<void> _saveMedication() async {
     if (!_formKey.currentState!.validate()) return;
+    final medOk = await _ensureValidMedicine();
+    if (!medOk) return;
+    if (!_validateDosage()) return;
     if (_selectedTimes.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -199,7 +488,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
 
     final data = {
       'name': _nameController.text.trim(),
-      'dose': _dosageController.text.trim(),
+      'dose': (_selectedDosage ?? _dosageController.text.trim()),
       'doctorName': _doctorController.text.trim(),
       'time': formattedTimes.isNotEmpty ? formattedTimes.first : '', // Legacy
       'times': formattedTimes,
@@ -304,6 +593,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
               _sectionTitle('Medicine Name'),
               const SizedBox(height: 8),
               TextFormField(
+                focusNode: _nameFocusNode,
                 controller: _nameController,
                 decoration: _inputDeco(
                   hint: 'e.g., Aspirin, Paracetamol',
@@ -315,24 +605,123 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
                             ? 'Please enter medicine name'
                             : null,
               ),
+              if (_diagnosticBanner != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange.shade200),
+                    ),
+                    child: Text(
+                      _diagnosticBanner!,
+                      style: const TextStyle(fontSize: 12, color: Colors.black87),
+                    ),
+                  ),
+                ),
+              if (_medicineError != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    _medicineError!,
+                    style: const TextStyle(color: Colors.red, fontSize: 12),
+                  ),
+                ),
+              if (_medicineError == null &&
+                  _nameController.text.trim().length >= 3 &&
+                  _nameSuggestions.isEmpty &&
+                  !_isSearching)
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text(
+                    'No suggestions. We will validate the exact name on save or when you leave the field.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ),
+              if (_nameController.text.trim().length > 0 &&
+                  _nameController.text.trim().length < 3)
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text(
+                    'Type at least 3 characters to see suggestions',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ),
+              if (_isSearching)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: LinearProgressIndicator(minHeight: 2),
+                ),
+              if (_nameSuggestions.isNotEmpty) _suggestionsDropdown(),
 
               const SizedBox(height: 24),
 
               // Dosage
               _sectionTitle('Dosage'),
               const SizedBox(height: 8),
-              TextFormField(
-                controller: _dosageController,
-                decoration: _inputDeco(
-                  hint: 'e.g., 500mg, 1 tablet',
-                  icon: Icons.local_pharmacy,
+              _dosageOptions.isNotEmpty
+                  ? _dropdownContainer(
+                      child: DropdownButtonFormField<String>(
+                        value: _selectedDosage,
+                        isExpanded: true,
+                        icon: const Icon(
+                          Icons.arrow_drop_down,
+                          color: Colors.teal,
+                        ),
+                        decoration: const InputDecoration.collapsed(
+                          hintText: '',
+                        ),
+                        hint: const Text('Select dosage'),
+                        items:
+                            _dosageOptions
+                                .map(
+                                  (v) => DropdownMenuItem(
+                                    value: v,
+                                    child: Text(v),
+                                  ),
+                                )
+                                .toList(),
+                        onChanged: (v) {
+                          setState(() {
+                            _selectedDosage = v;
+                            _dosageController.text = v ?? '';
+                            _dosageError = null;
+                          });
+                        },
+                        validator:
+                            (v) =>
+                                (v == null || v.trim().isEmpty)
+                                    ? 'Please select dosage'
+                                    : null,
+                      ),
+                    )
+                  : TextFormField(
+                    controller: _dosageController,
+                    decoration: _inputDeco(
+                      hint:
+                          _selectedMedicine == null
+                              ? 'Select a medicine to see dosages'
+                              : 'No dosages available',
+                      icon: Icons.local_pharmacy,
+                    ),
+                    enabled: _selectedMedicine != null,
+                    onChanged: (_) => setState(() => _dosageError = null),
+                    validator:
+                        (v) =>
+                            (v == null || v.trim().isEmpty)
+                                ? 'Please enter dosage'
+                                : null,
+                  ),
+              if (_dosageError != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    _dosageError!,
+                    style: const TextStyle(color: Colors.red, fontSize: 12),
+                  ),
                 ),
-                validator:
-                    (v) =>
-                        (v == null || v.trim().isEmpty)
-                            ? 'Please enter dosage'
-                            : null,
-              ),
 
               const SizedBox(height: 24),
 
@@ -584,6 +973,43 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
+  Widget _suggestionsDropdown() {
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade300),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 6,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: ListView.separated(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: _nameSuggestions.length,
+        separatorBuilder: (_, __) => Divider(
+          height: 1,
+          color: Colors.grey.shade200,
+        ),
+        itemBuilder: (context, index) {
+          final s = _nameSuggestions[index];
+          final subtitle =
+              s.shortComposition1.isNotEmpty ? s.shortComposition1 : '';
+          return ListTile(
+            title: Text(s.name),
+            subtitle: subtitle.isNotEmpty ? Text(subtitle) : null,
+            onTap: () => _selectSuggestion(s),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _sectionTitle(String t) => Text(
     t,
     style: const TextStyle(
