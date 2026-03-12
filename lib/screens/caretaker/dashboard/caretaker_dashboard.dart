@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../services/caretaker_id_helper.dart';
@@ -1288,7 +1288,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
           ),
         ),
 
-        _buildNavCard(
+       /* _buildNavCard(
           context,
           "Patient Overview",
           Icons.person_search,
@@ -1299,7 +1299,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
             elderlyId: elderlyUserId,
             elderlyName: elderlyUserName,
           ),
-        ),
+        ),*/
 
       ],
     );
