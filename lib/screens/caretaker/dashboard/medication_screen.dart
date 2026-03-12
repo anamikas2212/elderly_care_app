@@ -438,6 +438,18 @@ class _EnhancedMedicationScreenState extends State<EnhancedMedicationScreen> {
                     med['time'],
                     style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
                   ),
+                  if ((med['doctorName'] as String? ?? '').isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        'Prescribed by: ${med['doctorName']}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.teal.shade700,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
