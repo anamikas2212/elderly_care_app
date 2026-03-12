@@ -114,26 +114,30 @@ class CognitiveReportService {
   }
 
   /// Generates a weekly cognitive report by comparing daily reports
-  Future<void> generateWeeklyCognitiveReport(String elderlyId) async {
+  Future<void> generateWeeklyCognitiveReport(String elderlyId, {DateTime? periodStart, DateTime? periodEnd}) async {
     try {
       final userDoc = await _firestore.collection('users').doc(elderlyId).get();
       final caretakerId = userDoc.data()?['caretakerId'];
       final userName = userDoc.data()?['name'] ?? 'Elderly User';
       if (caretakerId == null) return;
 
-      // 1. Fetch daily reports from the last 7 days
-      final weekAgo = DateTime.now().subtract(const Duration(days: 7));
+      // Use supplied period or default to last 7 days
+      final effectiveEnd = periodEnd ?? DateTime.now();
+      final effectiveStart = periodStart ?? effectiveEnd.subtract(const Duration(days: 7));
+
+      // 1. Fetch daily reports from the requested period
       final reportsSnapshot = await _firestore
           .collection('users')
           .doc(caretakerId)
           .collection('cognitive_reports')
           .where('elderlyId', isEqualTo: elderlyId)
           .where('type', isEqualTo: 'daily')
-          .where('date', isGreaterThan: Timestamp.fromDate(weekAgo))
+          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(effectiveStart))
+          .where('date', isLessThan: Timestamp.fromDate(effectiveEnd))
           .get();
 
       if (reportsSnapshot.docs.isEmpty) {
-        print('Not enough daily reports to generate weekly summary for $userName');
+        print('Not enough daily reports to generate weekly summary for $userName in $effectiveStart – $effectiveEnd');
         return;
       }
 
@@ -164,7 +168,7 @@ class CognitiveReportService {
         id: '',
         elderlyId: elderlyId,
         elderlyName: userName,
-        date: DateTime.now(),
+        date: effectiveEnd,
         type: 'weekly',
         domainScores: {}, // Weekly is a trend, domains are in text
         overallScore: avgScore,
@@ -172,10 +176,11 @@ class CognitiveReportService {
         suggestions: List<String>.from(aiReport['suggestions'] ?? []),
         metadata: {
           'dailyReportsAnalyzed': dailyReports.length,
-          'periodStart': weekAgo.toIso8601String(),
-          'periodEnd': DateTime.now().toIso8601String(),
+          'periodStart': effectiveStart.toIso8601String(),
+          'periodEnd': effectiveEnd.toIso8601String(),
+          if (periodStart != null) 'isBackfilled': true,
         },
-        createdAt: DateTime.now(),
+        createdAt: effectiveEnd,
       );
 
       await _firestore
@@ -184,7 +189,7 @@ class CognitiveReportService {
           .collection('cognitive_reports')
           .add(report.toMap());
 
-      print('✅ Weekly cognitive trend report generated for $userName');
+      print('✅ Weekly cognitive trend report generated for $userName ($effectiveStart)');
     } catch (e) {
       print('❌ Error generating weekly cognitive report: $e');
     }

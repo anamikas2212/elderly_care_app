@@ -1,4 +1,4 @@
-﻿/*import 'package:cloud_firestore/cloud_firestore.dart';
+/*import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
 class ReportSchedulerService {
@@ -245,9 +245,64 @@ class ReportSchedulerService {
   }
 
   Future<void> _runCatchUp(String groqApiKey) async {
+    // Always run daily catch-up
     await _runDailyReports(groqApiKey, skipIfExists: true);
-    if (DateTime.now().weekday == DateTime.sunday) {
-      await _runWeeklyReports(groqApiKey, skipIfExists: true);
+    // Backfill any past weekly reports that are missing (up to 8 weeks back)
+    await _runHistoricalBackfill(groqApiKey);
+  }
+
+  // Backfill weekly reports for the past N weeks where no report exists yet
+  Future<void> _runHistoricalBackfill(String groqApiKey) async {
+    const weeksToCheck = 8;
+    print('🔄 Running historical weekly report backfill (last $weeksToCheck weeks)...');
+
+    try {
+      final memoryService = EnhancedMemoryService(groqApiKey: groqApiKey);
+      final cognitiveService = CognitiveReportService(groqApiKey: groqApiKey);
+
+      final usersSnapshot = await _firestore
+          .collection('users')
+          .where('caretakerId', isNull: false)
+          .get();
+
+      for (var userDoc in usersSnapshot.docs) {
+        final caretakerId = userDoc.data()['caretakerId'] as String?;
+        if (caretakerId == null) continue;
+
+        // Loop over past N weeks, oldest first
+        for (int w = weeksToCheck; w >= 1; w--) {
+          // Calculate start and end of that historical week (Sun–Sat)
+          final now = DateTime.now();
+          final currentWeekStart = _startOfWeekSunday(now);
+          final weekStart = currentWeekStart.subtract(Duration(days: 7 * w));
+          final weekEnd = weekStart.add(const Duration(days: 7));
+
+          // Skip if a report already exists for this period
+          final exists = await _hasReportSince(
+            caretakerId: caretakerId,
+            elderlyId: userDoc.id,
+            type: 'weekly',
+            since: weekStart,
+            before: weekEnd,
+          );
+          if (exists) continue;
+
+          try {
+            await memoryService.generateWeeklySentimentReportForPeriod(
+              elderlyId: userDoc.id,
+              periodStart: weekStart,
+              periodEnd: weekEnd,
+            );
+            await cognitiveService.generateWeeklyCognitiveReport(userDoc.id, periodStart: weekStart, periodEnd: weekEnd);
+            print('✅ Backfilled report for ${userDoc.id} week of ${weekStart.toIso8601String()}');
+          } catch (e) {
+            print('❌ Backfill failed for ${userDoc.id} week ${weekStart}: $e');
+          }
+        }
+      }
+      print('✅ Historical backfill complete.');
+    } catch (e) {
+      print('❌ Error in historical backfill: $e');
     }
   }
 
@@ -365,23 +420,22 @@ class ReportSchedulerService {
     required String elderlyId,
     required String type,
     required DateTime since,
+    DateTime? before, // optional upper bound for backfill checks
   }) async {
-    final snapshot = await _firestore
+    var query = _firestore
         .collection('users')
         .doc(caretakerId)
         .collection('cognitive_reports')
         .where('elderlyId', isEqualTo: elderlyId)
         .where('type', isEqualTo: type)
-        .orderBy('date', descending: true)
-        .limit(1)
-        .get();
+        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(since));
 
-    if (snapshot.docs.isEmpty) return false;
-    final data = snapshot.docs.first.data();
-    final ts = data['date'] as Timestamp?;
-    if (ts == null) return false;
-    final reportDate = ts.toDate();
-    return !reportDate.isBefore(since);
+    if (before != null) {
+      query = query.where('date', isLessThan: Timestamp.fromDate(before));
+    }
+
+    final snapshot = await query.limit(1).get();
+    return snapshot.docs.isNotEmpty;
   }
 
   DateTime _startOfDay(DateTime date) {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../services/caretaker_notification_service.dart';
 import '../../../services/enhanced_memory_service.dart';
+import '../../../services/report_scheduler_service.dart';
 import '../../../config/app_config.dart';
 
 class EnhancedBuddyActivityScreen extends StatefulWidget {
@@ -27,6 +28,7 @@ class _EnhancedBuddyActivityScreenState
   late CaretakerNotificationService _notificationService;
   late EnhancedMemoryService _memoryService;
   late TabController _tabController;
+  bool _isGenerating = false;
 
   @override
   void initState() {
@@ -343,36 +345,106 @@ class _EnhancedBuddyActivityScreenState
 
   // Reports Tab
   Widget _buildReportsTab() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: _notificationService.getWeeklyReportsStream(widget.caretakerId),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
+    return Stack(
+      children: [
+        StreamBuilder<QuerySnapshot>(
+          stream: _notificationService.getWeeklyReportsStream(widget.caretakerId),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return _buildEmptyState(
-            icon: Icons.analytics,
-            title: 'No reports yet',
-            subtitle: 'Weekly sentiment reports will appear here',
-          );
-        }
+            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+              return _buildEmptyState(
+                icon: Icons.analytics,
+                title: 'No reports yet',
+                subtitle: 'Tap the button below to generate reports from past conversations',
+              );
+            }
 
-        final reports = snapshot.data!.docs;
+            final reports = snapshot.data!.docs;
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: reports.length,
-          itemBuilder: (context, index) {
-            final reportDoc = reports[index];
-            final report = reportDoc.data() as Map<String, dynamic>;
-            final reportId = reportDoc.id;
-
-            return _buildReportCard(report, reportId);
+            return ListView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+              itemCount: reports.length,
+              itemBuilder: (context, index) {
+                final reportDoc = reports[index];
+                final report = reportDoc.data() as Map<String, dynamic>;
+                final reportId = reportDoc.id;
+                return _buildReportCard(report, reportId);
+              },
+            );
           },
-        );
-      },
+        ),
+        // FAB to manually generate reports
+        Positioned(
+          bottom: 24,
+          right: 24,
+          child: _isGenerating
+              ? const CircularProgressIndicator()
+              : FloatingActionButton.extended(
+                  onPressed: _generateReportsNow,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Generate Reports'),
+                  backgroundColor: Colors.blue[700],
+                ),
+        ),
+      ],
     );
+  }
+
+  Future<void> _generateReportsNow() async {
+    setState(() => _isGenerating = true);
+    try {
+      final memoryService = EnhancedMemoryService(groqApiKey: AppConfig.groqApiKey);
+
+      // Get current week boundaries
+      final now = DateTime.now();
+      final daysSinceSunday = now.weekday % 7;
+      final thisWeekStart = DateTime(now.year, now.month, now.day - daysSinceSunday);
+
+      // Try generating for the last 8 weeks
+      int generated = 0;
+      for (int w = 8; w >= 0; w--) {
+        final weekStart = thisWeekStart.subtract(Duration(days: 7 * w));
+        final weekEnd = weekStart.add(const Duration(days: 7));
+        if (weekEnd.isAfter(DateTime.now().add(const Duration(days: 1)))) continue;
+
+        try {
+          await memoryService.generateWeeklySentimentReportForPeriod(
+            elderlyId: widget.elderlyId,
+            periodStart: weekStart,
+            periodEnd: weekEnd,
+          );
+          generated++;
+        } catch (e) {
+          debugPrint('Backfill week $weekStart error: $e');
+        }
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(generated > 0
+                ? '✅ Generated $generated reports from past conversations!'
+                : 'No new conversations found to generate reports from.'),
+            backgroundColor: generated > 0 ? Colors.green : Colors.orange,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Error generating reports: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isGenerating = false);
+    }
   }
 
   // Report Card Widget
