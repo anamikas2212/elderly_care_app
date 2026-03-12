@@ -28,21 +28,21 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
   // Controllers
   final _nameController = TextEditingController();
   final _dosageController = TextEditingController();
+  final _doctorController = TextEditingController();
   final _noteController = TextEditingController();
 
   // Selected values
-  TimeOfDay? _selectedTime;
+  List<TimeOfDay> _selectedTimes = [];
   String _selectedFrequency = 'Daily';
   String _selectedFoodTiming = 'Before Food';
+  final List<String> _selectedSpecificDays = [];
+  final List<String> _weekDays = [
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
+  ];
 
   final List<String> _frequencyOptions = [
     'Daily',
-    'Every Other Day',
-    'Mon, Wed, Fri',
-    'Tue, Thu, Sat',
-    'Weekdays',
-    'Weekends',
-    'Custom',
+    'Specific Days',
   ];
 
   final List<String> _foodTimingOptions = [
@@ -61,10 +61,34 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
     if (med != null) {
       _nameController.text = med['name'] as String? ?? '';
       _dosageController.text = med['dose'] as String? ?? '';
+      _doctorController.text = med['doctorName'] as String? ?? '';
       _noteController.text = _stripFoodTiming(med['note'] as String? ?? '');
-      _selectedFrequency = med['days'] as String? ?? 'Daily';
+      
+      final daysData = med['days'];
+      if (daysData is String) {
+        if (daysData == 'Daily') {
+          _selectedFrequency = 'Daily';
+        } else {
+          _selectedFrequency = 'Specific Days';
+          _selectedSpecificDays.addAll(daysData.split(', '));
+        }
+      } else if (daysData is List) {
+        _selectedFrequency = 'Specific Days';
+        _selectedSpecificDays.addAll(daysData.map((e) => e.toString()));
+      }
+      
       _selectedFoodTiming = med['foodTiming'] as String? ?? 'Before Food';
-      _parseTime(med['time'] as String? ?? '');
+      
+      final timesData = med['times'];
+      if (timesData is List) {
+        for (var t in timesData) {
+          final parsed = _parseTimeReturn(t.toString());
+          if (parsed != null) _selectedTimes.add(parsed);
+        }
+      } else {
+        final parsed = _parseTimeReturn(med['time'] as String? ?? '');
+        if (parsed != null) _selectedTimes.add(parsed);
+      }
     }
   }
 
@@ -77,34 +101,39 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
     return note;
   }
 
-  void _parseTime(String timeStr) {
-    if (timeStr.isEmpty) return;
+  TimeOfDay? _parseTimeReturn(String timeStr) {
+    if (timeStr.isEmpty) return null;
     try {
-      final parts = timeStr.split(' ');
+      final parts = timeStr.trim().split(' ');
+      if (parts.isEmpty) return null;
       final hm = parts[0].split(':');
+      if (hm.length < 2) return null;
       int hour = int.parse(hm[0]);
       final minute = int.parse(hm[1]);
       if (parts.length > 1) {
         if (parts[1].toUpperCase() == 'PM' && hour != 12) hour += 12;
         if (parts[1].toUpperCase() == 'AM' && hour == 12) hour = 0;
       }
-      _selectedTime = TimeOfDay(hour: hour, minute: minute);
-    } catch (_) {}
+      return TimeOfDay(hour: hour, minute: minute);
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _dosageController.dispose();
+    _doctorController.dispose();
     _noteController.dispose();
     super.dispose();
   }
 
   // ─── Time picker ──────────────────────────────────────────────────────────
-  Future<void> _selectTime() async {
+  Future<void> _addTime() async {
     final picked = await showTimePicker(
       context: context,
-      initialTime: _selectedTime ?? TimeOfDay.now(),
+      initialTime: TimeOfDay.now(),
       builder:
           (ctx, child) => Theme(
             data: Theme.of(ctx).copyWith(
@@ -117,7 +146,24 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
             child: child!,
           ),
     );
-    if (picked != null) setState(() => _selectedTime = picked);
+    if (picked != null) {
+      setState(() {
+        if (!_selectedTimes.contains(picked)) {
+          _selectedTimes.add(picked);
+          // Sort times
+          _selectedTimes.sort((a, b) {
+            if (a.hour != b.hour) return a.hour.compareTo(b.hour);
+            return a.minute.compareTo(b.minute);
+          });
+        }
+      });
+    }
+  }
+
+  void _removeTime(int index) {
+    setState(() {
+      _selectedTimes.removeAt(index);
+    });
   }
 
   String _formatTime(TimeOfDay t) {
@@ -130,10 +176,10 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
   // ─── Save to Firestore ────────────────────────────────────────────────────
   Future<void> _saveMedication() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedTime == null) {
+    if (_selectedTimes.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('⏰ Please select a time'),
+          content: Text('⏰ Please add at least one time'),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
         ),
@@ -149,14 +195,18 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
             ? _selectedFoodTiming
             : '$_selectedFoodTiming - $noteText';
 
+    final formattedTimes = _selectedTimes.map((t) => _formatTime(t)).toList();
+
     final data = {
       'name': _nameController.text.trim(),
       'dose': _dosageController.text.trim(),
-      'time': _formatTime(_selectedTime!),
-      'days': _selectedFrequency,
+      'doctorName': _doctorController.text.trim(),
+      'time': formattedTimes.isNotEmpty ? formattedTimes.first : '', // Legacy
+      'times': formattedTimes,
+      'days': _selectedFrequency == 'Daily' ? 'Daily' : _selectedSpecificDays,
       'foodTiming': _selectedFoodTiming,
       'note': fullNote,
-      'takenToday': false,
+      'takenToday': false, // Kept for legacy compatibility
       'status': 'upcoming',
       'userId': widget.userId,
       'updatedAt': FieldValue.serverTimestamp(),
@@ -170,6 +220,11 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
 
       if (widget.existingDocId != null) {
         // ── Edit mode ──
+        if (widget.existingMedication != null && widget.existingMedication!['createdAt'] != null) {
+            data['createdAt'] = widget.existingMedication!['createdAt'];
+        } else {
+            data['createdAt'] = FieldValue.serverTimestamp(); // Fallback for old data
+        }
         await medCollection.doc(widget.existingDocId).update(data);
       } else {
         // ── Add mode ──
@@ -281,41 +336,84 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
 
               const SizedBox(height: 24),
 
-              // Time
-              _sectionTitle('Time'),
+              // Doctor Name
+              _sectionTitle('Doctor Name (Optional)'),
               const SizedBox(height: 8),
+              TextFormField(
+                controller: _doctorController,
+                decoration: _inputDeco(
+                  hint: 'e.g., Dr. Smith',
+                  icon: Icons.person_outline,
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // Time
+              _sectionTitle('Timings'),
+              const SizedBox(height: 8),
+              if (_selectedTimes.isNotEmpty)
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _selectedTimes.length,
+                  itemBuilder: (context, index) {
+                    final t = _selectedTimes[index];
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.access_time, color: Colors.teal),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              _formatTime(t),
+                              style: const TextStyle(
+                                fontSize: 16,
+                                color: Colors.black87,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
+                            onPressed: () => _removeTime(index),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
               InkWell(
-                onTap: _selectTime,
+                onTap: _addTime,
                 borderRadius: BorderRadius.circular(12),
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade50,
+                    color: Colors.teal.shade50,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade300),
+                    border: Border.all(color: Colors.teal.shade200),
                   ),
                   child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.access_time, color: Colors.teal),
+                      const Icon(Icons.add_alarm, color: Colors.teal),
                       const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          _selectedTime != null
-                              ? _formatTime(_selectedTime!)
-                              : 'Select time',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color:
-                                _selectedTime != null
-                                    ? Colors.black87
-                                    : Colors.grey.shade600,
-                          ),
+                      Text(
+                        _selectedTimes.isEmpty ? 'Add Time' : 'Add Another Time',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          color: Colors.teal,
+                          fontWeight: FontWeight.w600,
                         ),
-                      ),
-                      Icon(
-                        Icons.arrow_forward_ios,
-                        size: 16,
-                        color: Colors.grey.shade400,
                       ),
                     ],
                   ),
@@ -358,6 +456,33 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
                   ),
                 ),
               ),
+              
+              if (_selectedFrequency == 'Specific Days') ...[
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
+                  ].map((day) {
+                    final isSelected = _selectedSpecificDays.contains(day);
+                    return ChoiceChip(
+                      label: Text(day.substring(0, 3)),
+                      selected: isSelected,
+                      selectedColor: Colors.teal.shade100,
+                      onSelected: (selected) {
+                        setState(() {
+                          if (selected) {
+                            _selectedSpecificDays.add(day);
+                          } else {
+                            _selectedSpecificDays.remove(day);
+                          }
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+              ],
 
               const SizedBox(height: 24),
 

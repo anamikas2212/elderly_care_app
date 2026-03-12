@@ -13,12 +13,21 @@ class ElderlyInitialLoginScreen extends StatefulWidget {
       _ElderlyInitialLoginScreenState();
 }
 
-class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
+class _ElderlyInitialLoginScreenState
+    extends State<ElderlyInitialLoginScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _ageController = TextEditingController();
   final TextEditingController _genderController = TextEditingController();
   final PairingService _pairingService = PairingService();
   bool _isAnimating = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _ageController.dispose();
+    _genderController.dispose();
+    super.dispose();
+  }
 
   void _login() async {
     if (_nameController.text.trim().isEmpty ||
@@ -33,66 +42,80 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
       return;
     }
 
-    setState(() {
-      _isAnimating = true;
-    });
+    setState(() => _isAnimating = true);
 
-    // Sign in anonymously to get a FRESH Firebase UID for this elderly user.
-    // Always sign out first to avoid reusing the caretaker's session or
-    // a previous elderly user's anonymous session.
-    String uid = '';
-    final elderlyId = _nameController.text.trim();
-    try {
-      final existingUser = FirebaseAuth.instance.currentUser;
-      if (existingUser != null) {
-        await FirebaseAuth.instance.signOut();
-      }
-      final credential = await FirebaseAuth.instance.signInAnonymously();
-      uid = credential.user?.uid ?? '';
-    } catch (e) {
-      // Firebase not available — fall back to name-based ID
-      uid = elderlyId;
-    }
-
-    // Save details locally
+    // ── Stable UID ──────────────────────────────────────────────────────────
+    // IMPORTANT: For returning users we NEVER call signInAnonymously() again.
+    // Every call to signInAnonymously() creates a brand-new Firebase UID which
+    // breaks the pairing code link and caretaker association.
+    // We only create one anonymous session — on the very first app launch on
+    // this device — and then permanently store that UID locally.
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('elderly_user_uid', elderlyId);
-    await prefs.setString('elderly_user_id', elderlyId);
-    await prefs.setString('elderly_user_name', elderlyId);
+    String uid = prefs.getString('elderly_user_uid') ?? '';
+
+    if (uid.isEmpty) {
+      // ── First-time login on this device ──────────────────────────────────
+      try {
+        if (FirebaseAuth.instance.currentUser != null) {
+          await FirebaseAuth.instance.signOut();
+        }
+        final credential = await FirebaseAuth.instance.signInAnonymously();
+        uid = credential.user?.uid ?? '';
+      } catch (e) {
+        uid = _nameController.text.trim(); // offline fallback
+      }
+      if (uid.isNotEmpty) {
+        await prefs.setString('elderly_user_uid', uid);
+        await prefs.setString('elderly_user_id', uid);
+      }
+    }
+    // ── Returning user: DO NOT call signInAnonymously() again ────────────────
+    // Just use the stored uid as-is. Firebase Auth session may or may not be
+    // active — that's fine; Firestore writes work regardless.
+    // ────────────────────────────────────────────────────────────────────────
+
+    // Persist latest profile info locally.
+    await prefs.setString('elderly_user_uid', uid);
+    await prefs.setString('elderly_user_id', uid);
+    await prefs.setString('elderly_user_name', _nameController.text.trim());
     await prefs.setString('elderly_user_age', _ageController.text.trim());
     await prefs.setString('elderly_user_gender', _genderController.text.trim());
     await prefs.setString('user_role', 'elderly');
 
-    // Write elderly user document to Firestore so EnhancedMemoryService
-    // can look up the caretakerId when sending notifications.
+    // Update Firestore profile (merge so we never clobber caretakerId which
+    // is set exclusively by PairingService.redeemPairingCode).
     try {
-      final Map<String, dynamic> userData = {
-        'name': elderlyId,
-        'age': _ageController.text.trim(),
-        'gender': _genderController.text.trim(),
-        'role': 'elderly',
-        'authUid': uid,
-        'lastActive': FieldValue.serverTimestamp(),
-      };
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(elderlyId)
-          .set(userData, SetOptions(merge: true));
-      print('✅ Elderly user profile saved to Firestore');
+      await FirebaseFirestore.instance.collection('users').doc(uid).set(
+        {
+          'name': _nameController.text.trim(),
+          'age': _ageController.text.trim(),
+          'gender': _genderController.text.trim(),
+          'role': 'elderly',
+          'lastActive': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+      print('✅ Elderly profile saved/updated (uid: $uid)');
 
-      // Generate 6-digit pairing code for caretaker linking
-      try {
-        final code = await _pairingService.generatePairingCode(elderlyId);
-        await prefs.setString('care_code', code);
-        print('✅ Care Code generated and saved: $code');
-      } catch (e) {
-        print('⚠️ Could not generate pairing code: $e');
+      // Reuse the locally-saved care code if it exists.  Only call
+      // generatePairingCode when there's no code yet — this is what ensures
+      // the code is created exactly once and never regenerated.
+      final existingCode = prefs.getString('care_code') ?? '';
+      if (existingCode.isNotEmpty) {
+        print('✅ Reusing existing Care Code: $existingCode');
+      } else {
+        try {
+          final code = await _pairingService.generatePairingCode(uid);
+          await prefs.setString('care_code', code);
+          print('✅ Care Code generated: $code');
+        } catch (e) {
+          print('⚠️ Could not generate pairing code: $e');
+        }
       }
     } catch (e) {
-      print('⚠️ Could not save user profile to Firestore: $e');
+      print('⚠️ Could not save profile to Firestore: $e');
     }
 
-    // Navigate to dashboard AFTER code generation is complete
     await Future.delayed(const Duration(milliseconds: 500));
     if (mounted) {
       Navigator.pushReplacement(
@@ -104,7 +127,6 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
         ),
       );
     }
-
   }
 
   @override
@@ -125,7 +147,7 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // App Icon / Logo
+                  // ── Logo ──────────────────────────────────────────────────
                   Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
@@ -147,7 +169,7 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
                   ),
                   const SizedBox(height: 40),
 
-                  // Welcome Text
+                  // ── Heading ───────────────────────────────────────────────
                   Text(
                     'Welcome!',
                     style: TextStyle(
@@ -158,7 +180,7 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Please tell us your name\nso we can save your progress.',
+                    'Please tell us a little about yourself.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 18,
@@ -168,102 +190,55 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
                   ),
                   const SizedBox(height: 40),
 
-                  // Name Input
+                  // ── Form fields ───────────────────────────────────────────
+                  _buildInput(controller: _nameController, hint: 'Your Name'),
+                  const SizedBox(height: 20),
+                  _buildInput(
+                    controller: _ageController,
+                    hint: 'Age (e.g. 78)',
+                    keyboardType: TextInputType.number,
+                  ),
+                  const SizedBox(height: 20),
+                  _buildInput(
+                    controller: _genderController,
+                    hint: 'Gender (e.g. Female)',
+                  ),
+                  const SizedBox(height: 24),
+
+                  // ── Care Code info card ───────────────────────────────────
                   Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 14),
                     decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
+                      color: Colors.purple.shade50,
+                      borderRadius: BorderRadius.circular(16),
+                      border:
+                          Border.all(color: Colors.purple.shade200, width: 1.5),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.link_rounded,
+                            color: Colors.purple.shade400, size: 28),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'After logging in, share your 6-digit Care Code '
+                            'with your caretaker so they can link to your account.',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.purple.shade800,
+                              height: 1.4,
+                            ),
+                          ),
                         ),
                       ],
                     ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 5,
-                    ),
-                    child: TextField(
-                      controller: _nameController,
-                      style: const TextStyle(fontSize: 20),
-                      textAlign: TextAlign.center,
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
-                        hintText: 'Your Name',
-                        hintStyle: TextStyle(color: Colors.black26),
-                      ),
-                    ),
                   ),
-                  const SizedBox(height: 20),
-
-                  // Age Input
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 5,
-                    ),
-                    child: TextField(
-                      controller: _ageController,
-                      keyboardType: TextInputType.number,
-                      style: const TextStyle(fontSize: 20),
-                      textAlign: TextAlign.center,
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
-                        hintText: 'Age (e.g. 78)',
-                        hintStyle: TextStyle(color: Colors.black26),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Gender Input
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 5,
-                    ),
-                    child: TextField(
-                      controller: _genderController,
-                      style: const TextStyle(fontSize: 20),
-                      textAlign: TextAlign.center,
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
-                        hintText: 'Gender (e.g. Female)',
-                        hintStyle: TextStyle(color: Colors.black26),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
                   const SizedBox(height: 40),
 
-                  // Login Button
+                  // ── Login button ──────────────────────────────────────────
                   GestureDetector(
-                    onTap: _login,
+                    onTap: _isAnimating ? null : _login,
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 300),
                       width: _isAnimating ? 70 : 250,
@@ -318,6 +293,38 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInput({
+    required TextEditingController controller,
+    required String hint,
+    TextInputType keyboardType = TextInputType.text,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+      child: TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        style: const TextStyle(fontSize: 20),
+        textAlign: TextAlign.center,
+        decoration: InputDecoration(
+          border: InputBorder.none,
+          hintText: hint,
+          hintStyle: const TextStyle(color: Colors.black26),
         ),
       ),
     );
@@ -565,12 +572,13 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
                       ),
                       child: Center(
                         child: _isAnimating
-                            ? const CircularProgressIndicator(color: Colors.white)
+                            ? const CircularProgressIndicator(
+                                color: Colors.white)
                             : Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: const [
                                   Text(
-                                    'Let\'s Go',
+                                    "Let's Go",
                                     style: TextStyle(
                                       fontSize: 24,
                                       fontWeight: FontWeight.bold,
@@ -578,7 +586,11 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
                                     ),
                                   ),
                                   SizedBox(width: 10),
-                                  Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 30),
+                                  Icon(
+                                    Icons.arrow_forward_rounded,
+                                    color: Colors.white,
+                                    size: 30,
+                                  ),
                                 ],
                               ),
                       ),
@@ -588,6 +600,38 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInput({
+    required TextEditingController controller,
+    required String hint,
+    TextInputType keyboardType = TextInputType.text,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+      child: TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        style: const TextStyle(fontSize: 20),
+        textAlign: TextAlign.center,
+        decoration: InputDecoration(
+          border: InputBorder.none,
+          hintText: hint,
+          hintStyle: const TextStyle(color: Colors.black26),
         ),
       ),
     );

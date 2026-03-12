@@ -8,7 +8,8 @@ import '../../../theme/caretaker_theme.dart';
 import 'safety_reports_screen.dart';
 
 class SafetyMonitorScreen extends StatefulWidget {
-  const SafetyMonitorScreen({super.key});
+  final String? elderlyUserId;
+  const SafetyMonitorScreen({super.key, this.elderlyUserId});
 
   @override
   State<SafetyMonitorScreen> createState() => _SafetyMonitorScreenState();
@@ -44,8 +45,11 @@ class _SafetyMonitorScreenState extends State<SafetyMonitorScreen> with WidgetsB
   Future<void> _loadElderlyUserId() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      
-      final name = prefs.getString('elderly_user_name') ?? '';
+      final name =
+          widget.elderlyUserId ??
+          prefs.getString('elderly_user_name') ??
+          prefs.getString('elderly_user_id') ??
+          '';
 
       print('🔍 Loaded elderly user ID: "$name"');
       print('📦 Available SharedPreferences keys: ${prefs.getKeys()}');
@@ -263,6 +267,8 @@ class _SafetyMonitorScreenState extends State<SafetyMonitorScreen> with WidgetsB
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            _buildSafeZoneRadiusCard(),
+            const SizedBox(height: 24),
             // Active SOS Alerts
             const Text(
               'Active Alerts',
@@ -320,6 +326,114 @@ class _SafetyMonitorScreenState extends State<SafetyMonitorScreen> with WidgetsB
             _buildSafeZoneLogsSection(limit: 3),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSafeZoneRadiusCard() {
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('safe_zones')
+          .doc(elderlyUserId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        final data = snapshot.data?.data() as Map<String, dynamic>?;
+        final radius = (data?['radius'] as num?)?.toDouble();
+        final radiusText = radius != null ? '${radius.toStringAsFixed(0)} m' : 'Not set';
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Safe Zone Radius',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: CaretakerColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Current: $radiusText',
+                    style: TextStyle(color: Colors.grey.shade700),
+                  ),
+                ],
+              ),
+              ElevatedButton(
+                onPressed: _showRadiusDialog,
+                child: const Text('Set Radius'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showRadiusDialog() async {
+    final doc = await FirebaseFirestore.instance
+        .collection('safe_zones')
+        .doc(elderlyUserId)
+        .get();
+    final data = doc.data();
+    final currentRadius = (data?['radius'] as num?)?.toDouble();
+
+    final controller = TextEditingController(
+      text: currentRadius != null ? currentRadius.toStringAsFixed(0) : '500',
+    );
+
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Set Safe Zone Radius'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Radius (meters)',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final value = double.tryParse(controller.text.trim());
+              if (value == null || value <= 0) return;
+
+              await FirebaseFirestore.instance
+                  .collection('safe_zones')
+                  .doc(elderlyUserId)
+                  .set({
+                'radius': value,
+                'updatedAt': FieldValue.serverTimestamp(),
+              }, SetOptions(merge: true));
+
+              if (!mounted) return;
+              Navigator.pop(context);
+            },
+            child: const Text('Save'),
+          ),
+        ],
       ),
     );
   }

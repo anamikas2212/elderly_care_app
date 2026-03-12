@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../screens/elderly/chat_message.dart';
 
 class EnhancedMemoryService {
@@ -328,8 +329,19 @@ Extract important memories with emphasis on emotional state and any concerning p
       final elderlyDoc =
           await _firestore.collection('users').doc(elderlyId).get();
 
-      final caretakerId = elderlyDoc.data()?['caretakerId'];
-      if (caretakerId == null) return;
+      String? caretakerId = elderlyDoc.data()?['caretakerId'];
+
+      if (caretakerId == null || caretakerId.isEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        caretakerId = prefs.getString('caretaker_id');
+        if (caretakerId != null && caretakerId.isNotEmpty) {
+          await _firestore.collection('users').doc(elderlyId).set({
+            'caretakerId': caretakerId,
+          }, SetOptions(merge: true));
+        }
+      }
+
+      if (caretakerId == null || caretakerId.isEmpty) return;
 
       // Create notification
       await _createCaretakerNotification(
@@ -509,6 +521,65 @@ Extract important memories with emphasis on emotional state and any concerning p
       print('✅ Weekly sentiment report generated for $elderlyName');
     } catch (e) {
       print('Error generating weekly report: $e');
+    }
+  }
+
+  // Generate a weekly sentiment report for a SPECIFIC historical period (for backfill)
+  Future<void> generateWeeklySentimentReportForPeriod({
+    required String elderlyId,
+    required DateTime periodStart,
+    required DateTime periodEnd,
+  }) async {
+    try {
+      final elderlyDoc = await _firestore.collection('users').doc(elderlyId).get();
+      final caretakerId = elderlyDoc.data()?['caretakerId'];
+      final elderlyName = elderlyDoc.data()?['name'] ?? 'Your loved one';
+      if (caretakerId == null) return;
+
+      final conversationsSnapshot = await _firestore
+          .collection('users')
+          .doc(elderlyId)
+          .collection('conversations')
+          .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(periodStart))
+          .where('createdAt', isLessThan: Timestamp.fromDate(periodEnd))
+          .get();
+
+      if (conversationsSnapshot.docs.isEmpty) {
+        print('No conversations found for $elderlyId in period $periodStart – $periodEnd');
+        return;
+      }
+
+      final sentimentData = await _analyzeSentimentPatterns(
+        elderlyId: elderlyId,
+        conversationsSnapshot: conversationsSnapshot,
+      );
+
+      final reportSummary = await _generateReportSummary(
+        elderlyName: elderlyName,
+        sentimentData: sentimentData,
+      );
+
+      await _firestore
+          .collection('users')
+          .doc(caretakerId)
+          .collection('weekly_reports')
+          .add({
+            'elderlyId': elderlyId,
+            'elderlyName': elderlyName,
+            'reportPeriod': {
+              'start': Timestamp.fromDate(periodStart),
+              'end': Timestamp.fromDate(periodEnd),
+            },
+            'sentimentData': sentimentData,
+            'summary': reportSummary,
+            'createdAt': Timestamp.fromDate(periodEnd), // date it as week end for ordering
+            'isRead': false,
+            'isBackfilled': true,
+          });
+
+      print('✅ Backfill sentiment report saved for $elderlyName ($periodStart)');
+    } catch (e) {
+      print('Error generating backfill sentiment report: $e');
     }
   }
 

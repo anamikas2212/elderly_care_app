@@ -67,7 +67,7 @@ class _CaretakerLoginScreenState extends State<CaretakerLoginScreen> {
         MaterialPageRoute(builder: (_) => const PatientSelectionScreen()),
       );
     } catch (e) {
-      print('❌ Caretaker login error: $e');
+      print('❌ Caregiver login error: $e');
       String msg = 'Login failed. Please check your credentials.';
       if (e.toString().contains('user-not-found')) {
         msg = 'No account found with this email. Please register first.';
@@ -153,7 +153,7 @@ class _CaretakerLoginScreenState extends State<CaretakerLoginScreen> {
                   const SizedBox(height: 30),
 
                   Text(
-                    'Caretaker Login',
+                    'Caregiver Login',
                     style: TextStyle(
                       fontSize: 32,
                       fontWeight: FontWeight.bold,

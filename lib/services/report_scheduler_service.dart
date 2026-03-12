@@ -17,7 +17,7 @@ class ReportSchedulerService {
       );
 
       if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-        //print('✅ Notification permission granted');
+        //print('âœ… Notification permission granted');
 
         // Get FCM token
         String? token = await _messaging.getToken();
@@ -28,7 +28,7 @@ class ReportSchedulerService {
             'notificationsEnabled': true,
           }, SetOptions(merge: true));
 
-          //print('✅ FCM Token saved: $token');
+          //print('âœ… FCM Token saved: $token');
         }
 
         // Listen for token refresh
@@ -38,7 +38,7 @@ class ReportSchedulerService {
           });
         });
       } else {
-        //print('❌ Notification permission denied');
+        //print('âŒ Notification permission denied');
       }
     } catch (e) {
       //print('Error initializing notifications: $e');
@@ -178,16 +178,40 @@ class ReportSchedulerService {
 
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'enhanced_memory_service.dart';
+import 'package:elderly_care_app/services/enhanced_memory_service.dart';
+import 'package:elderly_care_app/services/cognitive_report_service.dart';
 
 class ReportSchedulerService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   Timer? _weeklyReportTimer;
+  Timer? _dailyReportTimer;
 
   // Initialize the scheduler
   void initializeScheduler(String groqApiKey) {
+    // Catch up immediately on app start (last 24h daily + Sunday weekly)
+    _runCatchUp(groqApiKey);
+
     // Run weekly reports every Sunday at midnight
     _scheduleWeeklyReports(groqApiKey);
+    // Run daily reports every night at midnight
+    _scheduleDailyReports(groqApiKey);
+  }
+
+  // Schedule daily cognitive reports
+  void _scheduleDailyReports(String groqApiKey) {
+    final now = DateTime.now();
+    final nextRun = DateTime(now.year, now.month, now.day + 1, 0, 0, 0);
+    final timeUntilNextRun = nextRun.difference(now);
+
+    print('ðŸ“… Next daily cognitive report scheduled for: $nextRun');
+
+    Future.delayed(timeUntilNextRun, () {
+      _runDailyReports(groqApiKey, skipIfExists: true);
+      _dailyReportTimer = Timer.periodic(
+        const Duration(days: 1),
+        (_) => _runDailyReports(groqApiKey, skipIfExists: true),
+      );
+    });
   }
 
   // Schedule weekly reports
@@ -198,7 +222,7 @@ class ReportSchedulerService {
     final nextSunday = DateTime(
       now.year,
       now.month,
-      now.day + daysUntilSunday,
+      now.day + (daysUntilSunday == 0 ? 7 : daysUntilSunday),
       0, // midnight
       0,
       0,
@@ -206,26 +230,127 @@ class ReportSchedulerService {
 
     final timeUntilNextRun = nextSunday.difference(now);
 
-    print('📅 Next weekly report scheduled for: $nextSunday');
+    print('ðŸ“… Next weekly report scheduled for: $nextSunday');
 
     // Schedule first run
     Future.delayed(timeUntilNextRun, () {
-      _runWeeklyReports(groqApiKey);
+      _runWeeklyReports(groqApiKey, skipIfExists: true);
 
       // Schedule recurring runs every 7 days
       _weeklyReportTimer = Timer.periodic(
         const Duration(days: 7),
-        (_) => _runWeeklyReports(groqApiKey),
+        (_) => _runWeeklyReports(groqApiKey, skipIfExists: true),
       );
     });
   }
 
-  // Run weekly reports for all elderly users
-  Future<void> _runWeeklyReports(String groqApiKey) async {
-    print('🔄 Running weekly reports...');
+  Future<void> _runCatchUp(String groqApiKey) async {
+    // Always run daily catch-up
+    await _runDailyReports(groqApiKey, skipIfExists: true);
+    // Backfill any past weekly reports that are missing (up to 8 weeks back)
+    await _runHistoricalBackfill(groqApiKey);
+  }
+
+  // Backfill weekly reports for the past N weeks where no report exists yet
+  Future<void> _runHistoricalBackfill(String groqApiKey) async {
+    const weeksToCheck = 8;
+    print('🔄 Running historical weekly report backfill (last $weeksToCheck weeks)...');
 
     try {
       final memoryService = EnhancedMemoryService(groqApiKey: groqApiKey);
+      final cognitiveService = CognitiveReportService(groqApiKey: groqApiKey);
+
+      final usersSnapshot = await _firestore
+          .collection('users')
+          .where('caretakerId', isNull: false)
+          .get();
+
+      for (var userDoc in usersSnapshot.docs) {
+        final caretakerId = userDoc.data()['caretakerId'] as String?;
+        if (caretakerId == null) continue;
+
+        // Loop over past N weeks, oldest first
+        for (int w = weeksToCheck; w >= 1; w--) {
+          // Calculate start and end of that historical week (Sun–Sat)
+          final now = DateTime.now();
+          final currentWeekStart = _startOfWeekSunday(now);
+          final weekStart = currentWeekStart.subtract(Duration(days: 7 * w));
+          final weekEnd = weekStart.add(const Duration(days: 7));
+
+          // Skip if a report already exists for this period
+          final exists = await _hasReportSince(
+            caretakerId: caretakerId,
+            elderlyId: userDoc.id,
+            type: 'weekly',
+            since: weekStart,
+            before: weekEnd,
+          );
+          if (exists) continue;
+
+          try {
+            await memoryService.generateWeeklySentimentReportForPeriod(
+              elderlyId: userDoc.id,
+              periodStart: weekStart,
+              periodEnd: weekEnd,
+            );
+            await cognitiveService.generateWeeklyCognitiveReport(userDoc.id, periodStart: weekStart, periodEnd: weekEnd);
+            print('✅ Backfilled report for ${userDoc.id} week of ${weekStart.toIso8601String()}');
+          } catch (e) {
+            print('❌ Backfill failed for ${userDoc.id} week ${weekStart}: $e');
+          }
+        }
+      }
+      print('✅ Historical backfill complete.');
+    } catch (e) {
+      print('❌ Error in historical backfill: $e');
+    }
+  }
+
+  // Run daily reports for all elderly users
+  Future<void> _runDailyReports(
+    String groqApiKey, {
+    required bool skipIfExists,
+  }) async {
+    print('Running daily cognitive reports...');
+    final cognitiveService = CognitiveReportService(groqApiKey: groqApiKey);
+    final todayStart = _startOfDay(DateTime.now());
+    
+    final usersSnapshot = await _firestore
+        .collection('users')
+        .where('caretakerId', isNull: false)
+        .get();
+
+    for (var userDoc in usersSnapshot.docs) {
+      try {
+        final caretakerId = userDoc.data()['caretakerId'] as String?;
+        if (caretakerId == null) continue;
+        if (skipIfExists) {
+          final exists = await _hasReportSince(
+            caretakerId: caretakerId,
+            elderlyId: userDoc.id,
+            type: 'daily',
+            since: todayStart,
+          );
+          if (exists) continue;
+        }
+        await cognitiveService.generateDailyCognitiveReport(userDoc.id);
+      } catch (e) {
+        print('âŒ Daily report failed for ${userDoc.id}: $e');
+      }
+    }
+  }
+
+  // Run weekly reports for all elderly users
+  Future<void> _runWeeklyReports(
+    String groqApiKey, {
+    required bool skipIfExists,
+  }) async {
+    print('Running weekly reports...');
+
+    try {
+      final memoryService = EnhancedMemoryService(groqApiKey: groqApiKey);
+      final cognitiveService = CognitiveReportService(groqApiKey: groqApiKey);
+      final weekStart = _startOfWeekSunday(DateTime.now());
 
       // Get all elderly users (users with a caretakerId field)
       final usersSnapshot =
@@ -239,41 +364,95 @@ class ReportSchedulerService {
 
       for (var userDoc in usersSnapshot.docs) {
         try {
+          final caretakerId = userDoc.data()['caretakerId'] as String?;
+          if (caretakerId == null) continue;
+          if (skipIfExists) {
+            final exists = await _hasReportSince(
+              caretakerId: caretakerId,
+              elderlyId: userDoc.id,
+              type: 'weekly',
+              since: weekStart,
+            );
+            if (exists) continue;
+          }
+          // Sentiment report
           await memoryService.generateWeeklySentimentReport(
             elderlyId: userDoc.id,
           );
+          
+          // Cognitive report
+          await cognitiveService.generateWeeklyCognitiveReport(userDoc.id);
+          
           successCount++;
-          print('✅ Report generated for user: ${userDoc.id}');
+          print('âœ… Reports generated for user: ${userDoc.id}');
         } catch (e) {
           errorCount++;
-          print('❌ Error generating report for ${userDoc.id}: $e');
+          print('âŒ Error generating report for ${userDoc.id}: $e');
         }
       }
 
-      print(
-        '📊 Weekly reports complete: $successCount succeeded, $errorCount failed',
-      );
+      print('Weekly reports complete: $successCount succeeded, $errorCount failed');
     } catch (e) {
-      print('❌ Error running weekly reports: $e');
+      print('Error running weekly reports: $e');
     }
   }
 
-  // Manually trigger weekly report for a specific user (for testing)
+  // Manually trigger reports for a specific user (for testing)
   Future<void> triggerManualReport(String elderlyId, String groqApiKey) async {
     try {
-      print('🔄 Manually triggering report for: $elderlyId');
+      print('ðŸ”„ Manually triggering reports for: $elderlyId');
       final memoryService = EnhancedMemoryService(groqApiKey: groqApiKey);
+      final cognitiveService = CognitiveReportService(groqApiKey: groqApiKey);
+      
       await memoryService.generateWeeklySentimentReport(elderlyId: elderlyId);
-      print('✅ Manual report generated successfully');
+      await cognitiveService.generateDailyCognitiveReport(elderlyId);
+      await cognitiveService.generateWeeklyCognitiveReport(elderlyId);
+      
+      print('âœ… manual reports generated successfully');
     } catch (e) {
-      print('❌ Error generating manual report: $e');
+      print('âŒ Error generating manual report: $e');
       rethrow;
     }
+  }
+
+  Future<bool> _hasReportSince({
+    required String caretakerId,
+    required String elderlyId,
+    required String type,
+    required DateTime since,
+    DateTime? before, // optional upper bound for backfill checks
+  }) async {
+    var query = _firestore
+        .collection('users')
+        .doc(caretakerId)
+        .collection('cognitive_reports')
+        .where('elderlyId', isEqualTo: elderlyId)
+        .where('type', isEqualTo: type)
+        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(since));
+
+    if (before != null) {
+      query = query.where('date', isLessThan: Timestamp.fromDate(before));
+    }
+
+    final snapshot = await query.limit(1).get();
+    return snapshot.docs.isNotEmpty;
+  }
+
+  DateTime _startOfDay(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
+  }
+
+  DateTime _startOfWeekSunday(DateTime date) {
+    final daysSinceSunday = date.weekday % 7; // Sunday=0, Monday=1, ...
+    final sunday = date.subtract(Duration(days: daysSinceSunday));
+    return DateTime(sunday.year, sunday.month, sunday.day);
   }
 
   // Cancel scheduled reports (call this when disposing)
   void dispose() {
     _weeklyReportTimer?.cancel();
-    print('🛑 Report scheduler stopped');
+    _dailyReportTimer?.cancel();
+    print('Report scheduler stopped');
   }
 }
+

@@ -26,12 +26,13 @@ class PairingService {
       throw Exception('Failed to generate unique pairing code. Try again.');
     }
 
-    // Save code with 24-hour expiry
+    // Save code with 30-day expiry so the elderly's code stays stable
+    // across multiple sessions on the same device.
     final now = DateTime.now();
     await _firestore.collection('pairing_codes').doc(code).set({
       'elderly_uid': elderlyUid,
       'created_at': Timestamp.fromDate(now),
-      'expires_at': Timestamp.fromDate(now.add(const Duration(hours: 24))),
+      'expires_at': Timestamp.fromDate(now.add(const Duration(days: 30))),
     });
 
     // Save code locally so the elderly user can always see it
@@ -93,10 +94,12 @@ class PairingService {
   }
 
   /// Redeems a 6-digit code: links the elderly user to the caretaker.
+  /// Also updates the elderly user's profile with detailed information provided by the caretaker.
   /// Returns the elderly user's UID if successful.
   Future<String> redeemPairingCode({
     required String code,
     required String caretakerUid,
+    required Map<String, dynamic> elderlyDetails,
   }) async {
     final doc = await _firestore.collection('pairing_codes').doc(code).get();
 
@@ -118,6 +121,32 @@ class PairingService {
     await _firestore.collection('users').doc(caretakerUid).update({
       'linked_elderly': FieldValue.arrayUnion([elderlyUid]),
     });
+
+    // Update the elderly user's profile with all the detailed info
+    final updatedDetails = {
+      'caretakerId': caretakerUid,
+      ...elderlyDetails,
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+
+    await _firestore.collection('users').doc(elderlyUid).set(
+          updatedDetails,
+          SetOptions(merge: true),
+        );
+
+    // Also update the name-based doc if it exists (backward compatibility)
+    try {
+      final elderlyName = elderlyDetails['name'];
+      if (elderlyName != null && elderlyName != elderlyUid) {
+        final nameDoc = await _firestore.collection('users').doc(elderlyName).get();
+        if (nameDoc.exists) {
+          await _firestore.collection('users').doc(elderlyName).set(
+                updatedDetails,
+                SetOptions(merge: true),
+              );
+        }
+      }
+    } catch (_) {}
 
     // Delete the used code
     await doc.reference.delete();
@@ -160,6 +189,35 @@ class PairingService {
     }
 
     return profiles;
+  }
+
+  /// Looks up the elderly user's profile from a 6-digit care code WITHOUT
+  /// consuming / redeeming it.  Returns null if the code is invalid or expired.
+  Future<Map<String, dynamic>?> lookupElderlyByCode(String code) async {
+    try {
+      final doc =
+          await _firestore.collection('pairing_codes').doc(code.trim()).get();
+      if (!doc.exists) return null;
+
+      final data = doc.data()!;
+      final expiresAt = (data['expires_at'] as Timestamp).toDate();
+      if (DateTime.now().isAfter(expiresAt)) return null;
+
+      final elderlyUid = data['elderly_uid'] as String;
+      final elderlyDoc =
+          await _firestore.collection('users').doc(elderlyUid).get();
+      if (!elderlyDoc.exists) return null;
+
+      final profile = elderlyDoc.data()!;
+      return {
+        'uid':    elderlyUid,
+        'name':   profile['name']   as String? ?? '',
+        'age':    profile['age']?.toString()  ?? '',
+        'gender': profile['gender'] as String? ?? '',
+      };
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Generates a random 6-digit numeric string.

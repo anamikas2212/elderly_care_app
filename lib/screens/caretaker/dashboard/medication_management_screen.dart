@@ -3,6 +3,7 @@ import '../../../theme/caretaker_theme.dart';
 import '../../elderly/medication/AddMedicationScreen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
 
 final _firestore = FirebaseFirestore.instance;
 final _auth = FirebaseAuth.instance;
@@ -19,11 +20,36 @@ class MedicationManagementScreen extends StatefulWidget {
 
 class _MedicationManagementScreenState
     extends State<MedicationManagementScreen> {
-  // ─── Computed values from Firestore docs ────────────────────────────────
-  int _takenCount(List<QueryDocumentSnapshot> docs) =>
-      docs.where((d) => (d['takenToday'] as bool? ?? false)).length;
+  bool _isMonthlyReport = false;
+  late Stream<QuerySnapshot> _medicationsStream;
 
-  double get _adherencePercentage => 87.0; // replace with real weekly calc
+  @override
+  void initState() {
+    super.initState();
+    _medicationsStream = _firestore
+        .collection('users')
+        .doc(widget.userId)
+        .collection('medications')
+        .snapshots();
+  }
+
+  TimeOfDay? _parse12hTime(String timeStr) {
+    try {
+      final parts = timeStr.trim().split(' ');
+      if (parts.isEmpty) return null;
+      final hm = parts[0].split(':');
+      if (hm.length < 2) return null;
+      int hour = int.parse(hm[0]);
+      final minute = int.parse(hm[1]);
+      if (parts.length > 1) {
+        if (parts[1].toUpperCase() == 'PM' && hour != 12) hour += 12;
+        if (parts[1].toUpperCase() == 'AM' && hour == 12) hour = 0;
+      }
+      return TimeOfDay(hour: hour, minute: minute);
+    } catch (_) {
+      return null;
+    }
+  }
 
   // ─── Add medicine ────────────────────────────────────────────────────────
   void _addMedicine() async {
@@ -131,19 +157,35 @@ class _MedicationManagementScreenState
   }
 
   // ─── Toggle taken ────────────────────────────────────────────────────────
-  Future<void> _toggleTaken(String docId, bool currentValue) async {
-    await _firestore
-        .collection('users')
-        .doc(widget.userId)
-        .collection('medications')
-        .doc(docId)
-        .update({
-          'takenToday': !currentValue,
-          'status': !currentValue ? 'taken' : 'upcoming',
-        });
+  Future<void> _toggleTaken(String docId, bool isTakenToday, int timeIndex) async {
+    final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    if (isTakenToday) {
+      await _firestore
+          .collection('users')
+          .doc(widget.userId)
+          .collection('medications')
+          .doc(docId)
+          .update({
+            'takenDates': FieldValue.arrayRemove([dateStr, '${dateStr}_$timeIndex']),
+            'takenToday': false, // Legacy
+            'status': 'upcoming',
+          });
+    } else {
+      await _firestore
+          .collection('users')
+          .doc(widget.userId)
+          .collection('medications')
+          .doc(docId)
+          .update({
+            'takenDates': FieldValue.arrayUnion([dateStr, '${dateStr}_$timeIndex']),
+            'takenToday': true, // Legacy
+            'lastTaken': FieldValue.serverTimestamp(),
+            'status': 'taken',
+          });
+    }
   }
-
-  // ─── Build ────────────────────────────────────────────────────────────────
+  
+  // ─── Build UI ────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     if (widget.userId == null || widget.userId!.isEmpty) {
@@ -189,13 +231,7 @@ class _MedicationManagementScreenState
         ],
       ),
       body: StreamBuilder<QuerySnapshot>(
-        stream:
-            _firestore
-                .collection('users')
-                .doc(widget.userId)
-                .collection('medications')
-                .orderBy('time', descending: false)
-                .snapshots(),
+        stream: _medicationsStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -206,6 +242,42 @@ class _MedicationManagementScreenState
           }
 
           final docs = snapshot.data?.docs ?? [];
+          
+          final dayName = DateFormat('EEEE').format(DateTime.now());
+          List<Map<String, dynamic>> flatListToday = [];
+          for (var doc in docs) {
+            final med = doc.data() as Map<String, dynamic>;
+            final days = (med['days'] == null) ? '' : (med['days'] is List ? med['days'].join(', ') : med['days'].toString()).toLowerCase();
+            
+            if (days.contains('daily') || days.contains(dayName.toLowerCase())) {
+              final times = med['times'] as List<dynamic>?;
+              if (times != null && times.isNotEmpty) {
+                for (var i = 0; i < times.length; i++) {
+                  flatListToday.add({
+                    'docId': doc.id,
+                    'data': med,
+                    'timeStr': times[i].toString(),
+                    'timeIndex': i,
+                  });
+                }
+              } else {
+                flatListToday.add({
+                  'docId': doc.id,
+                  'data': med,
+                  'timeStr': (med['time'] as String?) ?? '',
+                  'timeIndex': 0,
+                });
+              }
+            }
+          }
+          
+          flatListToday.sort((a, b) {
+            final tA = _parse12hTime(a['timeStr']);
+            final tB = _parse12hTime(b['timeStr']);
+            if (tA == null || tB == null) return 0;
+            if (tA.hour != tB.hour) return tA.hour.compareTo(tB.hour);
+            return tA.minute.compareTo(tB.minute);
+          });
 
           return SingleChildScrollView(
             child: Padding(
@@ -214,37 +286,58 @@ class _MedicationManagementScreenState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // ── Progress ──────────────────────────────────────────
-                  _buildProgressSection(docs),
+                  _buildProgressSection(flatListToday),
 
                   const SizedBox(height: 24),
 
-                  // ── Missed dose alert ─────────────────────────────────
-                  Builder(
-                    builder: (_) {
-                      final overdue =
-                          docs.where((d) {
-                            final data = d.data() as Map<String, dynamic>;
-                            return (data['status'] as String? ?? '') ==
-                                'overdue';
-                          }).toList();
-                      if (overdue.isEmpty) return const SizedBox.shrink();
-                      final med = overdue.first.data() as Map<String, dynamic>;
-                      return Column(
-                        children: [
-                          _buildMissedDoseAlert(med),
-                          const SizedBox(height: 24),
-                        ],
-                      );
-                    },
-                  ),
-
                   // ── Today's schedule ──────────────────────────────────
-                  _buildScheduleSection(docs),
+                  _buildScheduleSection(flatListToday),
 
                   const SizedBox(height: 32),
 
                   // ── Weekly adherence ──────────────────────────────────
-                  _buildWeeklyAdherence(),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                            const Text(
+                              'Adherence Analytics',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            Container(
+                                decoration: BoxDecoration(
+                                    color: Colors.grey.shade200,
+                                    borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: ToggleButtons(
+                                    constraints: const BoxConstraints(minHeight: 32, minWidth: 70),
+                                    borderRadius: BorderRadius.circular(20),
+                                    fillColor: Colors.teal.shade100,
+                                    selectedColor: Colors.teal.shade900,
+                                    color: Colors.grey.shade700,
+                                    isSelected: [!_isMonthlyReport, _isMonthlyReport],
+                                    onPressed: (index) {
+                                        setState(() {
+                                            _isMonthlyReport = index == 1;
+                                        });
+                                    },
+                                    children: const [
+                                        Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('Weekly', style: TextStyle(fontSize: 13))),
+                                        Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('Monthly', style: TextStyle(fontSize: 13))),
+                                    ],
+                                )
+                            )
+                        ]
+                    ),
+                    const SizedBox(height: 16),
+                    _buildAdherenceReport(docs, isMonthly: _isMonthlyReport),
+                  ],
+                  ),
 
                   const SizedBox(height: 100),
                 ],
@@ -271,9 +364,20 @@ class _MedicationManagementScreenState
   }
 
   // ─── Progress section ─────────────────────────────────────────────────────
-  Widget _buildProgressSection(List<QueryDocumentSnapshot> docs) {
-    final taken = _takenCount(docs);
-    final total = docs.length;
+  Widget _buildProgressSection(List<Map<String, dynamic>> flatList) {
+    final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    
+    int taken = 0;
+    for (var item in flatList) {
+      final med = item['data'] as Map<String, dynamic>;
+      final timeIndex = item['timeIndex'] as int;
+      final takenDates = med['takenDates'] as List<dynamic>? ?? [];
+      final legacyTaken = (timeIndex == 0) && (takenDates.contains(dateStr) || (med['takenToday'] == true && dateStr == DateFormat('yyyy-MM-dd').format(DateTime.now())));
+      if (takenDates.contains('${dateStr}_$timeIndex') || legacyTaken) {
+        taken++;
+      }
+    }
+    final total = flatList.length;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -312,60 +416,8 @@ class _MedicationManagementScreenState
     );
   }
 
-  // ─── Missed dose alert ────────────────────────────────────────────────────
-  Widget _buildMissedDoseAlert(Map<String, dynamic> med) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.red.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.red.shade200),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.warning_amber_rounded,
-            color: Colors.red.shade700,
-            size: 32,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Missed Dose: ${med['name']}',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.red.shade900,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Scheduled at ${med['time'] ?? ''}',
-                  style: TextStyle(fontSize: 14, color: Colors.red.shade700),
-                ),
-              ],
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {},
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade600,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text('Remind', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
-
   // ─── Schedule section ─────────────────────────────────────────────────────
-  Widget _buildScheduleSection(List<QueryDocumentSnapshot> docs) {
+  Widget _buildScheduleSection(List<Map<String, dynamic>> flatList) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -378,7 +430,7 @@ class _MedicationManagementScreenState
           ),
         ),
         const SizedBox(height: 16),
-        if (docs.isEmpty)
+        if (flatList.isEmpty)
           Center(
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 40),
@@ -407,12 +459,11 @@ class _MedicationManagementScreenState
           ListView.separated(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            itemCount: docs.length,
+            itemCount: flatList.length,
             separatorBuilder: (_, __) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
-              final doc = docs[index];
-              final med = doc.data() as Map<String, dynamic>;
-              return _buildMedicationCard(doc.id, med);
+              final item = flatList[index];
+              return _buildMedicationCard(item['docId'], item['data'], item['timeStr'], item['timeIndex']);
             },
           ),
       ],
@@ -420,10 +471,21 @@ class _MedicationManagementScreenState
   }
 
   // ─── Medication card ──────────────────────────────────────────────────────
-  Widget _buildMedicationCard(String docId, Map<String, dynamic> med) {
-    final isTaken = med['takenToday'] as bool? ?? false;
-    final status = med['status'] as String? ?? 'upcoming';
-    final isOverdue = status == 'overdue';
+  Widget _buildMedicationCard(String docId, Map<String, dynamic> med, String time, int timeIndex) {
+    final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final takenDates = med['takenDates'] as List<dynamic>? ?? [];
+    
+    final legacyTaken = (timeIndex == 0) && (takenDates.contains(dateStr) || (med['takenToday'] == true && dateStr == DateFormat('yyyy-MM-dd').format(DateTime.now())));
+    final isTaken = takenDates.contains('${dateStr}_$timeIndex') || legacyTaken;
+    
+    bool isOverdue = false;
+    if (!isTaken) {
+      final now = TimeOfDay.now();
+      final t = _parse12hTime(time);
+      if (t != null && (now.hour > t.hour || (now.hour == t.hour && now.minute > t.minute + 30))) {
+        isOverdue = true;
+      }
+    }
 
     Color statusColor = Colors.grey;
     Color bgColor = Colors.grey.shade50;
@@ -459,11 +521,11 @@ class _MedicationManagementScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+              Row(
               children: [
                 // Toggle taken on tap
                 GestureDetector(
-                  onTap: () => _toggleTaken(docId, isTaken),
+                  onTap: () => _toggleTaken(docId, isTaken, timeIndex),
                   child: statusIcon,
                 ),
                 const SizedBox(width: 16),
@@ -483,12 +545,24 @@ class _MedicationManagementScreenState
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        med['time'] as String? ?? '',
+                        time,
                         style: TextStyle(
                           fontSize: 14,
                           color: Colors.grey.shade600,
                         ),
                       ),
+                      if ((med['doctorName'] as String? ?? '').isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            'Prescribed by: ${med['doctorName']}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.teal.shade700,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -641,28 +715,248 @@ class _MedicationManagementScreenState
   }
 
   // ─── Weekly adherence ─────────────────────────────────────────────────────
-  Widget _buildWeeklyAdherence() {
+  Widget _buildAdherenceReport(List<QueryDocumentSnapshot> docs, {bool isMonthly = false}) {
+    int daysToAnalyze = isMonthly ? 30 : 7;
+    int totalPillsPastDays = 0;
+    int missedPillsPastDays = 0;
+    
+    int todayMissed = 0;
+    int todayTotal = 0;
+    
+    Map<String, int> medicineMissedCount = {};
+    List<Map<String, String>> missedHistory = []; // Tracks { 'name': 'Aspirin', 'date': '2026-03-10', 'time': '8:00 AM' }
+
+    final now = DateTime.now();
+    
+    // We analyze past N days tracking up to today.
+    for (int i = 0; i < daysToAnalyze; i++) {
+        final date = now.subtract(Duration(days: i));
+        final dateStr = DateFormat('yyyy-MM-dd').format(date);
+        final dayName = DateFormat('EEEE').format(date).toLowerCase();
+        
+        for (var doc in docs) {
+            final med = doc.data() as Map<String, dynamic>;
+            final medName = med['name'] as String? ?? 'Unknown';
+            
+            // Check if created after this date, if so, skip counting it for this past date
+            final createdAtTimestamp = med['createdAt'] as Timestamp?;
+            final createdAt = createdAtTimestamp?.toDate() ?? DateTime.now(); // If null, assume added today so we don't punish historical empty arrays.
+            final createdDateStr = DateFormat('yyyy-MM-dd').format(createdAt);
+            
+            // If the date we are checking (dateStr) is BEFORE the creation date (createdDateStr), skip it.
+            if (dateStr.compareTo(createdDateStr) < 0) {
+                continue;
+            }
+
+            final days = (med['days'] == null) ? '' : (med['days'] is List ? med['days'].join(', ') : med['days'].toString()).toLowerCase();
+            
+            if (days.contains('daily') || days.contains(dayName)) {
+                // Determine total timings for this med
+                final times = med['times'] as List<dynamic>?;
+                int timesCount = (times != null && times.isNotEmpty) ? times.length : 1;
+
+                final takenDates = med['takenDates'] as List<dynamic>? ?? [];
+                final legacyDayTaken = takenDates.contains(dateStr);
+                for (int tIdx = 0; tIdx < timesCount; tIdx++) {
+                    final scheduleTimeStr = (times != null && times.isNotEmpty)
+                        ? times[tIdx].toString()
+                        : (med['time'] as String? ?? '');
+                    final tObj = _parse12hTime(scheduleTimeStr);
+
+                    // Only count today's doses once they're due (not in the future)
+                    if (i == 0) {
+                        final isDue = tObj == null
+                            ? true
+                            : (now.hour > tObj.hour ||
+                                (now.hour == tObj.hour && now.minute >= tObj.minute));
+                        if (!isDue) {
+                            continue;
+                        }
+                        todayTotal++;
+                    }
+
+                    totalPillsPastDays++;
+
+                    // Legacy takenToday only applies to today (i == 0)
+                    final legacyTaken =
+                        legacyDayTaken || (i == 0 && med['takenToday'] == true);
+                    final isTaken =
+                        takenDates.contains('${dateStr}_$tIdx') || legacyTaken;
+                    
+                    if (!isTaken) {
+                        // If checking today, only count as missed if the time has passed
+                        if (i == 0) {
+                            // Check if overdue
+                            if (tObj != null && (now.hour > tObj.hour || (now.hour == tObj.hour && now.minute > tObj.minute + 30))) {
+                                todayMissed++;
+                                missedPillsPastDays++;
+                                medicineMissedCount[medName] = (medicineMissedCount[medName] ?? 0) + 1;
+                                missedHistory.add({'name': medName, 'date': dateStr, 'time': scheduleTimeStr});
+                            }
+                        } else {
+                            // Completely missed past day (and it was verified to be created on or before this day)
+                            missedPillsPastDays++;
+                            medicineMissedCount[medName] = (medicineMissedCount[medName] ?? 0) + 1;
+                            missedHistory.add({'name': medName, 'date': dateStr, 'time': scheduleTimeStr});
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Sort missed counts descending
+    var sortedMissedEntryList = medicineMissedCount.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+
+    double adherence = 100.0;
+    if (totalPillsPastDays > 0) {
+        adherence = ((totalPillsPastDays - missedPillsPastDays) / totalPillsPastDays) * 100;
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Weekly Adherence',
-          style: TextStyle(
+        Text(
+          isMonthly ? 'Monthly Adherence Report' : 'Weekly Adherence Report',
+          style: const TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w600,
             color: Colors.black87,
           ),
         ),
-        const SizedBox(height: 8),
-        Text(
-          'Weekly Average: ${_adherencePercentage.toStringAsFixed(0)}%',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: Colors.teal.shade700,
-          ),
+        const SizedBox(height: 16),
+        
+        // Summary Cards
+        Row(
+           children: [
+               Expanded(
+                   child: _buildReportCard(
+                       title: isMonthly ? 'Past 30 Days' : 'Past 7 Days',
+                       metrics: [
+                           'Total Pills: $totalPillsPastDays',
+                           'Missed: $missedPillsPastDays',
+                           'Adherence: ${adherence.toStringAsFixed(1)}%'
+                       ],
+                       color: adherence >= 80 ? Colors.green.shade50 : Colors.red.shade50,
+                       iconColor: adherence >= 80 ? Colors.green.shade700 : Colors.red.shade700,
+                   )
+               ),
+               const SizedBox(width: 12),
+               Expanded(
+                   child: _buildReportCard(
+                       title: 'Today',
+                       metrics: [
+                           'Total Pills: $todayTotal',
+                           'Missed: $todayMissed',
+                       ],
+                       color: Colors.blue.shade50,
+                       iconColor: Colors.blue.shade700,
+                   )
+               ),
+           ]
         ),
+        
+        const SizedBox(height: 16),
+        if (sortedMissedEntryList.isNotEmpty) ...[
+            Text(
+              isMonthly ? 'Frequently Missed Medications (Monthly)' : 'Frequently Missed Medications (Weekly)',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...sortedMissedEntryList.map((e) {
+                return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                        color: e.value > 3 ? Colors.red.shade100 : (e.value > 1 ? Colors.orange.shade50 : Colors.grey.shade100),
+                        borderRadius: BorderRadius.circular(10),
+                        border: e.value > 3 ? Border.all(color: Colors.red.shade300) : null,
+                    ),
+                    child: Row(
+                        children: [
+                            Icon(e.value > 3 ? Icons.error : (e.value > 1 ? Icons.warning : Icons.info), color: e.value > 3 ? Colors.red.shade800 : (e.value > 1 ? Colors.orange.shade700 : Colors.grey.shade600)),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(e.key, style: const TextStyle(fontWeight: FontWeight.w500))),
+                            Text('Missed ${e.value} times', style: TextStyle(fontWeight: FontWeight.bold, color: e.value > 3 ? Colors.red.shade900 : Colors.black87)),
+                        ]
+                    )
+                );
+            }).toList(),
+            const SizedBox(height: 16),
+        ],
+
+        if (missedHistory.isNotEmpty) ...[
+            const Text(
+              'Detailed Missed History log',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+                constraints: const BoxConstraints(maxHeight: 200),
+                decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: ListView.separated(
+                    padding: const EdgeInsets.all(8),
+                    shrinkWrap: true,
+                    itemCount: missedHistory.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                        final item = missedHistory[index];
+                        return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                            child: Row(
+                                children: [
+                                    const Icon(Icons.circle, size: 8, color: Colors.red),
+                                    const SizedBox(width: 8),
+                                    Expanded(child: Text(item['name']!, style: const TextStyle(fontWeight: FontWeight.w500))),
+                                    Text('${item['date']} at ${item['time']}', style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
+                                ]
+                            )
+                        );
+                    }
+                )
+            )
+        ]
       ],
     );
+  }
+
+  Widget _buildReportCard({required String title, required List<String> metrics, required Color color, required Color iconColor}) {
+      return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                  Row(
+                      children: [
+                          Icon(Icons.bar_chart, color: iconColor, size: 20),
+                          const SizedBox(width: 8),
+                          Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: iconColor)),
+                      ]
+                  ),
+                  const SizedBox(height: 12),
+                  ...metrics.map((m) => Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(m, style: const TextStyle(fontSize: 14)),
+                  )).toList()
+              ]
+          )
+      );
   }
 }

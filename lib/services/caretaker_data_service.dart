@@ -911,4 +911,101 @@ class CaretakerDataService {
     if (value is Timestamp) return value.toDate().millisecondsSinceEpoch;
     return 0;
   }
+
+  DateTime? _extractSessionTime(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+    return null;
+  }
+
+  String _normalizeGameType(dynamic raw) {
+    final String gameType = raw?.toString() ?? 'Unknown';
+    switch (gameType) {
+      case 'city_atlas':
+        return 'City Atlas';
+      case 'event_ordering':
+        return 'Event Ordering';
+      case 'daily_routine_recall':
+        return 'Routine Recall';
+      case 'monument_recall':
+        return 'Monument Recall';
+      default:
+        return gameType;
+    }
+  }
+
+  /// Fetch games played by a user in the last 24 hours from backend collections.
+  Future<List<Map<String, dynamic>>> getLast24hGames(String userId) async {
+    final since = DateTime.now().subtract(const Duration(hours: 24));
+    final List<Map<String, dynamic>> results = [];
+
+    // colorTapGameSessions
+    try {
+      final snap = await _firestore
+          .collection('colorTapGameSessions')
+          .where('userId', isEqualTo: userId)
+          .limit(200)
+          .get();
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final time = _extractSessionTime(data['createdAt']);
+        if (time != null && time.isAfter(since)) {
+          results.add({
+            'gameType': 'Color Tap',
+            'timestamp': time,
+            'metricsTracked': (data['metrics'] is Map)
+                ? (data['metrics'] as Map).keys.map((k) => k.toString()).toList()
+                : <String>[],
+          });
+        }
+      }
+    } catch (_) {}
+
+    // flipCardGameSessions
+    try {
+      final snap = await _firestore
+          .collection('flipCardGameSessions')
+          .where('userId', isEqualTo: userId)
+          .limit(200)
+          .get();
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final time = _extractSessionTime(data['createdAt']);
+        if (time != null && time.isAfter(since)) {
+          results.add({
+            'gameType': 'Flip Card',
+            'timestamp': time,
+            'metricsTracked': (data['metrics'] is Map)
+                ? (data['metrics'] as Map).keys.map((k) => k.toString()).toList()
+                : <String>[],
+          });
+        }
+      }
+    } catch (_) {}
+
+    // game_sessions (other games)
+    try {
+      final snap = await _firestore
+          .collection('game_sessions')
+          .where('userId', isEqualTo: userId)
+          .limit(200)
+          .get();
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final time = _extractSessionTime(data['timestamp'] ?? data['createdAt']);
+        if (time != null && time.isAfter(since)) {
+          results.add({
+            'gameType': _normalizeGameType(data['gameType']),
+            'timestamp': time,
+            'metricsTracked': (data['metrics'] is Map)
+                ? (data['metrics'] as Map).keys.map((k) => k.toString()).toList()
+                : <String>[],
+          });
+        }
+      }
+    } catch (_) {}
+
+    results.sort((a, b) => (b['timestamp'] as DateTime).compareTo(a['timestamp'] as DateTime));
+    return results;
+  }
 }

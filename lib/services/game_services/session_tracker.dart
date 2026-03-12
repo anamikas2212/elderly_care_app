@@ -1,7 +1,10 @@
 // FILE LOCATION: lib/services/game_services/session_tracker.dart
 // UPDATED VERSION - Supports both Color Tap and Flip Card Match games
 
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:elderly_care_app/config/app_config.dart';
+import 'package:elderly_care_app/services/cognitive_report_service.dart';
 import '../../models/cognitive/game_session.dart';
 
 class SessionTracker {
@@ -177,6 +180,15 @@ class SessionTracker {
       print('   Main collection: $collectionName/${session.id}');
       print('   User collection: users/$userId/$collectionName/${session.id}');
       print('   🎯 Caretaker dashboard will update in real-time!');
+
+      // Generate daily report on first session of the day (last 24h window).
+      // Delay slightly to allow server timestamps to resolve.
+      Future.delayed(const Duration(seconds: 10), () {
+        unawaited(
+          CognitiveReportService(groqApiKey: AppConfig.groqApiKey)
+              .generateDailyCognitiveReportIfMissing(userId),
+        );
+      });
     } catch (e, stackTrace) {
       print('❌ ERROR SAVING SESSION: $e');
       print('Stack trace: $stackTrace');

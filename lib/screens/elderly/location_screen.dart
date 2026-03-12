@@ -39,10 +39,12 @@ class _LocationScreenState extends State<LocationScreen> {
   // Stream subscription for location updates
   StreamSubscription<Position>? _positionStreamSubscription;
   Timer? _positionPollTimer;
+  StreamSubscription<DocumentSnapshot>? _safeZoneSubscription;
   
   // Distance from home
   double? _distanceFromHome;
   bool _isInsideSafeZone = true;
+  Position? _lastPosition;
   
   // Route guidance
   List<LatLng> _routePoints = [];
@@ -74,6 +76,7 @@ class _LocationScreenState extends State<LocationScreen> {
   void dispose() {
     _positionStreamSubscription?.cancel();
     _positionPollTimer?.cancel();
+    _safeZoneSubscription?.cancel();
     _mapController.dispose();
     super.dispose();
   }
@@ -94,7 +97,7 @@ class _LocationScreenState extends State<LocationScreen> {
 
       print('✅ Loading home location for user: $_elderlyUserName');
 
-      // Load home location from Firebase
+      // Load home location from Firebase (initial)
       final doc = await FirebaseFirestore.instance
           .collection('safe_zones')
           .doc(_elderlyUserName)
@@ -116,6 +119,30 @@ class _LocationScreenState extends State<LocationScreen> {
       } else {
         print('⚠️ No home location saved - user needs to set it');
       }
+
+      // Live updates for home location + radius
+      _safeZoneSubscription?.cancel();
+      _safeZoneSubscription = FirebaseFirestore.instance
+          .collection('safe_zones')
+          .doc(_elderlyUserName)
+          .snapshots()
+          .listen((snapshot) {
+        if (!snapshot.exists) return;
+        final data = snapshot.data()!;
+        final lat = data['homeLatitude'] as double?;
+        final lng = data['homeLongitude'] as double?;
+        final radius = (data['radius'] as num?)?.toDouble();
+
+        if (lat != null && lng != null) {
+          setState(() {
+            _homeLocation = LatLng(lat, lng);
+            if (radius != null) _safeZoneRadius = radius;
+          });
+          if (_lastPosition != null) {
+            _updateSafeZoneStatus(_lastPosition!, saveToFirebase: true);
+          }
+        }
+      });
 
       _requestLocationPermission();
     } catch (e) {
@@ -189,6 +216,7 @@ class _LocationScreenState extends State<LocationScreen> {
   Future<void> _updateLocation(Position position) async {
     if (!mounted) return;
     final newLocation = LatLng(position.latitude, position.longitude);
+    _lastPosition = position;
     
     setState(() {
       _currentLocation = newLocation;
@@ -196,43 +224,49 @@ class _LocationScreenState extends State<LocationScreen> {
     });
 
     if (_homeLocation != null) {
-      final distance = Geolocator.distanceBetween(
-        _homeLocation!.latitude,
-        _homeLocation!.longitude,
-        position.latitude,
-        position.longitude,
-      );
+      _updateSafeZoneStatus(position, saveToFirebase: true);
+    }
+  }
 
-      final wasInside = _isInsideSafeZone;
-      bool isInside = distance <= _safeZoneRadius;
+  void _updateSafeZoneStatus(Position position, {required bool saveToFirebase}) {
+    final distance = Geolocator.distanceBetween(
+      _homeLocation!.latitude,
+      _homeLocation!.longitude,
+      position.latitude,
+      position.longitude,
+    );
 
+    final wasInside = _isInsideSafeZone;
+    final isInside = distance <= _safeZoneRadius;
+
+    setState(() {
+      _distanceFromHome = distance;
+      _isInsideSafeZone = isInside;
+    });
+
+    print('📍 Location: ${position.latitude}, ${position.longitude}');
+    print('📏 Distance from home: ${distance.toStringAsFixed(2)}m');
+    print('🏠 Inside safe zone: $isInside');
+
+    // Auto-generate route when leaving safe zone
+    if (!isInside && wasInside) {
+      print('⚠️ User left safe zone - generating route home');
+      _logSafeZoneExit(position, distance);
+      _fetchRoute(force: true);
+    } else if (!isInside && _showRoute) {
+      _fetchRoute();
+    } else if (isInside && _showRoute) {
       setState(() {
-        _distanceFromHome = distance;
-        _isInsideSafeZone = isInside;
+        _showRoute = false;
+        _routePoints.clear();
       });
+      _lastRouteOrigin = null;
+      _lastRouteDestination = null;
+      _lastRouteFetchAt = null;
+      print('✅ User back in safe zone - clearing route');
+    }
 
-      print('📍 Location: ${position.latitude}, ${position.longitude}');
-      print('📏 Distance from home: ${distance.toStringAsFixed(2)}m');
-      print('🏠 Inside safe zone: $isInside');
-
-      // Auto-generate route when leaving safe zone
-      if (!isInside && wasInside) {
-        print('⚠️ User left safe zone - generating route home');
-        _logSafeZoneExit(position, distance);
-        _fetchRoute(force: true);
-      } else if (!isInside && _showRoute) {
-        _fetchRoute();
-      } else if (isInside && _showRoute) {
-        setState(() {
-          _showRoute = false;
-          _routePoints.clear();
-        });
-        _lastRouteOrigin = null;
-        _lastRouteDestination = null;
-        _lastRouteFetchAt = null;
-        print('✅ User back in safe zone - clearing route');
-      }
-
+    if (saveToFirebase) {
       _saveLocationToFirebase(position, isInside, distance);
     }
   }

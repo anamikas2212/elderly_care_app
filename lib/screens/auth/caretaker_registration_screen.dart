@@ -13,6 +13,9 @@ class CaretakerRegistrationScreen extends StatefulWidget {
 class _CaretakerRegistrationScreenState
     extends State<CaretakerRegistrationScreen> {
   final _nameController = TextEditingController();
+  final _ageController = TextEditingController();
+  String _selectedGender = 'Female';
+  final _occupationController = TextEditingController();
   final _roleController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -24,13 +27,25 @@ class _CaretakerRegistrationScreenState
 
   Future<void> _register() async {
     final name = _nameController.text.trim();
+    final age = _ageController.text.trim();
+    final occupation = _occupationController.text.trim();
     final role = _roleController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
     final confirm = _confirmPasswordController.text.trim();
 
-    if (name.isEmpty || email.isEmpty || password.isEmpty) {
+    final intAge = int.tryParse(age) ?? 0;
+
+    if (name.isEmpty ||
+        age.isEmpty ||
+        email.isEmpty ||
+        password.isEmpty ||
+        role.isEmpty) {
       _showError('Please fill in all required fields.');
+      return;
+    }
+    if (intAge < 18) {
+      _showError('Caretaker must be at least 18 years old.');
       return;
     }
     if (password.length < 6) {
@@ -47,9 +62,12 @@ class _CaretakerRegistrationScreenState
     try {
       await _authService.registerCaretaker(
         name: name,
+        age: age,
+        gender: _selectedGender,
+        occupation: occupation,
         email: email,
         password: password,
-        familyRole: role.isEmpty ? 'Caretaker' : role,
+        familyRole: role,
       );
       if (!mounted) return;
       Navigator.pushAndRemoveUntil(
@@ -58,7 +76,7 @@ class _CaretakerRegistrationScreenState
         (route) => false,
       );
     } catch (e) {
-      print('❌ Caretaker registration error: $e');
+      print('❌ Caregiver registration error: $e');
       String msg = 'Registration failed. Please try again.';
       if (e.toString().contains('email-already-in-use')) {
         msg = 'This email is already registered. Try logging in.';
@@ -67,7 +85,8 @@ class _CaretakerRegistrationScreenState
       } else if (e.toString().contains('weak-password')) {
         msg = 'Password is too weak. Use at least 6 characters.';
       } else if (e.toString().contains('operation-not-allowed')) {
-        msg = 'Email/Password sign-in is not enabled. Please enable it in Firebase Console.';
+        msg =
+            'Email/Password sign-in is not enabled. Please enable it in Firebase Console.';
       }
       _showError('$msg\n\nDebug: $e');
     } finally {
@@ -90,6 +109,8 @@ class _CaretakerRegistrationScreenState
   @override
   void dispose() {
     _nameController.dispose();
+    _ageController.dispose();
+    _occupationController.dispose();
     _roleController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -142,7 +163,7 @@ class _CaretakerRegistrationScreenState
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Register as a caretaker',
+                    'Register as a Caregiver',
                     style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
                   ),
                   const SizedBox(height: 30),
@@ -154,10 +175,37 @@ class _CaretakerRegistrationScreenState
                   ),
                   const SizedBox(height: 14),
 
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 1,
+                        child: _buildTextField(
+                          controller: _ageController,
+                          hint: 'Age *',
+                          icon: Icons.cake_outlined,
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        flex: 2,
+                        child: _buildDropdown(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+
                   _buildTextField(
                     controller: _roleController,
-                    hint: 'Family Role (e.g. Son, Nurse)',
+                    hint: 'Family Role (e.g. Son, Nurse) *',
                     icon: Icons.family_restroom,
+                  ),
+                  const SizedBox(height: 14),
+
+                  _buildTextField(
+                    controller: _occupationController,
+                    hint: 'Occupation (Optional)',
+                    icon: Icons.work_outline,
                   ),
                   const SizedBox(height: 14),
 
@@ -181,8 +229,10 @@ class _CaretakerRegistrationScreenState
                             : Icons.visibility,
                         color: Colors.grey,
                       ),
-                      onPressed: () =>
-                          setState(() => _obscurePassword = !_obscurePassword),
+                      onPressed:
+                          () => setState(
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -199,8 +249,10 @@ class _CaretakerRegistrationScreenState
                             : Icons.visibility,
                         color: Colors.grey,
                       ),
-                      onPressed: () =>
-                          setState(() => _obscureConfirm = !_obscureConfirm),
+                      onPressed:
+                          () => setState(
+                            () => _obscureConfirm = !_obscureConfirm,
+                          ),
                     ),
                   ),
                   const SizedBox(height: 30),
@@ -218,20 +270,23 @@ class _CaretakerRegistrationScreenState
                         ),
                         elevation: 4,
                       ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
+                      child:
+                          _isLoading
+                              ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                              : const Text(
+                                'Create Account',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
-                            )
-                          : const Text(
-                              'Create Account',
-                              style: TextStyle(
-                                  fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -295,8 +350,45 @@ class _CaretakerRegistrationScreenState
           prefixIcon: Icon(icon, color: Colors.blue.shade400),
           suffixIcon: suffixIcon,
           border: InputBorder.none,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 18,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDropdown() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(13),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _selectedGender,
+          isExpanded: true,
+          icon: Icon(Icons.keyboard_arrow_down, color: Colors.blue.shade400),
+          items: ['Male', 'Female', 'Other'].map((String value) {
+            return DropdownMenuItem<String>(
+              value: value,
+              child: Text(value, style: const TextStyle(fontSize: 16)),
+            );
+          }).toList(),
+          onChanged: (newValue) {
+            if (newValue != null) {
+              setState(() => _selectedGender = newValue);
+            }
+          },
         ),
       ),
     );

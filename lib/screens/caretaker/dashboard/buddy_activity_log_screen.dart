@@ -41,7 +41,7 @@ class BuddyActivityLogScreen extends StatelessWidget {
           const Divider(),
           _buildLogItem(Icons.video_call, 'Facilitated video call', 'Yesterday, 6:00 PM', false),
           const Divider(),
-          _buildLogItem(Icons.notifications_active, 'Reminded caretaker', 'Oct 24, 9:00 AM', true),
+          _buildLogItem(Icons.notifications_active, 'Reminded Caregiver', 'Oct 24, 9:00 AM', true),
         ],
       ),
     );
