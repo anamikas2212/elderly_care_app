@@ -1,4 +1,5 @@
 //location_screen.dart
+// ✅ ENHANCED: Manual Pin-Drop to Set Home Location + Auto Route Guidance
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -7,6 +8,8 @@ import 'package:geolocator/geolocator.dart';
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class LocationScreen extends StatefulWidget {
   const LocationScreen({super.key});
@@ -19,9 +22,9 @@ class _LocationScreenState extends State<LocationScreen> {
   // Map controller
   final MapController _mapController = MapController();
   
-  // Home location (hardcoded for now)
-  final LatLng _homeLocation = LatLng(9.998418620839775, 76.361358164756); // my hostel
-  final double _safeZoneRadius = 500.0; 
+  // Home location (will be loaded from Firebase or set by user)
+  LatLng? _homeLocation;
+  double _safeZoneRadius = 500.0;
   
   // Current location (will be updated in real-time)
   LatLng? _currentLocation;
@@ -38,12 +41,26 @@ class _LocationScreenState extends State<LocationScreen> {
   
   // Distance from home
   double? _distanceFromHome;
-  bool _isInsideSafeZone = false;
+  bool _isInsideSafeZone = true;
+  
+  // Route guidance
+  List<LatLng> _routePoints = [];
+  bool _isLoadingRoute = false;
+  bool _showRoute = false;
+  double? _routeDistance;
+  String? _routeDuration;
+  
+  // ✅ NEW: Pin-drop mode for setting home
+  bool _isSettingHomeMode = false;
+  LatLng? _tempHomePin; // Temporary pin position while in setting mode
+  bool _isSavingHome = false;
+  
+  String? _elderlyUserName;
 
   @override
   void initState() {
     super.initState();
-    _requestLocationPermission();
+    _loadUserAndHomeLocation();
   }
 
   @override
@@ -53,12 +70,56 @@ class _LocationScreenState extends State<LocationScreen> {
     super.dispose();
   }
 
-  // Request location permission
+  // Load user name and home location from Firebase
+  Future<void> _loadUserAndHomeLocation() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _elderlyUserName = prefs.getString('elderly_user_name') ??
+                         prefs.getString('currentUserId') ??
+                         prefs.getString('elderly_user_id');
+
+      if (_elderlyUserName == null || _elderlyUserName!.isEmpty) {
+        print('⚠️ No elderly user name found');
+        setState(() => _isLoadingLocation = false);
+        return;
+      }
+
+      print('✅ Loading home location for user: $_elderlyUserName');
+
+      // Load home location from Firebase
+      final doc = await FirebaseFirestore.instance
+          .collection('safe_zones')
+          .doc(_elderlyUserName)
+          .get();
+
+      if (doc.exists) {
+        final data = doc.data()!;
+        final lat = data['homeLatitude'] as double?;
+        final lng = data['homeLongitude'] as double?;
+        final radius = (data['radius'] as num?)?.toDouble();
+
+        if (lat != null && lng != null) {
+          setState(() {
+            _homeLocation = LatLng(lat, lng);
+            if (radius != null) _safeZoneRadius = radius;
+          });
+          print('✅ Home location loaded: $lat, $lng (radius: $_safeZoneRadius)');
+        }
+      } else {
+        print('⚠️ No home location saved - user needs to set it');
+      }
+
+      _requestLocationPermission();
+    } catch (e) {
+      print('❌ Error loading home location: $e');
+      _requestLocationPermission();
+    }
+  }
+
   Future<void> _requestLocationPermission() async {
     bool serviceEnabled;
     LocationPermission permission;
 
-    // Check if location services are enabled
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       setState(() => _isLoadingLocation = false);
@@ -66,7 +127,6 @@ class _LocationScreenState extends State<LocationScreen> {
       return;
     }
 
-    // Check permission status
     permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
@@ -87,19 +147,17 @@ class _LocationScreenState extends State<LocationScreen> {
     _startLocationTracking();
   }
 
-  // Start real-time location tracking
   void _startLocationTracking() {
-    Geolocator.getCurrentPosition( // Get initial position
+    Geolocator.getCurrentPosition(
       desiredAccuracy: LocationAccuracy.high,
     ).then(_updateLocation).catchError((error) {
       print('Error getting initial position: $error');
       setState(() => _isLoadingLocation = false);
     });
 
-    // Listen to location updates
     const LocationSettings locationSettings = LocationSettings(
       accuracy: LocationAccuracy.high,
-      distanceFilter: 1, // Update every 1 meters
+      distanceFilter: 1,
     );
 
     _positionStreamSubscription = Geolocator.getPositionStream(
@@ -109,169 +167,266 @@ class _LocationScreenState extends State<LocationScreen> {
     });
   }
 
-  // ✅ UPDATED: Update current location and send to Firebase using NAME as ID
   Future<void> _updateLocation(Position position) async {
     final newLocation = LatLng(position.latitude, position.longitude);
     
-    // Calculate distance from home
-    final distance = Geolocator.distanceBetween(
-      _homeLocation.latitude,
-      _homeLocation.longitude,
-      position.latitude,
-      position.longitude,
-    );
-
-    bool isInside = distance <= _safeZoneRadius;
-
     setState(() {
       _currentLocation = newLocation;
-      _distanceFromHome = distance;
-      _isInsideSafeZone = distance <= _safeZoneRadius;
       _isLoadingLocation = false;
     });
 
-    print('📍 Location updated: ${position.latitude}, ${position.longitude}');
-    print('📏 Distance from home: ${distance.toStringAsFixed(2)} meters');
-    print('🏠 Inside safe zone: $_isInsideSafeZone');
+    if (_homeLocation != null) {
+      final distance = Geolocator.distanceBetween(
+        _homeLocation!.latitude,
+        _homeLocation!.longitude,
+        position.latitude,
+        position.longitude,
+      );
 
-    try {
-      // ✅ UPDATED: Use NAME as the document ID (not Firebase UID)
-      final prefs = await SharedPreferences.getInstance();
-      
-      // Try to get the elderly user's NAME (primary ID)
-      String? elderlyUserName = prefs.getString('elderly_user_name') ??
-                                prefs.getString('currentUserId') ??
-                                prefs.getString('elderly_user_id');
+      bool isInside = distance <= _safeZoneRadius;
+      bool wasOutside = !_isInsideSafeZone;
 
-      if (elderlyUserName == null || elderlyUserName.isEmpty) {
-        print('⚠️ No elderly user name found in SharedPreferences');
-        return;
+      setState(() {
+        _distanceFromHome = distance;
+        _isInsideSafeZone = isInside;
+      });
+
+      print('📍 Location: ${position.latitude}, ${position.longitude}');
+      print('📏 Distance from home: ${distance.toStringAsFixed(2)}m');
+      print('🏠 Inside safe zone: $isInside');
+
+      // Auto-generate route when leaving safe zone
+      if (!isInside && wasOutside != !isInside) {
+        print('⚠️ User left safe zone - generating route home');
+        _fetchRoute();
+      } else if (!isInside && _showRoute) {
+        _fetchRoute();
+      } else if (isInside && _showRoute) {
+        setState(() {
+          _showRoute = false;
+          _routePoints.clear();
+        });
+        print('✅ User back in safe zone - clearing route');
       }
 
-      print('✅ Updating location for user: $elderlyUserName (NAME as ID)');
+      _saveLocationToFirebase(position, isInside, distance);
+    }
+  }
 
-      // Update Firebase using NAME as document ID
+  Future<void> _saveLocationToFirebase(Position position, bool isInside, double distance) async {
+    try {
+      if (_elderlyUserName == null || _elderlyUserName!.isEmpty) return;
+
       await FirebaseFirestore.instance
           .collection('users')
-          .doc(elderlyUserName) // ✅ Using NAME, not UID
+          .doc(_elderlyUserName)
           .set({
         'latitude': position.latitude,
         'longitude': position.longitude,
         'isHome': isInside,
         'distanceFromHome': distance,
         'lastLocationUpdate': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true)); // Use merge to not overwrite other fields
-
-      print('✅ Location sent to Firebase: users/$elderlyUserName');
+      }, SetOptions(merge: true));
     } catch (e) {
       print('❌ Error sending location to Firebase: $e');
     }
   }
 
-  // Show location service disabled dialog
+  // ✅ NEW: Enter pin-drop mode to set home location
+  void _enterSetHomeMode() {
+    setState(() {
+      _isSettingHomeMode = true;
+      // Initialize temp pin at current location or center of map
+      _tempHomePin = _currentLocation ?? _homeLocation ?? LatLng(9.998418620839775, 76.361358164756);
+      
+      // Center map on the pin
+      _mapController.move(_tempHomePin!, 16.0);
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('📍 Tap anywhere on the map to place your home location'),
+        backgroundColor: Colors.blue,
+        duration: Duration(seconds: 3),
+      ),
+    );
+  }
+
+  // ✅ NEW: Cancel setting home mode
+  void _cancelSetHomeMode() {
+    setState(() {
+      _isSettingHomeMode = false;
+      _tempHomePin = null;
+    });
+  }
+
+  // ✅ NEW: Save the pin-dropped location as home
+  Future<void> _saveHomeLocation() async {
+    if (_tempHomePin == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚠️ Please tap on the map to set a location'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    try {
+      setState(() => _isSavingHome = true);
+
+      await FirebaseFirestore.instance
+          .collection('safe_zones')
+          .doc(_elderlyUserName)
+          .set({
+        'homeLatitude': _tempHomePin!.latitude,
+        'homeLongitude': _tempHomePin!.longitude,
+        'radius': _safeZoneRadius,
+        'setAt': FieldValue.serverTimestamp(),
+      });
+
+      setState(() {
+        _homeLocation = _tempHomePin;
+        _isSettingHomeMode = false;
+        _tempHomePin = null;
+        _isSavingHome = false;
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Home location saved!'),
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 2),
+        ),
+      );
+
+      print('✅ Home location set: ${_homeLocation!.latitude}, ${_homeLocation!.longitude}');
+    } catch (e) {
+      setState(() => _isSavingHome = false);
+      print('❌ Error setting home location: $e');
+      
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Error: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _fetchRoute() async {
+    if (_currentLocation == null || _homeLocation == null) return;
+
+    setState(() => _isLoadingRoute = true);
+
+    try {
+      final url = 'https://router.project-osrm.org/route/v1/foot/'
+          '${_currentLocation!.longitude},${_currentLocation!.latitude};'
+          '${_homeLocation!.longitude},${_homeLocation!.latitude}'
+          '?overview=full&geometries=geojson';
+
+      print('🗺️ Fetching route from OSRM...');
+      final response = await http.get(Uri.parse(url));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        
+        if (data['routes'] != null && data['routes'].isNotEmpty) {
+          final route = data['routes'][0];
+          final geometry = route['geometry']['coordinates'] as List;
+          
+          final distance = route['distance'] as num;
+          final duration = route['duration'] as num;
+
+          setState(() {
+            _routePoints = geometry.map((coord) {
+              return LatLng(coord[1] as double, coord[0] as double);
+            }).toList();
+            
+            _routeDistance = distance.toDouble();
+            _routeDuration = _formatDuration(duration.toInt());
+            _showRoute = true;
+            _isLoadingRoute = false;
+          });
+
+          print('✅ Route fetched: ${_routePoints.length} points');
+        }
+      } else {
+        setState(() => _isLoadingRoute = false);
+      }
+    } catch (e) {
+      print('❌ Error fetching route: $e');
+      setState(() => _isLoadingRoute = false);
+    }
+  }
+
+  String _formatDuration(int seconds) {
+    if (seconds < 60) return '$seconds sec';
+    final minutes = seconds ~/ 60;
+    if (minutes < 60) return '$minutes min';
+    final hours = minutes ~/ 60;
+    final remainingMinutes = minutes % 60;
+    return '$hours hr $remainingMinutes min';
+  }
+
+  void _toggleRoute() {
+    if (_showRoute) {
+      setState(() {
+        _showRoute = false;
+        _routePoints.clear();
+      });
+    } else {
+      _fetchRoute();
+    }
+  }
+
   void _showLocationServiceDialog() {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text(
-          'Location Service Disabled',
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-        ),
-        content: const Text(
-          'Please enable location services to use this feature.',
-          style: TextStyle(fontSize: 18),
-        ),
+        title: const Text('Location Service Disabled', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+        content: const Text('Please enable location services to use this feature.', style: TextStyle(fontSize: 18)),
         actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(context); // Go back to previous screen
-            },
-            child: const Text('Cancel', style: TextStyle(fontSize: 18)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await Geolocator.openLocationSettings();
-              _requestLocationPermission();
-            },
-            child: const Text('Open Settings', style: TextStyle(fontSize: 18)),
-          ),
+          TextButton(onPressed: () { Navigator.pop(context); Navigator.pop(context); }, child: const Text('Cancel', style: TextStyle(fontSize: 18))),
+          ElevatedButton(onPressed: () async { Navigator.pop(context); await Geolocator.openLocationSettings(); _requestLocationPermission(); }, child: const Text('Open Settings', style: TextStyle(fontSize: 18))),
         ],
       ),
     );
   }
 
-  // Show permission denied dialog
   void _showPermissionDeniedDialog() {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text(
-          'Location Permission Required',
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-        ),
-        content: const Text(
-          'This app needs location permission to show your current position and track if you\'re in the safe zone.',
-          style: TextStyle(fontSize: 18),
-        ),
+        title: const Text('Location Permission Required', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+        content: const Text('This app needs location permission to show your current position and track if you\'re in the safe zone.', style: TextStyle(fontSize: 18)),
         actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(context);
-            },
-            child: const Text('Cancel', style: TextStyle(fontSize: 18)),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _requestLocationPermission();
-            },
-            child: const Text('Grant Permission', style: TextStyle(fontSize: 18)),
-          ),
+          TextButton(onPressed: () { Navigator.pop(context); Navigator.pop(context); }, child: const Text('Cancel', style: TextStyle(fontSize: 18))),
+          ElevatedButton(onPressed: () { Navigator.pop(context); _requestLocationPermission(); }, child: const Text('Grant Permission', style: TextStyle(fontSize: 18))),
         ],
       ),
     );
   }
 
-  // Show permission denied forever dialog
   void _showPermissionDeniedForeverDialog() {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text(
-          'Permission Permanently Denied',
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-        ),
-        content: const Text(
-          'Location permission has been permanently denied. Please enable it in app settings.',
-          style: TextStyle(fontSize: 18),
-        ),
+        title: const Text('Permission Permanently Denied', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+        content: const Text('Location permission has been permanently denied. Please enable it in app settings.', style: TextStyle(fontSize: 18)),
         actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(context);
-            },
-            child: const Text('Cancel', style: TextStyle(fontSize: 18)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await Geolocator.openAppSettings();
-            },
-            child: const Text('Open Settings', style: TextStyle(fontSize: 18)),
-          ),
+          TextButton(onPressed: () { Navigator.pop(context); Navigator.pop(context); }, child: const Text('Cancel', style: TextStyle(fontSize: 18))),
+          ElevatedButton(onPressed: () async { Navigator.pop(context); await Geolocator.openAppSettings(); }, child: const Text('Open Settings', style: TextStyle(fontSize: 18))),
         ],
       ),
     );
   }
 
-  // Zoom in function
   void _zoomIn() {
     setState(() {
       _currentZoom = (_currentZoom + 1).clamp(5.0, 18.0);
@@ -287,13 +442,14 @@ class _LocationScreenState extends State<LocationScreen> {
   }
 
   void _centerOnHome() {
-    setState(() {
-      _currentZoom = 15.0;
-      _mapController.move(_homeLocation, _currentZoom);
-    });
+    if (_homeLocation != null) {
+      setState(() {
+        _currentZoom = 15.0;
+        _mapController.move(_homeLocation!, _currentZoom);
+      });
+    }
   }
 
-  // Center on current location
   void _centerOnCurrentLocation() {
     if (_currentLocation != null) {
       setState(() {
@@ -303,14 +459,11 @@ class _LocationScreenState extends State<LocationScreen> {
     }
   }
 
-  // Format distance for display
   String _formatDistance(double? distance) {
     if (distance == null) return 'Calculating...';
     if (distance < 1000) return '${distance.toStringAsFixed(0)} m';
     return '${(distance / 1000).toStringAsFixed(2)} km';
   }
-
-  // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -319,28 +472,100 @@ class _LocationScreenState extends State<LocationScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, size: 32, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
+        leading: _isSettingHomeMode 
+            ? null 
+            : IconButton(
+                icon: const Icon(Icons.arrow_back, size: 32, color: Colors.black),
+                onPressed: () => Navigator.pop(context),
+              ),
+        title: Text(
+          _isSettingHomeMode ? '📍 Set Home Location' : '📍 Location',
+          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.black),
         ),
-        title: const Text(
-          '📍 Location',
-          style: TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
-            color: Colors.black,
-          ),
-        ),
+        actions: [
+          if (_locationPermissionGranted && !_isSettingHomeMode)
+            TextButton.icon(
+              onPressed: _enterSetHomeMode,
+              icon: const Icon(Icons.edit_location, size: 20),
+              label: Text(
+                _homeLocation == null ? 'Set Home' : 'Change Home',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              ),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.blue,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+            ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: _isLoadingLocation
           ? _buildLoadingView()
           : !_locationPermissionGranted
               ? _buildPermissionDeniedView()
               : _buildMapView(),
+      
+      // ✅ NEW: Bottom action bar when in setting mode
+      bottomNavigationBar: _isSettingHomeMode
+          ? Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, -2),
+                  ),
+                ],
+              ),
+              child: SafeArea(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _isSavingHome ? null : _cancelSetHomeMode,
+                        icon: const Icon(Icons.close),
+                        label: const Text('Cancel', style: TextStyle(fontSize: 18)),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          side: const BorderSide(color: Colors.grey),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton.icon(
+                        onPressed: _isSavingHome ? null : _saveHomeLocation,
+                        icon: _isSavingHome
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.check_circle),
+                        label: Text(
+                          _isSavingHome ? 'Saving...' : 'Save Home Location',
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : null,
     );
   }
 
-  // Loading view while getting location
   Widget _buildLoadingView() {
     return Center(
       child: Column(
@@ -348,21 +573,14 @@ class _LocationScreenState extends State<LocationScreen> {
         children: const [
           CircularProgressIndicator(strokeWidth: 4),
           SizedBox(height: 24),
-          Text(
-            'Getting your location...',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-          ),
+          Text('Getting your location...', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
           SizedBox(height: 12),
-          Text(
-            'Please wait',
-            style: TextStyle(fontSize: 16, color: Colors.grey),
-          ),
+          Text('Please wait', style: TextStyle(fontSize: 16, color: Colors.grey)),
         ],
       ),
     );
   }
 
-  // Permission denied view
   Widget _buildPermissionDeniedView() {
     return Center(
       child: Padding(
@@ -372,30 +590,14 @@ class _LocationScreenState extends State<LocationScreen> {
           children: [
             const Icon(Icons.location_off, size: 100, color: Colors.red),
             const SizedBox(height: 24),
-            const Text(
-              'Location Permission Needed',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
-            ),
+            const Text('Location Permission Needed', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
             const SizedBox(height: 16),
-            const Text(
-              'Please grant location permission to use this feature',
-              style: TextStyle(fontSize: 18, color: Colors.grey),
-              textAlign: TextAlign.center,
-            ),
+            const Text('Please grant location permission to use this feature', style: TextStyle(fontSize: 18, color: Colors.grey), textAlign: TextAlign.center),
             const SizedBox(height: 32),
             ElevatedButton(
               onPressed: _requestLocationPermission,
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 16,
-                ),
-              ),
-              child: const Text(
-                'Grant Permission',
-                style: TextStyle(fontSize: 20),
-              ),
+              style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16)),
+              child: const Text('Grant Permission', style: TextStyle(fontSize: 20)),
             ),
           ],
         ),
@@ -403,84 +605,162 @@ class _LocationScreenState extends State<LocationScreen> {
     );
   }
 
-  // Main map view
   Widget _buildMapView() {
+    // Show prompt if home not set and not in setting mode
+    if (_homeLocation == null && !_isSettingHomeMode) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.home_work, size: 100, color: Colors.blue),
+              const SizedBox(height: 24),
+              const Text('Set Your Home Location', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              const Text(
+                'Tap the "Set Home" button above to mark your home location on the map.',
+                style: TextStyle(fontSize: 18, color: Colors.grey),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              ElevatedButton.icon(
+                onPressed: _enterSetHomeMode,
+                icon: const Icon(Icons.edit_location, size: 24),
+                label: const Text('Set Home on Map', style: TextStyle(fontSize: 18)),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  backgroundColor: Colors.blue,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Column(
         children: [
-          // Status Card
-          Container(
-            decoration: BoxDecoration(
-              color: _isInsideSafeZone ? Colors.green.shade50 : Colors.orange.shade50,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: _isInsideSafeZone ? Colors.green.shade300 : Colors.orange.shade300,
-                width: 4,
-              ),
-            ),
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      _isInsideSafeZone ? '🏠' : '⚠️',
-                      style: const TextStyle(fontSize: 40),
-                    ),
-                    const SizedBox(width: 15),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _isInsideSafeZone ? 'You are Home' : 'Outside Safe Zone',
-                            style: const TextStyle(
-                              fontSize: 28,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Text(
-                            _isInsideSafeZone ? 'Safe Zone ✓' : 'Alert!',
-                            style: TextStyle(
-                              fontSize: 20,
-                              color: _isInsideSafeZone ? Colors.green : Colors.orange,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+          // Status Card (hide when in setting mode)
+          if (!_isSettingHomeMode && _homeLocation != null)
+            Container(
+              decoration: BoxDecoration(
+                color: _isInsideSafeZone ? Colors.green.shade50 : Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: _isInsideSafeZone ? Colors.green.shade300 : Colors.orange.shade300,
+                  width: 4,
                 ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+              ),
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  Row(
                     children: [
-                      const Icon(Icons.straighten, size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Distance from home: ${_formatDistance(_distanceFromHome)}',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
+                      Text(_isInsideSafeZone ? '🏠' : '⚠️', style: const TextStyle(fontSize: 40)),
+                      const SizedBox(width: 15),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _isInsideSafeZone ? 'You are Home' : 'Outside Safe Zone',
+                              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                            ),
+                            Text(
+                              _isInsideSafeZone 
+                                  ? 'Safe Zone ✓' 
+                                  : _showRoute ? 'Showing route home 🗺️' : 'Alert!',
+                              style: TextStyle(
+                                fontSize: 20,
+                                color: _isInsideSafeZone ? Colors.green : Colors.orange,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.straighten, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Distance from home: ${_formatDistance(_distanceFromHome)}',
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                        if (_showRoute && _routeDistance != null) ...[
+                          const SizedBox(height: 8),
+                          const Divider(),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.route, size: 18, color: Colors.blue),
+                                  const SizedBox(width: 6),
+                                  Text('Walking distance: ${_formatDistance(_routeDistance)}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blue)),
+                                ],
+                              ),
+                              Row(
+                                children: [
+                                  const Icon(Icons.access_time, size: 18, color: Colors.blue),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Walking duration: ${_routeDuration ?? ''}',
+                                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blue),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
+          
+          // Instruction banner when in setting mode
+          if (_isSettingHomeMode)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.blue.shade300, width: 2),
+              ),
+              child: Row(
+                children: const [
+                  Icon(Icons.touch_app, color: Colors.blue, size: 32),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Tap anywhere on the map to place your home location pin',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           
           const SizedBox(height: 20),
-          // Expanded Map Container
+          
+          // Map Container
           Expanded(
             child: Container(
               decoration: BoxDecoration(
@@ -498,250 +778,288 @@ class _LocationScreenState extends State<LocationScreen> {
               clipBehavior: Clip.antiAlias,
               child: Stack(
                 children: [
-                  // Map
+                  // ✅ MODIFIED: Map with tap handler when in setting mode
                   FlutterMap(
                     mapController: _mapController,
                     options: MapOptions(
-                      initialCenter: _currentLocation ?? _homeLocation,
+                      initialCenter: _currentLocation ?? _homeLocation ?? _tempHomePin ?? LatLng(9.998418620839775, 76.361358164756),
                       initialZoom: _currentZoom,
                       minZoom: 5.0,
                       maxZoom: 18.0,
+                      interactionOptions: InteractionOptions(
+                        flags: _isSettingHomeMode 
+                            ? InteractiveFlag.all & ~InteractiveFlag.rotate // Disable rotation in setting mode
+                            : InteractiveFlag.all,
+                      ),
+                      onTap: _isSettingHomeMode
+                          ? (tapPosition, latLng) {
+                              setState(() {
+                                _tempHomePin = latLng;
+                              });
+                              print('📍 Pin placed at: ${latLng.latitude}, ${latLng.longitude}');
+                            }
+                          : null,
                     ),
                     children: [
-                      // Tile Layer
-                      TileLayer(
-                        urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-                        userAgentPackageName: 'com.example.elderly_care_app',
-                      ),
-                      
-                      // Circle Layer (Safe Zone)
-                      CircleLayer(
-                        circles: [
-                          CircleMarker(
-                            point: _homeLocation,
-                            radius: _safeZoneRadius,
-                            useRadiusInMeter: true,
-                            color: Colors.green.withOpacity(0.2),
-                            borderColor: Colors.green,
-                            borderStrokeWidth: 3,
-                          ),
-                        ],
-                      ),
-                      
-                      // Marker Layer
-                      MarkerLayer(
-                        markers: [
-                          // Home Location
-                          Marker(
-                            point: _homeLocation,
-                            width: 60,
-                            height: 60,
-                            child: Container(
-                              decoration: BoxDecoration(
+                        TileLayer(
+                          urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                          userAgentPackageName: 'com.example.elderly_care_app',
+                        ),
+                        
+                        // Route polyline (only when not in setting mode and route exists)
+                        if (!_isSettingHomeMode && _showRoute && _routePoints.isNotEmpty)
+                          PolylineLayer(
+                            polylines: [
+                              Polyline(
+                                points: _routePoints,
+                                strokeWidth: 5,
                                 color: Colors.blue,
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.3),
-                                    blurRadius: 6,
-                                    offset: const Offset(0, 3),
-                                  ),
-                                ],
+                                borderStrokeWidth: 2,
+                                borderColor: Colors.white,
                               ),
-                              child: const Icon(
-                                Icons.home,
-                                size: 35,
-                                color: Colors.white,
-                              ),
-                            ),
+                            ],
                           ),
-                          
-                          // Current Location (only if available)
-                          if (_currentLocation != null)
-                            Marker(
-                              point: _currentLocation!,
-                              width: 50,
-                              height: 50,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.red,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white,
-                                    width: 3,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.red.withOpacity(0.5),
-                                      blurRadius: 10,
-                                      spreadRadius: 2,
+                        
+                        // Safe zone circle (only show when home is set and not in setting mode)
+                        if (!_isSettingHomeMode && _homeLocation != null)
+                          CircleLayer(
+                            circles: [
+                              CircleMarker(
+                                point: _homeLocation!,
+                                radius: _safeZoneRadius,
+                                useRadiusInMeter: true,
+                                color: Colors.green.withOpacity(0.2),
+                                borderColor: Colors.green,
+                                borderStrokeWidth: 3,
+                              ),
+                            ],
+                          ),
+                        
+                        // Markers
+                        MarkerLayer(
+                          markers: [
+                            // ✅ Home Location OR Temp Pin (when setting)
+                            if (_isSettingHomeMode && _tempHomePin != null)
+                              Marker(
+                                point: _tempHomePin!,
+                                width: 60,
+                                height: 80,
+                                child: Column(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 3),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.red.withOpacity(0.5),
+                                            blurRadius: 10,
+                                            spreadRadius: 2,
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Icon(Icons.home, size: 28, color: Colors.white),
+                                    ),
+                                    Container(
+                                      width: 4,
+                                      height: 20,
+                                      color: Colors.red,
                                     ),
                                   ],
                                 ),
-                                child: const Icon(
-                                  Icons.person,
-                                  size: 30,
-                                  color: Colors.white,
+                              )
+                            else if (_homeLocation != null)
+                              Marker(
+                                point: _homeLocation!,
+                                width: 60,
+                                height: 60,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue,
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.3),
+                                        blurRadius: 6,
+                                        offset: const Offset(0, 3),
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(Icons.home, size: 35, color: Colors.white),
                                 ),
                               ),
-                            ),
-                        ],
-                      ),
+                            
+                            // Current Location (hide when in setting mode)
+                            if (!_isSettingHomeMode && _currentLocation != null)
+                              Marker(
+                                point: _currentLocation!,
+                                width: 50,
+                                height: 50,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white, width: 3),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.red.withOpacity(0.5),
+                                        blurRadius: 10,
+                                        spreadRadius: 2,
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(Icons.person, size: 30, color: Colors.white),
+                                ),
+                              ),
+                          ],
+                        ),
                     ],
                   ),
                   
-                  // Zoom Controls
-                  Positioned(
-                    right: 16,
-                    top: 16,
-                    child: Column(
-                      children: [
-                        _buildZoomButton(Icons.add, _zoomIn),
-                        const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: Colors.blue.shade300,
-                              width: 2,
+                  // Zoom Controls (hide when in setting mode)
+                  if (!_isSettingHomeMode)
+                    Positioned(
+                      right: 16,
+                      top: 16,
+                      child: Column(
+                        children: [
+                          _buildZoomButton(Icons.add, _zoomIn),
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.blue.shade300, width: 2),
+                            ),
+                            child: Text(
+                              '${_currentZoom.toStringAsFixed(0)}x',
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue),
                             ),
                           ),
-                          child: Text(
-                            '${_currentZoom.toStringAsFixed(0)}x',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
+                          const SizedBox(height: 12),
+                          _buildZoomButton(Icons.remove, _zoomOut),
+                        ],
+                      ),
+                    ),
+                  
+                  // Control Buttons (hide when in setting mode)
+                  if (!_isSettingHomeMode && _homeLocation != null)
+                    Positioned(
+                      left: 16,
+                      right: 16,
+                      bottom: 16,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _buildControlButton(
+                              icon: Icons.my_location,
+                              label: 'My Location',
+                              onTap: _centerOnCurrentLocation,
+                              color: Colors.red,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildControlButton(
+                              icon: Icons.home,
+                              label: 'Home',
+                              onTap: _centerOnHome,
                               color: Colors.blue,
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        _buildZoomButton(Icons.remove, _zoomOut),
-                      ],
-                    ),
-                  ),
-                  
-                  // Control Buttons (Bottom)
-                  Positioned(
-                    left: 16,
-                    right: 16,
-                    bottom: 16,
-                    child: Row(
-                      children: [
-                        // Center on Current Location
-                        Expanded(
-                          child: _buildControlButton(
-                            icon: Icons.my_location,
-                            label: 'My Location',
-                            onTap: _centerOnCurrentLocation,
-                            color: Colors.red,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        // Center on Home
-                        Expanded(
-                          child: _buildControlButton(
-                            icon: Icons.home,
-                            label: 'Home',
-                            onTap: _centerOnHome,
-                            color: Colors.blue,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  
-                  // Status Badge
-                  Positioned(
-                    left: 16,
-                    top: 16,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: _isInsideSafeZone ? Colors.green : Colors.orange,
-                          width: 2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            _isInsideSafeZone ? Icons.check_circle : Icons.warning,
-                            color: _isInsideSafeZone ? Colors.green : Colors.orange,
-                            size: 24,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            _isInsideSafeZone ? 'Safe Zone' : 'Outside',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: _isInsideSafeZone ? Colors.green : Colors.orange,
+                          if (!_isInsideSafeZone) ...[
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildControlButton(
+                                icon: _isLoadingRoute 
+                                    ? Icons.hourglass_empty 
+                                    : (_showRoute ? Icons.close : Icons.directions),
+                                label: _isLoadingRoute 
+                                    ? 'Loading...' 
+                                    : (_showRoute ? 'Hide Route' : 'Show Route'),
+                                onTap: _isLoadingRoute ? () {} : _toggleRoute,
+                                color: _showRoute ? Colors.orange : Colors.green,
+                              ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                     ),
-                  ),
+                  
+                  // Status Badge (hide when in setting mode)
+                  if (!_isSettingHomeMode && _homeLocation != null)
+                    Positioned(
+                      left: 16,
+                      top: 16,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _isInsideSafeZone ? Colors.green : Colors.orange,
+                            width: 2,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _isInsideSafeZone ? Icons.check_circle : Icons.warning,
+                              color: _isInsideSafeZone ? Colors.green : Colors.orange,
+                              size: 24,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _isInsideSafeZone ? 'Safe Zone' : 'Outside',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: _isInsideSafeZone ? Colors.green : Colors.orange,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
           ),
           
-          const SizedBox(height: 20),
-          
-          // Map Legend
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: Colors.grey.shade300, width: 2),
+          // Legend (hide when in setting mode)
+          if (!_isSettingHomeMode && _homeLocation != null) ...[
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: Colors.grey.shade300, width: 2),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildLegendItem(icon: Icons.home, color: Colors.blue, label: 'Home'),
+                  _buildLegendItem(icon: Icons.person_pin_circle, color: Colors.red, label: 'You'),
+                  _buildLegendItem(icon: Icons.circle_outlined, color: Colors.green, label: 'Safe Zone (${_safeZoneRadius.toInt()}m)'),
+                ],
+              ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildLegendItem(
-                  icon: Icons.home,
-                  color: Colors.blue,
-                  label: 'Home',
-                ),
-                _buildLegendItem(
-                  icon: Icons.person_pin_circle,
-                  color: Colors.red,
-                  label: 'You',
-                ),
-                _buildLegendItem(
-                  icon: Icons.circle_outlined,
-                  color: Colors.green,
-                  label: 'Safe Zone (${_safeZoneRadius.toInt()}m)',
-                ),
-              ],
-            ),
-          ),
+          ],
         ],
       ),
     );
   }
-
-  // ── Reusable widgets ──────────────────────────────────────────────────────
 
   Widget _buildZoomButton(IconData icon, VoidCallback onTap) {
     return Material(
@@ -778,21 +1096,17 @@ class _LocationScreenState extends State<LocationScreen> {
         borderRadius: BorderRadius.circular(15),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 14),
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(15),
-          ),
+          decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(15)),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(icon, color: Colors.white, size: 24),
               const SizedBox(width: 8),
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+              Flexible(
+                child: Text(
+                  label,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -802,19 +1116,12 @@ class _LocationScreenState extends State<LocationScreen> {
     );
   }
 
-  Widget _buildLegendItem({
-    required IconData icon,
-    required Color color,
-    required String label,
-  }) {
+  Widget _buildLegendItem({required IconData icon, required Color color, required String label}) {
     return Row(
       children: [
         Icon(icon, color: color, size: 20),
         const SizedBox(width: 6),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-        ),
+        Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
       ],
     );
   }

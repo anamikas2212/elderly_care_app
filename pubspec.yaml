@@ -32,7 +32,7 @@ dependencies:
   google_generative_ai: ^0.4.7
   intl: ^0.19.0
   shared_preferences: ^2.2.2
-  http: ^1.6.0
+  http: ^1.6.0  # ✅ NEW - For OSRM API routing
 
   uuid: ^4.3.3
 
