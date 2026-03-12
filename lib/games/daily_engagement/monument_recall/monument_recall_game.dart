@@ -434,7 +434,7 @@ class _MonumentRecallGameState extends State<MonumentRecallGame> {
         // Set A
         [
           MonumentQuestion("What is this monument?", ["Padmanabhaswamy Temple", "Guruvayur Temple", "Sabarimala"], "Padmanabhaswamy Temple", "Temples", true,
-            imageUrl: "https://images.unsplash.com/photo-1600010991979-3baaa196f3cf?w=400&q=80"), // Golden temple architecture proxy
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6e/Sree_Padmanabhaswamy_Temple%2C_Thiruvananthapuram.jpg/500px-Sree_Padmanabhaswamy_Temple%2C_Thiruvananthapuram.jpg"),
           MonumentQuestion("Where is Bekal Fort located?", ["Kasaragod", "Kannur", "Kochi"], "Kasaragod", "Forts", false),
           MonumentQuestion("Which palace is famous for murals?", ["Mattancherry Palace", "Hill Palace", "Kowdiar Palace"], "Mattancherry Palace", "Palaces", false),
           MonumentQuestion("Edakkal Caves are in which district?", ["Wayanad", "Idukki", "Palakkad"], "Wayanad", "Caves", false),
@@ -443,12 +443,12 @@ class _MonumentRecallGameState extends State<MonumentRecallGame> {
         // Set B
         [
           MonumentQuestion("This is a famous backwater destination. Where?", ["Alappuzha", "Kottayam", "Ernakulam"], "Alappuzha", "Landmarks", true,
-            imageUrl: "https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?w=400&q=80"), // Kerala backwaters proxy
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/Around_Alappuzha_backwaters_Kerala.jpg/500px-Around_Alappuzha_backwaters_Kerala.jpg"),
           MonumentQuestion("Thalassery Fort was built by?", ["British", "Dutch", "Portuguese"], "British", "Forts", false),
           MonumentQuestion("Where is Guruvayur Temple?", ["Thrissur", "Palakkad", "Ernakulam"], "Thrissur", "Temples", false),
           MonumentQuestion("Munnar is famous for?", ["Tea plantations", "Beaches", "Forts"], "Tea plantations", "Landmarks", false),
           MonumentQuestion("Identify this waterfall in Idukki", ["Athirappilly", "Cheeyappara", "Soochipara"], "Cheeyappara", "Nature", true,
-            imageUrl: "https://images.unsplash.com/photo-1546944061-07eb7ccff4d6?w=400&q=80"), // Waterfall proxy
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/16/Cheeyappara_Waterfalls_01.jpg/500px-Cheeyappara_Waterfalls_01.jpg"),
         ],
         // Set C
         [
@@ -465,7 +465,7 @@ class _MonumentRecallGameState extends State<MonumentRecallGame> {
           MonumentQuestion("Kappad Beach is historically significant because?", ["Vasco da Gama landed", "Tipu Sultan battle", "Dutch trading post"], "Vasco da Gama landed", "History", false),
           MonumentQuestion("Anjengo Fort was built by?", ["British", "Dutch", "Portuguese"], "British", "Forts", false),
           MonumentQuestion("Identify this waterfall", ["Athirappilly", "Soochipara", "Palaruvi"], "Athirappilly", "Nature", true,
-            imageUrl: "https://images.unsplash.com/photo-1616843413587-9e3a37f7bbd8?w=400&q=80"), // Athirappilly proxy
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/0/01/Athirappilly_Waterfalls.jpg/500px-Athirappilly_Waterfalls.jpg"),
         ],
       ],
     };
@@ -482,7 +482,7 @@ class _MonumentRecallGameState extends State<MonumentRecallGame> {
       // Set A
       [
         MonumentQuestion("Identify this monument", ["Taj Mahal", "Red Fort", "Qutub Minar"], "Taj Mahal", "Monuments", true,
-            imageUrl: "https://images.unsplash.com/photo-1564507592227-0b0efa862ced?w=400&q=80"),
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/bd/Taj_Mahal%2C_Agra%2C_India_edit3.jpg/500px-Taj_Mahal%2C_Agra%2C_India_edit3.jpg"),
         MonumentQuestion("Where is the Gateway of India?", ["Mumbai", "Delhi", "Kolkata"], "Mumbai", "Monuments", false),
         MonumentQuestion("Who built the Red Fort?", ["Shah Jahan", "Akbar", "Aurangzeb"], "Shah Jahan", "Forts", false),
         MonumentQuestion("Hawa Mahal is in which city?", ["Jaipur", "Jodhpur", "Udaipur"], "Jaipur", "Palaces", false),
@@ -491,7 +491,7 @@ class _MonumentRecallGameState extends State<MonumentRecallGame> {
       // Set B
       [
         MonumentQuestion("Identify this monument", ["Qutub Minar", "India Gate", "Victoria Memorial"], "Qutub Minar", "Monuments", true,
-            imageUrl: "https://images.unsplash.com/photo-1587474260584-136574528ed5?w=400&q=80"),
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/Delhi_Qutb_Minar.jpg/500px-Delhi_Qutb_Minar.jpg"),
         MonumentQuestion("Victoria Memorial is in?", ["Kolkata", "Mumbai", "Chennai"], "Kolkata", "Monuments", false),
         MonumentQuestion("Mysore Palace is in which state?", ["Karnataka", "Tamil Nadu", "Kerala"], "Karnataka", "Palaces", false),
         MonumentQuestion("Where is Konark Sun Temple?", ["Odisha", "Rajasthan", "Madhya Pradesh"], "Odisha", "Temples", false),
@@ -524,7 +524,7 @@ class _MonumentRecallGameState extends State<MonumentRecallGame> {
       [
         MonumentQuestion("Where is the Eiffel Tower?", ["Paris", "London", "New York"], "Paris", "Monuments", true,
           // FIXED: using a proper thumbnail URL with contain fit
-          imageUrl: "https://images.unsplash.com/photo-1511739001486-6bfe10ce785f?w=400&q=80",
+          imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/Tour_Eiffel_Wikimedia_Commons.jpg/500px-Tour_Eiffel_Wikimedia_Commons.jpg",
           hint: "This iconic iron lattice tower is a symbol of France"),
         MonumentQuestion("The Great Wall is in which country?", ["China", "Japan", "Korea"], "China", "Monuments", false),
         MonumentQuestion("Machu Picchu is in?", ["Peru", "Brazil", "Mexico"], "Peru", "Historical", false),
@@ -533,7 +533,7 @@ class _MonumentRecallGameState extends State<MonumentRecallGame> {
       // Set B
       [
         MonumentQuestion("Where is the Statue of Liberty?", ["New York", "Washington D.C.", "Los Angeles"], "New York", "Monuments", true,
-            imageUrl: "https://images.unsplash.com/photo-1605130284535-11dd9eedc58a?w=400&q=80"),
+            imageUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Statue_of_Liberty_7.jpg/500px-Statue_of_Liberty_7.jpg"),
         MonumentQuestion("Pyramids of Giza are in?", ["Egypt", "Iraq", "Sudan"], "Egypt", "Historical", false),
         MonumentQuestion("Big Ben is in which city?", ["London", "Paris", "Dublin"], "London", "Monuments", false),
         MonumentQuestion("Where is the Leaning Tower of Pisa?", ["Italy", "Spain", "Greece"], "Italy", "Monuments", false),
