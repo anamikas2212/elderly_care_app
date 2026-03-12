@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 
 class CaretakerNotificationService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -8,6 +9,7 @@ class CaretakerNotificationService {
   // Initialize notification service for caretaker
   Future<void> initializeForCaretaker(String caretakerId) async {
     try {
+      if (kIsWeb) return;
       // Request permission
       NotificationSettings settings = await _messaging.requestPermission(
         alert: true,

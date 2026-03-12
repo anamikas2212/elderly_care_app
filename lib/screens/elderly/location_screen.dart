@@ -165,7 +165,7 @@ class _LocationScreenState extends State<LocationScreen> {
 
     const LocationSettings locationSettings = LocationSettings(
       accuracy: LocationAccuracy.high,
-      distanceFilter: 1,
+      distanceFilter: 0,
     );
 
     _positionStreamSubscription = Geolocator.getPositionStream(
@@ -176,7 +176,8 @@ class _LocationScreenState extends State<LocationScreen> {
 
     // Fallback poll to keep UI status fresh even when stream throttles (e.g., web)
     _positionPollTimer?.cancel();
-    _positionPollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+    _positionPollTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (!mounted) return;
       Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       ).then(_updateLocation).catchError((error) {
@@ -186,6 +187,7 @@ class _LocationScreenState extends State<LocationScreen> {
   }
 
   Future<void> _updateLocation(Position position) async {
+    if (!mounted) return;
     final newLocation = LatLng(position.latitude, position.longitude);
     
     setState(() {

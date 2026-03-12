@@ -54,5 +54,10 @@
 	
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>We need your location to keep you safe and notify your family</string>
+
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>

@@ -7,10 +7,19 @@ import 'games/chill_zone/color_tap/color_tap_game.dart';
 import 'screens/elderly/zone_selection_screen.dart';
 import 'package:elderly_care_app/services/report_scheduler_service.dart'; // Added
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'services/push_notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  if (!kIsWeb) {
+    FirebaseMessaging.onBackgroundMessage(
+      PushNotificationService.firebaseMessagingBackgroundHandler,
+    );
+    await PushNotificationService.initialize();
+  }
 
   // Added: initialize report scheduler
   final scheduler = ReportSchedulerService();

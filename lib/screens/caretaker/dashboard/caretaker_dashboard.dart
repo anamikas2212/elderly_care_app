@@ -20,6 +20,7 @@ import '../analytics/daily_routine_analytics_screen.dart';
 import '../analytics/monument_recall_analytics_screen.dart';
 
 import '../../../services/sos_service.dart';
+import '../../../services/safety_alert_listener_service.dart';
 
 class CaretakerDashboard extends StatefulWidget {
   final String? elderlyUserId;
@@ -31,6 +32,8 @@ class CaretakerDashboard extends StatefulWidget {
 
 class _CaretakerDashboardState extends State<CaretakerDashboard> {
   final CaretakerDataService _dataService = CaretakerDataService();
+  final SafetyAlertListenerService _alertListenerService =
+      SafetyAlertListenerService();
 
   String elderlyUserId = "";
   String elderlyUserName = "";
@@ -43,6 +46,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
   final SOSService _sosService = SOSService();
   bool _hasActiveSOS = false;
   bool _isHome = false;
+  DateTime? _lastHomeStatusChangedAt;
 
   // Cached cognitive health future so it doesn't reset on every rebuild
   Future<Map<String, dynamic>>? _cognitiveHealthFuture;
@@ -57,6 +61,12 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
     //_listenToElderlyLocation();
     // Listen to SOS alerts
     //_listenToSOSAlerts();
+  }
+
+  @override
+  void dispose() {
+    _alertListenerService.stop();
+    super.dispose();
   }
 
   Future<void> _loadElderlyUserId() async {
@@ -164,6 +174,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
       _listenToElderlyLocation();
       _listenToSOSAlerts();
       _checkSOSStatus();
+      await _alertListenerService.start(elderlyUserId);
       //_checkLocationStatus();
 
     } catch (e) {
@@ -195,8 +206,16 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
 
       if (!mounted) return;
 
+      final newIsHome = data['isHome'] ?? false;
+      final lastUpdate = (data['lastLocationUpdate'] as Timestamp?)?.toDate();
       setState(() {
-        _isHome = data['isHome'] ?? false;
+        if (_lastHomeStatusChangedAt == null && lastUpdate != null) {
+          _lastHomeStatusChangedAt = lastUpdate;
+        }
+        if (newIsHome != _isHome) {
+          _lastHomeStatusChangedAt = lastUpdate ?? DateTime.now();
+        }
+        _isHome = newIsHome;
       });
     });
   }
@@ -223,17 +242,6 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
       _hasActiveSOS = hasActiveSOS;
     });
   }
-/*
-  Future<void> _checkLocationStatus() async {
-    if (elderlyUserId.isEmpty) return;
-    
-    final locationStatus = await _sosService.getLocationStatus(elderlyUserId);
-    
-    if (!mounted) return;
-    setState(() {
-      _isHome = locationStatus['isHome'] ?? false;
-    });
-  }*/
 
   // ── Build ─────────────────────────────────────────────────────────────────
 
@@ -369,10 +377,6 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
     final age = elderlyUserAge;
     final gender = elderlyUserGender;
     
-    // UPDATED: Dynamic status based on SOS
-    final status = _hasActiveSOS ? 'SOS TRIGGERED' : 'Active';
-    final statusColor = _hasActiveSOS ? Colors.red : CaretakerColors.successGreen;
-    
     // UPDATED: Dynamic gradient based on SOS
     final gradientColors = _hasActiveSOS
         ? [Colors.red.shade400, Colors.red.shade600]
@@ -400,22 +404,6 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
                 Text('Age $age • $gender', style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.9))),
                 const SizedBox(height: 8),
                 
-                // UPDATED: Show Home/Away based on location
-                Row(
-                  children: [
-                    Icon(
-                      _isHome ? Icons.home : Icons.location_on,
-                      size: 14,
-                      color: Colors.white,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      _isHome ? 'Home' : 'Away from Home',
-                      style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.9)),
-                    ),
-                  ],
-                ),
-                
                 // NEW: Show SOS icon if active
                 if (_hasActiveSOS) ...[
                   const SizedBox(height: 8),
@@ -437,21 +425,54 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white, width: 1.5),
-            ),
-            child: Text(
-              status,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
-            ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white, width: 1.5),
+                ),
+                child: Text(
+                  _isHome ? 'Home' : 'Away from Home',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                _lastHomeStatusChangedAt != null
+                    ? _formatStatusTimestamp(_lastHomeStatusChangedAt!)
+                    : '—',
+                style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 10),
+                textAlign: TextAlign.center,
+              ),
+            ],
           ),
         ],
       ),
     );
+  }
+
+  String _formatStatusTimestamp(DateTime dt) {
+    final hour = dt.hour.toString().padLeft(2, '0');
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final second = dt.second.toString().padLeft(2, '0');
+
+    final day = dt.day;
+    String suffix = 'th';
+    if (day % 10 == 1 && day % 100 != 11) suffix = 'st';
+    if (day % 10 == 2 && day % 100 != 12) suffix = 'nd';
+    if (day % 10 == 3 && day % 100 != 13) suffix = 'rd';
+
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    final month = months[dt.month - 1];
+
+    return '$hour:$minute:$second, $day$suffix $month ${dt.year}';
   }
 
   Color _getStatusColor(String status) {

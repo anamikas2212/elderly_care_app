@@ -1,0 +1,82 @@
+import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'push_notification_service.dart';
+
+class SafetyAlertListenerService {
+  StreamSubscription<QuerySnapshot>? _sosSub;
+  StreamSubscription<QuerySnapshot>? _safeZoneSub;
+
+  Future<void> start(String elderlyId) async {
+    await stop();
+
+    final prefs = await SharedPreferences.getInstance();
+    final now = DateTime.now();
+
+    final sosKey = 'last_sos_alert_ts_$elderlyId';
+    final safeKey = 'last_safezone_alert_ts_$elderlyId';
+
+    final lastSosMillis = prefs.getInt(sosKey) ?? now.millisecondsSinceEpoch;
+    final lastSafeMillis = prefs.getInt(safeKey) ?? now.millisecondsSinceEpoch;
+
+    final lastSosTime = DateTime.fromMillisecondsSinceEpoch(lastSosMillis);
+    final lastSafeTime = DateTime.fromMillisecondsSinceEpoch(lastSafeMillis);
+
+    _sosSub = FirebaseFirestore.instance
+        .collection('sos_alerts')
+        .where('elderlyUserId', isEqualTo: elderlyId)
+        .orderBy('triggeredAt', descending: true)
+        .snapshots()
+        .listen((snapshot) async {
+      DateTime newest = lastSosTime;
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        final ts = data['triggeredAt'] as Timestamp?;
+        if (ts == null) continue;
+        final dt = ts.toDate();
+        if (dt.isAfter(lastSosTime)) {
+          final name = data['elderlyUserName'] ?? elderlyId;
+          await PushNotificationService.showLocalNotification(
+            'Emergency Alert',
+            'SOS from $name. Immediate action required.',
+          );
+          if (dt.isAfter(newest)) newest = dt;
+        }
+      }
+      await prefs.setInt(sosKey, newest.millisecondsSinceEpoch);
+    });
+
+    _safeZoneSub = FirebaseFirestore.instance
+        .collection('safezone_logs')
+        .doc(elderlyId)
+        .collection('logs')
+        .orderBy('triggeredAt', descending: true)
+        .snapshots()
+        .listen((snapshot) async {
+      DateTime newest = lastSafeTime;
+      for (final doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        final action = data['action'] as String? ?? '';
+        if (action != 'outside_safezone') continue;
+        final ts = data['triggeredAt'] as Timestamp?;
+        if (ts == null) continue;
+        final dt = ts.toDate();
+        if (dt.isAfter(lastSafeTime)) {
+          await PushNotificationService.showLocalNotification(
+            'Safe Zone Alert',
+            'Elderly has stepped out of the safe zone.',
+          );
+          if (dt.isAfter(newest)) newest = dt;
+        }
+      }
+      await prefs.setInt(safeKey, newest.millisecondsSinceEpoch);
+    });
+  }
+
+  Future<void> stop() async {
+    await _sosSub?.cancel();
+    await _safeZoneSub?.cancel();
+    _sosSub = null;
+    _safeZoneSub = null;
+  }
+}

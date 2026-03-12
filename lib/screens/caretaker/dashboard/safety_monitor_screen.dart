@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../services/sos_service.dart';
 import '../../../theme/caretaker_theme.dart';
+import 'safety_reports_screen.dart';
 
 class SafetyMonitorScreen extends StatefulWidget {
   const SafetyMonitorScreen({super.key});
@@ -232,6 +233,20 @@ class _SafetyMonitorScreenState extends State<SafetyMonitorScreen> with WidgetsB
         ),
         iconTheme: const IconThemeData(color: CaretakerColors.textPrimary),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.analytics_outlined),
+            tooltip: 'Reports',
+            onPressed: elderlyUserId.isEmpty
+                ? null
+                : () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => SafetyReportsScreen(elderlyUserId: elderlyUserId),
+                      ),
+                    );
+                  },
+          ),
           // ✅ ADDED: Refresh button
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -897,6 +912,7 @@ class _SafetyMonitorScreenState extends State<SafetyMonitorScreen> with WidgetsB
       },
     );
   }
+
 
   String _formatDateTime(DateTime dateTime) {
     final now = DateTime.now();
