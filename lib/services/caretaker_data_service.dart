@@ -607,104 +607,148 @@ class CaretakerDataService {
 
   // ========== GAME SESSION HISTORY (All Games) ==========
 
-  Stream<List<Map<String, dynamic>>> getGameSessionHistory(String userId) {
+  Stream<List<Map<String, dynamic>>> getGameSessionHistory(
+    String userId, {
+    String? elderlyUid,
+    int limit = 10,
+  }) {
     // Combine streaks from 3 collections into one live list
     // REMOVED 'orderBy' to prevent "Missing Index" errors. Sorting is done client-side.
-    
-    final Stream<List<Map<String, dynamic>>> colorTapStream = _firestore
-        .collection('colorTapGameSessions')
-        .where('userId', isEqualTo: userId)
-        .limit(20) 
-        .snapshots()
-        .map((s) => s.docs.map((d) {
-              final data = d.data();
-              return {
-                'gameType': 'Color Tap',
-                'icon': 'touch_app',
-                'color': 'blue',
-                'score': data['score'] ?? 0,
-                'createdAt': _parseTimestamp(data['createdAt']),
-                'correct_taps': data['correct_taps'] ?? 0,
-                'false_taps': data['false_taps'] ?? 0,
-                'average_reaction_time': (data['average_reaction_time'] as num?)?.toDouble() ?? 0.0,
-              };
-            }).toList())
-        .handleError((e) { print("Error in ColorTap stream: $e"); return []; });
+    final ids = <String>{userId};
+    if (elderlyUid != null && elderlyUid.isNotEmpty && elderlyUid != userId) {
+      ids.add(elderlyUid);
+    }
 
-    final Stream<List<Map<String, dynamic>>> flipCardStream = _firestore
-        .collection('flipCardGameSessions')
-        .where('userId', isEqualTo: userId)
-        .limit(20)
-        .snapshots()
-        .map((s) => s.docs.map((d) {
-              final data = d.data();
-              return {
-                'gameType': 'Flip Card',
-                'icon': 'flip',
-                'color': 'purple',
-                'score': data['score'] ?? 0,
-                'createdAt': _parseTimestamp(data['createdAt']),
-                'efficiency': (data['efficiency'] as num?)?.toDouble() ?? 0.0,
-              };
-            }).toList())
-        .handleError((e) { print("Error in FlipCard stream: $e"); return []; });
+    Stream<List<Map<String, dynamic>>> _colorTapStreamForId(String id) {
+      return _firestore
+          .collection('colorTapGameSessions')
+          .where('userId', isEqualTo: id)
+          .limit(20)
+          .snapshots()
+          .map((s) => s.docs.map((d) {
+                final data = d.data();
+                return {
+                  'gameType': 'Color Tap',
+                  'icon': 'touch_app',
+                  'color': 'blue',
+                  'score': data['score'] ?? 0,
+                  'createdAt': _parseTimestamp(data['createdAt']),
+                  'correct_taps': data['correct_taps'] ?? 0,
+                  'false_taps': data['false_taps'] ?? 0,
+                  'average_reaction_time': (data['average_reaction_time'] as num?)?.toDouble() ?? 0.0,
+                };
+              }).toList())
+          .handleError((e) {
+            print("Error in ColorTap stream: $e");
+            return [];
+          });
+    }
 
-    final Stream<List<Map<String, dynamic>>> otherGamesStream = _firestore
-        .collection('game_sessions')
-        .where('userId', isEqualTo: userId)
-        .limit(20)
-        .snapshots()
-        .map((s) => s.docs.map((d) {
-              final data = d.data();
-              final gameType = data['gameType'] as String? ?? 'Unknown';
-              String label;
-              switch (gameType) {
-                case 'city_atlas': label = 'City Atlas'; break;
-                case 'event_ordering': label = 'Event Ordering'; break;
-                case 'daily_routine_recall': label = 'Routine Recall'; break;
-                case 'monument_recall': label = 'Monument Recall'; break;
-                default: label = gameType;
-              }
-              return {
-                'gameType': label,
-                'icon': 'sports_esports',
-                'color': 'teal',
-                'score': (data['score'] as num?)?.toInt() ?? 0,
-                'createdAt': _parseTimestamp(data['timestamp'] ?? data['createdAt']),
-                'metrics': data['metrics'] ?? {},
-                'cognitive_contributions': data['cognitive_contributions'] ?? {},
-              };
-            }).toList())
-        .handleError((e) { print("Error in OtherGames stream: $e"); return []; });
+    Stream<List<Map<String, dynamic>>> _flipCardStreamForId(String id) {
+      return _firestore
+          .collection('flipCardGameSessions')
+          .where('userId', isEqualTo: id)
+          .limit(20)
+          .snapshots()
+          .map((s) => s.docs.map((d) {
+                final data = d.data();
+                return {
+                  'gameType': 'Flip Card',
+                  'icon': 'flip',
+                  'color': 'purple',
+                  'score': data['score'] ?? 0,
+                  'createdAt': _parseTimestamp(data['createdAt']),
+                  'efficiency': (data['efficiency'] as num?)?.toDouble() ?? 0.0,
+                };
+              }).toList())
+          .handleError((e) {
+            print("Error in FlipCard stream: $e");
+            return [];
+          });
+    }
 
-    // Merge logic
-    List<Map<String, dynamic>> ctList = [];
-    List<Map<String, dynamic>> fcList = [];
-    List<Map<String, dynamic>> ogList = [];
-    
-    // ignore: cancel_subscriptions
-    StreamSubscription? sub1, sub2, sub3;
+    Stream<List<Map<String, dynamic>>> _otherGamesStreamForId(String id) {
+      return _firestore
+          .collection('game_sessions')
+          .where('userId', isEqualTo: id)
+          .limit(20)
+          .snapshots()
+          .map((s) => s.docs.map((d) {
+                final data = d.data();
+                final gameType = data['gameType'] as String? ?? 'Unknown';
+                String label;
+                switch (gameType) {
+                  case 'city_atlas': label = 'City Atlas'; break;
+                  case 'event_ordering': label = 'Event Ordering'; break;
+                  case 'daily_routine_recall': label = 'Routine Recall'; break;
+                  case 'monument_recall': label = 'Monument Recall'; break;
+                  default: label = gameType;
+                }
+                return {
+                  'gameType': label,
+                  'icon': 'sports_esports',
+                  'color': 'teal',
+                  'score': (data['score'] as num?)?.toInt() ?? 0,
+                  'createdAt': _parseTimestamp(data['timestamp'] ?? data['createdAt']),
+                  'metrics': data['metrics'] ?? {},
+                  'cognitive_contributions': data['cognitive_contributions'] ?? {},
+                };
+              }).toList())
+          .handleError((e) {
+            print("Error in OtherGames stream: $e");
+            return [];
+          });
+    }
 
     final controller = StreamController<List<Map<String, dynamic>>>.broadcast();
+    final Map<int, List<Map<String, dynamic>>> lists = {};
+    final List<StreamSubscription> subs = [];
+    int keyCounter = 0;
 
     void update() {
       if (controller.isClosed) return;
-      final all = [...ctList, ...fcList, ...ogList];
-      all.sort((a, b) => (b['createdAt'] as int).compareTo(a['createdAt'] as int));
-      controller.add(all.take(10).toList());
+      final all = <Map<String, dynamic>>[];
+      for (final l in lists.values) {
+        all.addAll(l);
+      }
+      final seen = <String>{};
+      final deduped = <Map<String, dynamic>>[];
+      for (final s in all) {
+        final key = _sessionDedupeKey(s);
+        if (seen.add(key)) deduped.add(s);
+      }
+      deduped.sort((a, b) => (b['createdAt'] as int).compareTo(a['createdAt'] as int));
+      controller.add(deduped.take(limit).toList());
     }
 
-    sub1 = colorTapStream.listen((l) { ctList = l; update(); }, onError: (e) { print('CT error: $e'); update(); });
-    sub2 = flipCardStream.listen((l) { fcList = l; update(); }, onError: (e) { print('FC error: $e'); update(); });
-    sub3 = otherGamesStream.listen((l) { ogList = l; update(); }, onError: (e) { print('OG error: $e'); update(); });
+    void register(Stream<List<Map<String, dynamic>>> stream, String label) {
+      final key = keyCounter++;
+      lists[key] = [];
+      final sub = stream.listen(
+        (l) { lists[key] = l; update(); },
+        onError: (e) { print('$label error: $e'); update(); },
+      );
+      subs.add(sub);
+    }
+
+    for (final id in ids) {
+      register(_colorTapStreamForId(id), 'CT');
+      register(_flipCardStreamForId(id), 'FC');
+      register(_otherGamesStreamForId(id), 'OG');
+    }
 
     controller.onCancel = () {
-      sub1?.cancel();
-      sub2?.cancel();
-      sub3?.cancel();
+      for (final sub in subs) {
+        sub.cancel();
+      }
     };
 
     return controller.stream;
+  }
+
+  String _sessionDedupeKey(Map<String, dynamic> s) {
+    final createdAt = s['createdAt'];
+    return '${s['gameType']}_${createdAt}_${s['score'] ?? ''}_${s['efficiency'] ?? ''}_${s['average_reaction_time'] ?? ''}';
   }
 
   Future<List<Map<String, dynamic>>> _fetchAllGameSessions(String userId) async {
@@ -725,7 +769,8 @@ class CaretakerDataService {
       try {
         var ctQuery = _firestore
             .collection('colorTapGameSessions')
-            .where('userId', isEqualTo: id);
+            .where('userId', isEqualTo: id)
+            .orderBy('createdAt', descending: true);
         final ctSnap = await (limit != null ? ctQuery.limit(limit) : ctQuery).get();
         for (final d in ctSnap.docs) {
           final data = d.data();
@@ -745,7 +790,8 @@ class CaretakerDataService {
       try {
         var fcQuery = _firestore
             .collection('flipCardGameSessions')
-            .where('userId', isEqualTo: id);
+            .where('userId', isEqualTo: id)
+            .orderBy('createdAt', descending: true);
         final fcSnap = await (limit != null ? fcQuery.limit(limit) : fcQuery).get();
         for (final d in fcSnap.docs) {
           final data = d.data();
@@ -763,7 +809,8 @@ class CaretakerDataService {
       try {
         var ogQuery = _firestore
             .collection('game_sessions')
-            .where('userId', isEqualTo: id);
+            .where('userId', isEqualTo: id)
+            .orderBy('timestamp', descending: true);
         final ogSnap = await (limit != null ? ogQuery.limit(limit) : ogQuery).get();
         for (final d in ogSnap.docs) {
           final data = d.data();

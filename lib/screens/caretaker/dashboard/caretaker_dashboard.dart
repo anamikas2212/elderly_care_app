@@ -176,7 +176,10 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
         elderlyUserGender = loadedGender;
         caretakerId = cId;
         _cognitiveHealthFuture = _dataService.getCognitiveHealthFuture(dataId);
-        _recentActivityStream = _dataService.getGameSessionHistory(dataId);
+        _recentActivityStream = _dataService.getGameSessionHistory(
+          dataId,
+          elderlyUid: storedUid ?? uid ?? '',
+        );
         _recentActivityFuture = _dataService.getRecentActivityFuture(
           dataId,
           elderlyUid: storedUid ?? uid ?? '',
@@ -185,17 +188,6 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
           dataId,
           elderlyUid: storedUid ?? uid ?? '',
         );
-        _isLoading = false;
-      });
-
-      setState(() {
-        elderlyUserId = dataId;
-        elderlyUserName = name;
-        elderlyUserAge = loadedAge;
-        elderlyUserGender = loadedGender;
-        _cognitiveHealthFuture = _dataService.getCognitiveHealthFuture(dataId);
-        _recentActivityFuture = _dataService.getRecentActivityFuture(dataId);
-        _overallStatsFuture = _dataService.getOverallStatisticsFuture(dataId);
         _isLoading = false;
       });
 
@@ -1040,7 +1032,10 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
                         onTap:
                             () => setState(() {
                               _recentActivityFuture = _dataService
-                                  .getRecentActivityFuture(elderlyUserId);
+                                  .getRecentActivityFuture(
+                                    elderlyUserId,
+                                    elderlyUid: elderlyUserUid,
+                                  );
                             }),
                         child: Icon(
                           Icons.refresh,
@@ -1540,6 +1535,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
             caretakerId: caretakerId,
             elderlyId: elderlyUserId,
             elderlyName: elderlyUserName,
+            elderlyUid: elderlyUserUid,
           ),
         ),
 

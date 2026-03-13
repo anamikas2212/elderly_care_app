@@ -63,7 +63,11 @@ class CognitiveReportService {
       if (caretakerId == null) return;
 
       final yesterday = DateTime.now().subtract(const Duration(days: 1));
-      final sessions = await _fetchRecentSessions(elderlyId, yesterday);
+      final sessions = await _fetchRecentSessions(
+        elderlyId,
+        yesterday,
+        altUserId: userName,
+      );
 
       if (sessions.isEmpty) {
         print('No game sessions found for $userName in the last 24h. Skipping daily report.');
@@ -170,7 +174,11 @@ class CognitiveReportService {
       }
 
       final since = DateTime.now().subtract(const Duration(days: 1));
-      final sessions = await _fetchRecentSessions(elderlyId, since);
+      final sessions = await _fetchRecentSessions(
+        elderlyId,
+        since,
+        altUserId: userName,
+      );
       if (sessions.isEmpty) {
         return 'no_sessions';
       }
@@ -783,39 +791,55 @@ class CognitiveReportService {
 
   // ─── Session Fetching ──────────────────────────────────────────
 
-  Future<List<Map<String, dynamic>>> _fetchRecentSessions(String userId, DateTime since) async {
+  Future<List<Map<String, dynamic>>> _fetchRecentSessions(
+    String userId,
+    DateTime since, {
+    String? altUserId,
+  }) async {
     final List<Map<String, dynamic>> all = [];
+    final seen = <String>{};
     final collections = ['colorTapGameSessions', 'flipCardGameSessions', 'game_sessions'];
+    final ids = <String>{userId};
+    if (altUserId != null && altUserId.isNotEmpty && altUserId != userId) {
+      ids.add(altUserId);
+    }
 
     for (var col in collections) {
-      if (col == 'game_sessions') {
-        final snap = await _firestore
-            .collection(col)
-            .where('userId', isEqualTo: userId)
-            .limit(200)
-            .get();
-        for (var doc in snap.docs) {
-          final data = doc.data();
-          final sessionTime = _extractSessionTime(data['timestamp'] ?? data['createdAt']);
-          if (sessionTime != null && sessionTime.isAfter(since)) {
-            data['gameType'] = _normalizeGameType(data['gameType']);
-            data['createdAt'] = data['timestamp'] ?? data['createdAt'];
-            all.add(data);
+      for (final id in ids) {
+        if (col == 'game_sessions') {
+          final snap = await _firestore
+              .collection(col)
+              .where('userId', isEqualTo: id)
+              .limit(200)
+              .get();
+          for (var doc in snap.docs) {
+            final data = doc.data();
+            final sessionTime =
+                _extractSessionTime(data['timestamp'] ?? data['createdAt']);
+            if (sessionTime != null && sessionTime.isAfter(since)) {
+              data['gameType'] = _normalizeGameType(data['gameType']);
+              data['createdAt'] = data['timestamp'] ?? data['createdAt'];
+              final key =
+                  '${data['gameType']}_${sessionTime.millisecondsSinceEpoch}_${data['score'] ?? ''}';
+              if (seen.add(key)) all.add(data);
+            }
           }
-        }
-      } else {
-        final snap = await _firestore
-            .collection(col)
-            .where('userId', isEqualTo: userId)
-            .limit(200)
-            .get();
-        for (var doc in snap.docs) {
-          final data = doc.data();
-          final sessionTime = _extractSessionTime(data['createdAt']);
-          if (sessionTime != null && sessionTime.isAfter(since)) {
-            data['gameType'] = data['gameType'] ??
-                (col == 'colorTapGameSessions' ? 'Color Tap' : 'Flip Card');
-            all.add(data);
+        } else {
+          final snap = await _firestore
+              .collection(col)
+              .where('userId', isEqualTo: id)
+              .limit(200)
+              .get();
+          for (var doc in snap.docs) {
+            final data = doc.data();
+            final sessionTime = _extractSessionTime(data['createdAt']);
+            if (sessionTime != null && sessionTime.isAfter(since)) {
+              data['gameType'] = data['gameType'] ??
+                  (col == 'colorTapGameSessions' ? 'Color Tap' : 'Flip Card');
+              final key =
+                  '${data['gameType']}_${sessionTime.millisecondsSinceEpoch}_${data['score'] ?? ''}';
+              if (seen.add(key)) all.add(data);
+            }
           }
         }
       }
@@ -1124,7 +1148,11 @@ class CognitiveReportService {
       if (caretakerId == null) return;
 
       final since = DateTime.now().subtract(interval);
-      final sessions = await _fetchRecentSessions(elderlyId, since);
+      final sessions = await _fetchRecentSessions(
+        elderlyId,
+        since,
+        altUserId: userName,
+      );
       if (sessions.isEmpty) return;
 
       final todayScores = _calculateTodayScores(sessions);

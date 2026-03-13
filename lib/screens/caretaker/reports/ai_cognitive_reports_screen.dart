@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
@@ -11,12 +12,14 @@ class AiCognitiveReportsScreen extends StatefulWidget {
   final String caretakerId;
   final String elderlyId;
   final String? elderlyName;
+  final String? elderlyUid;
 
   const AiCognitiveReportsScreen({
     Key? key,
     required this.caretakerId,
     required this.elderlyId,
     this.elderlyName,
+    this.elderlyUid,
   }) : super(key: key);
 
   @override
@@ -35,6 +38,12 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
 
   static const _tabLabels = ['Daily', 'Weekly', 'Monthly', 'Yearly'];
   static const _tabTypes = ['daily', 'weekly', 'monthly', 'yearly'];
+
+  String get _effectiveElderlyId {
+    final uid = widget.elderlyUid;
+    if (uid != null && uid.isNotEmpty) return uid;
+    return widget.elderlyId;
+  }
 
   @override
   void initState() {
@@ -331,12 +340,8 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
 
     return Stack(
       children: [
-        StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(widget.elderlyId)
-                  .collection('cognitive_reports')
-                  .snapshots(),
+        StreamBuilder<List<Map<String, dynamic>>>(
+          stream: _reportsStream(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
@@ -346,13 +351,13 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
               return Center(child: Text("Error: ${snapshot.error}"));
             }
 
-            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            if (!snapshot.hasData || snapshot.data!.isEmpty) {
               return _buildEmptyTabState(type);
             }
 
             // Filter by elderlyId, type, and date range, then sort
-            final filtered = snapshot.data!.docs.where((doc) {
-              final data = doc.data() as Map<String, dynamic>;
+            final filtered = snapshot.data!.where((entry) {
+              final data = entry['data'] as Map<String, dynamic>;
               final id = data['elderlyId']?.toString();
               final name = data['elderlyName']?.toString();
               final reportType = data['type']?.toString() ?? 'daily';
@@ -374,8 +379,8 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
 
             // Sort by date descending
             filtered.sort((a, b) {
-              final aTs = (a.data() as Map<String, dynamic>)['date'] as Timestamp?;
-              final bTs = (b.data() as Map<String, dynamic>)['date'] as Timestamp?;
+              final aTs = (a['data'] as Map<String, dynamic>)['date'] as Timestamp?;
+              final bTs = (b['data'] as Map<String, dynamic>)['date'] as Timestamp?;
               if (aTs == null && bTs == null) return 0;
               if (aTs == null) return 1;
               if (bTs == null) return -1;
@@ -390,13 +395,14 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
               padding: const EdgeInsets.all(16),
               itemCount: filtered.length,
               itemBuilder: (context, index) {
-                final reportData =
-                    filtered[index].data() as Map<String, dynamic>;
+                final entry = filtered[index];
+                final reportData = entry['data'] as Map<String, dynamic>;
                 final report = CognitiveReport.fromMap(
                   reportData,
-                  filtered[index].id,
+                  entry['id'] as String,
                 );
-                return _buildReportCard(report);
+                final sourceId = entry['sourceId'] as String? ?? widget.elderlyId;
+                return _buildReportCard(report, sourceId);
               },
             );
           },
@@ -440,6 +446,73 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
           ),
       ],
     );
+  }
+
+  Stream<List<Map<String, dynamic>>> _reportsStream() {
+    final ids = <String>{widget.elderlyId};
+    if (widget.elderlyUid != null && widget.elderlyUid!.isNotEmpty) {
+      ids.add(widget.elderlyUid!);
+    }
+
+    final controller = StreamController<List<Map<String, dynamic>>>.broadcast();
+    final Map<String, List<Map<String, dynamic>>> bySource = {};
+    final List<StreamSubscription> subs = [];
+
+    void emit() {
+      final all = <Map<String, dynamic>>[];
+      for (final list in bySource.values) {
+        all.addAll(list);
+      }
+      final seen = <String>{};
+      final deduped = <Map<String, dynamic>>[];
+      for (final item in all) {
+        final data = item['data'] as Map<String, dynamic>;
+        final ts = data['date'] as Timestamp?;
+        final key =
+            '${data['type']}_${ts?.millisecondsSinceEpoch ?? ''}_${data['overallScore'] ?? ''}';
+        if (seen.add(key)) deduped.add(item);
+      }
+      controller.add(deduped);
+    }
+
+    void register(String id) {
+      final sub = FirebaseFirestore.instance
+          .collection('users')
+          .doc(id)
+          .collection('cognitive_reports')
+          .snapshots()
+          .listen(
+            (snapshot) {
+              bySource[id] = snapshot.docs
+                  .map(
+                    (doc) => {
+                      'id': doc.id,
+                      'data': doc.data(),
+                      'sourceId': id,
+                    },
+                  )
+                  .toList();
+              emit();
+            },
+            onError: (_) {
+              bySource[id] = [];
+              emit();
+            },
+          );
+      subs.add(sub);
+    }
+
+    for (final id in ids) {
+      register(id);
+    }
+
+    controller.onCancel = () {
+      for (final sub in subs) {
+        sub.cancel();
+      }
+    };
+
+    return controller.stream;
   }
 
   Widget _buildEmptyTabState(String type) {
@@ -488,7 +561,7 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
 
   // ─── Report Card ────────────────────────────────────────────────
 
-  Widget _buildReportCard(CognitiveReport report) {
+  Widget _buildReportCard(CognitiveReport report, String sourceId) {
     final bool isWeekly = report.type == 'weekly';
     final bool isMonthly = report.type == 'monthly';
     final bool isYearly = report.type == 'yearly';
@@ -649,7 +722,7 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
                 ),
                 IconButton(
                   icon: const Icon(Icons.delete_outline, color: Colors.grey),
-                  onPressed: () => _confirmDelete(report),
+                  onPressed: () => _confirmDelete(report, sourceId),
                   tooltip: "Delete report",
                 ),
               ],
@@ -681,7 +754,7 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
     try {
       final service = CognitiveReportService(groqApiKey: AppConfig.groqApiKey);
       final status = await service.generateDailyCognitiveReportWithStatus(
-        widget.elderlyId,
+        _effectiveElderlyId,
         caretakerIdOverride: widget.caretakerId,
       );
       if (!mounted) return;
@@ -744,18 +817,18 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
           targetDate = DateTime(_selectedYear, _selectedMonth, 7);
         }
         await service.generateWeeklyCognitiveReport(
-          widget.elderlyId,
+          _effectiveElderlyId,
           periodEnd: targetDate, // If null, service uses DateTime.now()
         );
       } else if (type == 'monthly') {
         await service.generateMonthlyCognitiveReport(
-          widget.elderlyId,
+          _effectiveElderlyId,
           month: _selectedMonth,
           year: _selectedYear,
         );
       } else if (type == 'yearly') {
         await service.generateYearlyCognitiveReport(
-          widget.elderlyId,
+          _effectiveElderlyId,
           year: _selectedYear,
         );
       }
@@ -783,7 +856,7 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
 
   // ─── Delete ─────────────────────────────────────────────────────
 
-  Future<void> _confirmDelete(CognitiveReport report) async {
+  Future<void> _confirmDelete(CognitiveReport report, String sourceId) async {
     final result = await showDialog<bool>(
       context: context,
       builder:
@@ -810,7 +883,7 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
 
     await FirebaseFirestore.instance
         .collection('users')
-        .doc(widget.elderlyId)
+        .doc(sourceId)
         .collection('cognitive_reports')
         .doc(report.id)
         .delete();
