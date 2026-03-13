@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import 'caretaker_login_screen.dart';
 import 'elderly_initial_login_screen.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -14,6 +15,32 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   String? selectedRole;
+
+  @override
+  void initState() {
+    super.initState();
+    _requestCriticalPermissions();
+  }
+
+  Future<void> _requestCriticalPermissions() async {
+    // 1. Request POST_NOTIFICATIONS (Android 13+)
+    final notifStatus = await Permission.notification.status;
+    if (!notifStatus.isGranted) {
+      await Permission.notification.request();
+    }
+
+    // 2. Request Schedule Exact Alarms (Android 12+)
+    final alarmStatus = await Permission.scheduleExactAlarm.status;
+    if (!alarmStatus.isGranted) {
+      await Permission.scheduleExactAlarm.request();
+    }
+
+    // 3. Request Ignore Battery Optimizations (Critical for Vivo/Oppo/Xiaomi background alarms)
+    final ignoreBatteryStatus = await Permission.ignoreBatteryOptimizations.status;
+    if (!ignoreBatteryStatus.isGranted) {
+      await Permission.ignoreBatteryOptimizations.request();
+    }
+  }
 
   void selectRole(String role) {
     setState(() {

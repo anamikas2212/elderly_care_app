@@ -28,9 +28,9 @@ class MedicationHistoryScreen extends StatelessWidget {
       // ✅ FIX: StreamBuilder must be inside body
       body: StreamBuilder<QuerySnapshot>(
         stream: _firestore
+            .collection('users')
+            .doc(userId)
             .collection('medications')
-            .where('userId', isEqualTo: userId)
-            .orderBy('lastTaken', descending: true)
             .snapshots(),
         builder: (context, snapshot) {
 
@@ -44,7 +44,14 @@ class MedicationHistoryScreen extends StatelessWidget {
 
           final docs = snapshot.data!.docs
               .where((d) => (d.data() as Map)['lastTaken'] != null)
-              .toList();
+              .toList()
+            ..sort((a, b) {
+              final aTs = (a.data() as Map<String, dynamic>)['lastTaken'] as Timestamp?;
+              final bTs = (b.data() as Map<String, dynamic>)['lastTaken'] as Timestamp?;
+              final aMillis = aTs?.millisecondsSinceEpoch ?? 0;
+              final bMillis = bTs?.millisecondsSinceEpoch ?? 0;
+              return bMillis.compareTo(aMillis);
+            });
 
           return ListView.builder(
             padding: const EdgeInsets.all(16),

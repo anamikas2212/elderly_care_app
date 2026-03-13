@@ -3,6 +3,20 @@ const admin = require("firebase-admin");
 
 admin.initializeApp();
 
+function shouldSuppressAlertPush(data) {
+  const title = String(data.title || "").toLowerCase();
+  const message = String(data.message || "").toLowerCase();
+  const type = String(data.type || "").toLowerCase();
+  const combined = `${title} ${message} ${type}`;
+
+  return (
+    combined.includes("medication") ||
+    combined.includes("pill") ||
+    combined.includes("overdue") ||
+    combined.includes("missed dose")
+  );
+}
+
 async function sendToUserToken(userId, payload) {
   if (!userId) return null;
 
@@ -29,6 +43,15 @@ exports.sendAlertPush = functions.firestore
   .onCreate(async (snap, context) => {
     const data = snap.data() || {};
     const userId = data.userId;
+
+    if (shouldSuppressAlertPush(data)) {
+      functions.logger.info("Skipping medication-style alert push", {
+        alertId: context.params.alertId,
+        userId,
+        type: data.type || null,
+      });
+      return null;
+    }
 
     const notification = {
       title: data.title || "Medication Reminder",

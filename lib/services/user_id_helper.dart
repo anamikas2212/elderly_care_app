@@ -11,14 +11,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 class UserIdHelper {
   /// Returns the userId to use for Firestore operations, or null if none found.
   static Future<String?> getCurrentUserId() async {
-    // 1. Prefer the name-based ID saved in SharedPreferences
+    // 1. Prefer the persisted UID used as the Firestore document id.
     try {
       final prefs = await SharedPreferences.getInstance();
-      final name = prefs.getString('elderly_user_name');
-      if (name != null && name.isNotEmpty) return name;
-      final uid = prefs.getString('elderly_user_id') ??
+      final uid =
+          prefs.getString('elderly_user_id') ??
           prefs.getString('elderly_user_uid');
       if (uid != null && uid.isNotEmpty) return uid;
+      final name = prefs.getString('elderly_user_name');
+      if (name != null && name.isNotEmpty) return name;
     } catch (_) {}
 
     // 2. Fall back to the live Firebase Auth user (if any)

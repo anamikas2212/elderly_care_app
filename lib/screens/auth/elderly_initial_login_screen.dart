@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../elderly/home/elderly_dashboard.dart';
 import '../../services/pairing_service.dart';
+import '../../services/medication_notification_service.dart';
 import 'package:flutter/services.dart';
 
 class ElderlyInitialLoginScreen extends StatefulWidget {
@@ -94,6 +95,8 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
     await prefs.setString('elderly_user_age', _ageController.text.trim());
     await prefs.setString('elderly_user_gender', _genderController.text.trim());
     await prefs.setString('user_role', 'elderly');
+
+    await MedicationNotificationService.instance.start(uid);
 
     // Update Firestore profile (merge so we never clobber caretakerId which
     // is set exclusively by PairingService.redeemPairingCode).
@@ -478,6 +481,7 @@ class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
     await prefs.setString('elderly_user_name', elderlyId);
     await prefs.setString('elderly_user_age', _ageController.text.trim());
     await prefs.setString('elderly_user_gender', _genderController.text.trim());
+    await MedicationNotificationService.instance.start(elderlyId);
 
     // Simulate a brief loading/welcome delay
     Future.delayed(const Duration(milliseconds: 1500), () {

@@ -1,3 +1,92 @@
+/* getCognitiveHealthFuture(userId) and getOverallCognitiveHealth(userId)
+call _computeCognitiveHealth(userId)
+this is what powers the main cognitive health card on caretaker side
+_computeCognitiveHealth(userId)
+reads colorTapGameSessions
+reads flipCardGameSessions
+reads game_sessions
+combines them into:
+attention
+processingSpeed
+memory
+executiveFunction
+language
+overallScore
+then writes the result into cognitive_summary
+How each collection is used
+
+colorTapGameSessions
+used for attention and processingSpeed
+calculates from:
+correct_taps
+false_taps
+average_reaction_time
+
+flipCardGameSessions
+used for memory
+calculates from:
+efficiency
+game_sessions
+used for Daily Engagement games
+reads cognitive_contributions
+extracts:
+executive_function
+memory
+language
+
+Important functions for dashboard
+
+getColorTapAnalytics(userId)
+returns summary stats + sessions list for Color Tap analytics screen
+getFlipCardAnalytics(userId)
+returns summary stats + sessions list for Flip Card analytics screen
+getCityAtlasAnalytics(userId)
+getEventOrderingAnalytics(userId)
+getDailyRoutineAnalytics(userId)
+getMonumentRecallAnalytics(userId)
+each one reads matching game data and prepares:
+stats
+sessions
+caretaker graph screens use these two outputs directly
+How trends are built
+
+every analytics function creates a sessions list
+each session item contains:
+metrics
+cognitive_contributions
+score
+createdAt
+caretaker analytics screens use this list to draw LineChart graphs
+Recent activity link
+
+getRecentActivityFuture(userId, elderlyUid: ...)
+combines data from:
+colorTapGameSessions
+flipCardGameSessions
+game_sessions
+normalizes game names
+sorts by newest first
+used to show recent played games on caretaker dashboard
+Game count link
+
+getOverallStatisticsFuture(...)
+counts total sessions across all 3 collections
+used for “games played” type cards*/
+
+
+
+/*
+
+_computeCognitiveHealth(userId) combines:
+colorTapGameSessions -> attention, processingSpeed
+flipCardGameSessions -> memory
+game_sessions -> executiveFunction, language, extra memory
+Final:
+overallScore = average of available domain scores
+also caches result in cognitive_summary/{userId}
+
+
+ */
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';

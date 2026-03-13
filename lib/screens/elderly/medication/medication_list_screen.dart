@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'medication_history_screen.dart';
 import 'AddMedicationScreen.dart';
 import '../../../services/notification_service.dart';
+import '../../../services/user_id_helper.dart';
 import 'package:intl/intl.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -17,64 +18,81 @@ enum UserRole { elderly, caretaker }
 class MedicationListScreen extends StatefulWidget {
   final String userId;
   final UserRole role;
-  const MedicationListScreen({Key? key, required this.userId, required this.role})
-      : super(key: key);
+  const MedicationListScreen({
+    Key? key,
+    required this.userId,
+    required this.role,
+  }) : super(key: key);
   @override
   State<MedicationListScreen> createState() => _MedicationListScreenState();
 }
 
 class _MedicationListScreenState extends State<MedicationListScreen> {
   DateTime _selectedDate = DateTime.now();
-  late Stream<QuerySnapshot> _medicationsStream;
-  late Stream<QuerySnapshot> _alertsStream;
-  final Set<String> _notifiedAlerts = {};
-  List<QueryDocumentSnapshot> _activeAlerts = [];
+  Stream<QuerySnapshot>? _medicationsStream;
+  late String _effectiveUserId;
+  bool _isInitializing = true;
 
   @override
   void initState() {
     super.initState();
-    _medicationsStream = _firestore.collection('users').doc(widget.userId)
-        .collection('medications').snapshots();
-    _alertsStream = _firestore.collection('alerts')
-        .where('userId', isEqualTo: widget.userId)
-        .where('isActive', isEqualTo: true)
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .asBroadcastStream();
-
-    if (widget.role == UserRole.elderly && !kIsWeb) {
-      _alertsStream.listen((snapshot) {
-        if (mounted) {
-          setState(() {
-            _activeAlerts = snapshot.docs;
-          });
-        }
-        if (snapshot.docs.isNotEmpty) {
-           _triggerLocalAlertNotification(snapshot.docs);
-        }
-      });
-    }
-
-    if (!kIsWeb) {
-      NotificationService.instance.init().then((_) {
-        if (widget.role == UserRole.elderly) {
-          _scheduleAllNotifications();
-        }
-      });
-    }
+    _initializeStreams();
   }
 
-  Future<void> _scheduleNotification(String docId, Map<String, dynamic> med) async {
+  Future<void> _initializeStreams() async {
+    _effectiveUserId = widget.userId;
+    if (widget.role == UserRole.elderly) {
+      final resolvedUserId = await UserIdHelper.getCurrentUserId();
+      if (resolvedUserId != null && resolvedUserId.isNotEmpty) {
+        _effectiveUserId = resolvedUserId;
+      }
+    }
+
+    _medicationsStream =
+        _firestore
+            .collection('users')
+            .doc(_effectiveUserId)
+            .collection('medications')
+            .snapshots();
+    if (!mounted) return;
+    setState(() {
+      _isInitializing = false;
+    });
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
+  String get _userId => _effectiveUserId;
+
+  Future<void> _scheduleNotification(
+    String docId,
+    Map<String, dynamic> med,
+  ) async {
     if (kIsWeb) return;
-    
+
     final daysStr = _safeStringOrList(med['days']).toLowerCase();
     final times = med['times'] as List<dynamic>?;
     if (times != null && times.isNotEmpty) {
       for (var i = 0; i < times.length; i++) {
-        _scheduleSingleNotification(docId, med, times[i].toString(), i, daysStr);
+        _scheduleSingleNotification(
+          docId,
+          med,
+          times[i].toString(),
+          i,
+          daysStr,
+        );
       }
     } else {
-      _scheduleSingleNotification(docId, med, _safeString(med['time']), 0, daysStr);
+      _scheduleSingleNotification(
+        docId,
+        med,
+        _safeString(med['time']),
+        0,
+        daysStr,
+      );
     }
   }
 
@@ -87,7 +105,7 @@ class _MedicationListScreenState extends State<MedicationListScreen> {
   ) async {
     final t = _parse12hTime(timeStr);
     if (t == null) return;
-    
+
     final name = _safeString(med['name']);
     final dose = _safeString(med['dose']);
 
@@ -96,7 +114,7 @@ class _MedicationListScreenState extends State<MedicationListScreen> {
       final notifId = '${docId}_${timeIndex}_daily'.hashCode.abs() % 100000;
       await NotificationService.instance.scheduleMedication(
         id: notifId,
-        userId: widget.userId,
+        userId: _userId,
         docId: docId,
         name: name,
         dose: dose,
@@ -114,7 +132,7 @@ class _MedicationListScreenState extends State<MedicationListScreen> {
       final notifId = '${docId}_${timeIndex}_$wd'.hashCode.abs() % 100000;
       await NotificationService.instance.scheduleMedication(
         id: notifId,
-        userId: widget.userId,
+        userId: _userId,
         docId: docId,
         name: name,
         dose: dose,
@@ -129,8 +147,12 @@ class _MedicationListScreenState extends State<MedicationListScreen> {
 
   Future<void> _scheduleAllNotifications() async {
     if (kIsWeb) return;
-    final snapshot = await _firestore.collection('users').doc(widget.userId)
-        .collection('medications').get();
+    final snapshot =
+        await _firestore
+            .collection('users')
+            .doc(_userId)
+            .collection('medications')
+            .get();
     for (final doc in snapshot.docs) {
       _scheduleNotification(doc.id, doc.data() as Map<String, dynamic>);
     }
@@ -141,7 +163,7 @@ class _MedicationListScreenState extends State<MedicationListScreen> {
     final now = DateTime.now().add(const Duration(minutes: 10));
     await NotificationService.instance.scheduleMedication(
       id: docId.hashCode.abs() % 100000,
-      userId: widget.userId,
+      userId: _userId,
       docId: docId,
       name: _safeString(med['name']),
       dose: _safeString(med['dose']),
@@ -158,94 +180,123 @@ class _MedicationListScreenState extends State<MedicationListScreen> {
     // but typically you'd cancel it here.
   }
 
-  Future<void> _dismissAlert(String alertId) async {
-    try {
-      await _firestore.collection('alerts').doc(alertId).update({'isActive': false});
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Alert dismissed'), backgroundColor: Colors.green),
-      );
-    } catch (e) { debugPrint('Error dismissing alert: $e'); }
-  }
-
   Future<void> _markAsTaken(String docId, String name, int timeIndex) async {
     try {
       final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
-      await _firestore.collection('users').doc(widget.userId)
-          .collection('medications').doc(docId)
+      await _firestore
+          .collection('users')
+          .doc(_userId)
+          .collection('medications')
+          .doc(docId)
           .update({
-            'lastTaken': Timestamp.fromDate(DateTime.now()), 
+            'lastTaken': Timestamp.fromDate(DateTime.now()),
             'takenToday': true, // Legacy
-            'takenDates': FieldValue.arrayUnion([dateStr, '${dateStr}_$timeIndex']),
+            'takenDates': FieldValue.arrayUnion([
+              dateStr,
+              '${dateStr}_$timeIndex',
+            ]),
           });
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('✅ $name marked as taken'),
-        backgroundColor: Colors.green.shade700,
-        duration: const Duration(seconds: 3),
-      ));
-    } catch (e) { debugPrint('Error marking as taken: $e'); }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ $name marked as taken'),
+          backgroundColor: Colors.green.shade700,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      debugPrint('Error marking as taken: $e');
+    }
   }
 
   Future<void> _snoozeMedication(String docId, Map<String, dynamic> med) async {
     final name = _safeString(med['name']);
     await _snoozeNotif(docId, med);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('⏰ $name snoozed for 10 minutes'),
-      backgroundColor: Colors.orange.shade700,
-      duration: const Duration(seconds: 3),
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('⏰ $name snoozed for 10 minutes'),
+        backgroundColor: Colors.orange.shade700,
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   void _deleteMedication(String docId, String name) {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('🗑️ Delete Medication',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-        content: Text('Are you sure you want to delete $name?',
-            style: const TextStyle(fontSize: 18)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel', style: TextStyle(fontSize: 18))),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await _cancelNotif(docId);
-              await _firestore.collection('users').doc(widget.userId)
-                  .collection('medications').doc(docId).delete();
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text('🗑️ $name deleted'),
-                backgroundColor: Colors.red.shade700,
-                behavior: SnackBarBehavior.floating,
-              ));
-            },
-            child: Text('Delete',
-                style: TextStyle(fontSize: 18, color: Colors.red.shade700)),
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text(
+              '🗑️ Delete Medication',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            ),
+            content: Text(
+              'Are you sure you want to delete $name?',
+              style: const TextStyle(fontSize: 18),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel', style: TextStyle(fontSize: 18)),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  await _cancelNotif(docId);
+                  await _firestore
+                      .collection('users')
+                      .doc(_userId)
+                      .collection('medications')
+                      .doc(docId)
+                      .delete();
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('🗑️ $name deleted'),
+                      backgroundColor: Colors.red.shade700,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                },
+                child: Text(
+                  'Delete',
+                  style: TextStyle(fontSize: 18, color: Colors.red.shade700),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 
-  Future<void> _navigateToAdd({Map<String, dynamic>? existing, String? docId}) async {
-    final result = await Navigator.push(context, MaterialPageRoute(
-      builder: (_) => AddMedicationScreen(
-        userId: widget.userId,
-        existingMedication: existing,
-        existingDocId: docId,
+  Future<void> _navigateToAdd({
+    Map<String, dynamic>? existing,
+    String? docId,
+  }) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (_) => AddMedicationScreen(
+              userId: _userId,
+              existingMedication: existing,
+              existingDocId: docId,
+            ),
       ),
-    ));
+    );
     if (result == true && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(existing == null
-            ? '✅ Medication added successfully!'
-            : '✏️ Medication updated successfully!'),
-        backgroundColor: existing == null ? Colors.green.shade700 : Colors.blue.shade700,
-        behavior: SnackBarBehavior.floating,
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            existing == null
+                ? '✅ Medication added successfully!'
+                : '✏️ Medication updated successfully!',
+          ),
+          backgroundColor:
+              existing == null ? Colors.green.shade700 : Colors.blue.shade700,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -257,8 +308,10 @@ class _MedicationListScreenState extends State<MedicationListScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('💊 My Medications',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+        title: const Text(
+          '💊 My Medications',
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.green.shade700,
         foregroundColor: Colors.white,
         elevation: 0,
@@ -267,104 +320,36 @@ class _MedicationListScreenState extends State<MedicationListScreen> {
             IconButton(
               icon: const Icon(Icons.history, size: 28),
               tooltip: 'History',
-              onPressed: () => Navigator.push(context, MaterialPageRoute(
-                builder: (_) => MedicationHistoryScreen(userId: widget.userId),
-              )),
+              onPressed:
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder:
+                          (_) => MedicationHistoryScreen(userId: _userId),
+                    ),
+                  ),
             ),
         ],
       ),
-      body: Column(children: [
-        if (widget.role == UserRole.elderly) _buildAlertBanner(),
-        if (widget.role == UserRole.elderly) _buildWeeklyCalendar(),
-        Expanded(child: _buildMedicationList()),
-      ]),
-      floatingActionButton: widget.role == UserRole.caretaker
-          ? FloatingActionButton.extended(
-              onPressed: () => _navigateToAdd(),
-              backgroundColor: Colors.green.shade700,
-              icon: const Icon(Icons.add, size: 28),
-              label: const Text('Add Medicine',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            )
-          : null,
-    );
-  }
-
-  Widget _buildAlertBanner() {
-    if (_activeAlerts.isEmpty) return const SizedBox.shrink();
-    
-    return Container(
-      color: Colors.grey.shade100,
-      child: Column(
-        children: _activeAlerts.map((doc) {
-          final alert = doc.data() as Map<String, dynamic>;
-          final type = _safeString(alert['type'], fallback: 'warning');
-          final alertColor = _alertColor(type);
-          return Padding(
-            padding: const EdgeInsets.all(12),
-            child: Container(
-             padding: const EdgeInsets.all(16),
-             decoration: BoxDecoration(
-               color: _alertBgColor(type),
-               borderRadius: BorderRadius.circular(12),
-               border: Border.all(color: alertColor.withOpacity(0.3), width: 2),
-             ),
-             child: Row(children: [
-               Icon(_alertIcon(type), color: alertColor, size: 32),
-               const SizedBox(width: 12),
-               Expanded(child: Column(
-                 crossAxisAlignment: CrossAxisAlignment.start,
-                 children: [
-                   Text(_safeString(alert['title'], fallback: 'Alert'),
-                       style: TextStyle(fontWeight: FontWeight.w700,
-                           color: alertColor, fontSize: 18)),
-                   if (_safeString(alert['message']).isNotEmpty)
-                     Text(_safeString(alert['message']),
-                         style: TextStyle(
-                             color: alertColor.withOpacity(0.8), fontSize: 15)),
-                 ],
-               )),
-               IconButton(
-                 icon: Icon(Icons.close, color: alertColor, size: 24),
-                 onPressed: () => _dismissAlert(doc.id),
-                 padding: EdgeInsets.zero,
-                 constraints: const BoxConstraints(),
-               ),
-             ]),
-            ),
-          );
-        }).toList(),
+      body: Column(
+        children: [
+          if (widget.role == UserRole.elderly) _buildWeeklyCalendar(),
+          Expanded(child: _buildMedicationList()),
+        ],
       ),
+      floatingActionButton:
+          widget.role == UserRole.caretaker
+              ? FloatingActionButton.extended(
+                onPressed: () => _navigateToAdd(),
+                backgroundColor: Colors.green.shade700,
+                icon: const Icon(Icons.add, size: 28),
+                label: const Text(
+                  'Add Medicine',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              )
+              : null,
     );
-  }
-
-  Future<void> _triggerLocalAlertNotification(
-    List<QueryDocumentSnapshot> docs,
-  ) async {
-    if (docs.isEmpty) return;
-    
-    for (final doc in docs) {
-      if (_notifiedAlerts.contains(doc.id)) continue;
-      
-      final data = doc.data() as Map<String, dynamic>;
-      final isActive = data['isActive'] == true;
-      if (!isActive) continue;
-
-      final title = _safeString(data['title'], fallback: 'Medication Reminder');
-      final message = _safeString(
-        data['message'],
-        fallback: 'Please check your medication schedule.',
-      );
-
-      try {
-        await NotificationService.instance.showImmediate(
-          title: title,
-          body: message,
-          payload: 'alert|${doc.id}',
-        );
-        _notifiedAlerts.add(doc.id);
-      } catch (_) {}
-    }
   }
 
   Widget _buildWeeklyCalendar() {
@@ -392,15 +377,27 @@ class _MedicationListScreenState extends State<MedicationListScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: List.generate(7, (index) {
               final date = startOfWeek.add(Duration(days: index));
-              final isSelected = date.day == _selectedDate.day && date.month == _selectedDate.month && date.year == _selectedDate.year;
+              final isSelected =
+                  date.day == _selectedDate.day &&
+                  date.month == _selectedDate.month &&
+                  date.year == _selectedDate.year;
               return GestureDetector(
                 onTap: () => setState(() => _selectedDate = date),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 10,
+                    horizontal: 12,
+                  ),
                   decoration: BoxDecoration(
-                    color: isSelected ? Colors.green.shade700 : Colors.green.shade50,
+                    color:
+                        isSelected
+                            ? Colors.green.shade700
+                            : Colors.green.shade50,
                     borderRadius: BorderRadius.circular(12),
-                    border: isSelected ? null : Border.all(color: Colors.green.shade200),
+                    border:
+                        isSelected
+                            ? null
+                            : Border.all(color: Colors.green.shade200),
                   ),
                   child: Column(
                     children: [
@@ -408,7 +405,8 @@ class _MedicationListScreenState extends State<MedicationListScreen> {
                         DateFormat('E').format(date).substring(0, 1),
                         style: TextStyle(
                           fontSize: 14,
-                          color: isSelected ? Colors.white : Colors.green.shade800,
+                          color:
+                              isSelected ? Colors.white : Colors.green.shade800,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -418,7 +416,8 @@ class _MedicationListScreenState extends State<MedicationListScreen> {
                         style: TextStyle(
                           fontSize: 16,
                           color: isSelected ? Colors.white : Colors.black87,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          fontWeight:
+                              isSelected ? FontWeight.bold : FontWeight.normal,
                         ),
                       ),
                     ],
@@ -433,22 +432,28 @@ class _MedicationListScreenState extends State<MedicationListScreen> {
   }
 
   Widget _buildMedicationList() {
+    if (_isInitializing || _medicationsStream == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     return StreamBuilder<QuerySnapshot>(
       stream: _medicationsStream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-        if (snapshot.hasError) return Center(child: Text('Error: ${snapshot.error}'));
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return _buildEmptyState();
-        
+        if (snapshot.hasError)
+          return Center(child: Text('Error: ${snapshot.error}'));
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty)
+          return _buildEmptyState();
+
         final dayName = DateFormat('EEEE').format(_selectedDate);
-        
+
         List<Map<String, dynamic>> flatList = [];
         for (var doc in snapshot.data!.docs) {
           final med = doc.data() as Map<String, dynamic>;
           final days = _safeStringOrList(med['days']).toLowerCase();
-          
+
           if (days.contains('daily') || days.contains(dayName.toLowerCase())) {
             final times = med['times'] as List<dynamic>?;
             if (times != null && times.isNotEmpty) {
@@ -507,21 +512,34 @@ class _MedicationListScreenState extends State<MedicationListScreen> {
   }
 
   Widget _buildEmptyState() {
-    return Center(child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(Icons.medication_outlined, size: 120, color: Colors.grey.shade400),
-        const SizedBox(height: 24),
-        Text('No medications added yet',
-            style: TextStyle(fontSize: 22, color: Colors.grey.shade600,
-                fontWeight: FontWeight.w500)),
-        const SizedBox(height: 16),
-        if (widget.role == UserRole.caretaker)
-          Text('Tap the button below to add a medication',
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.medication_outlined,
+            size: 120,
+            color: Colors.grey.shade400,
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'No medications added yet',
+            style: TextStyle(
+              fontSize: 22,
+              color: Colors.grey.shade600,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (widget.role == UserRole.caretaker)
+            Text(
+              'Tap the button below to add a medication',
               style: TextStyle(fontSize: 16, color: Colors.grey.shade500),
-              textAlign: TextAlign.center),
-      ],
-    ));
+              textAlign: TextAlign.center,
+            ),
+        ],
+      ),
+    );
   }
 
   Widget _buildMedicationCard(
@@ -531,20 +549,32 @@ class _MedicationListScreenState extends State<MedicationListScreen> {
     int timeIndex,
     int number,
   ) {
-    final name       = _safeString(med['name']);
-    final dosage     = _safeString(med['dose']);
-    final time       = specificTime.isNotEmpty ? specificTime : _safeString(med['time']);
-    final days       = _safeStringOrList(med['days']);
-    final note       = _safeString(med['note']);
-    final doctorName = _safeString(med['doctorName'], fallback: 'Not specified');
+    final name = _safeString(med['name']);
+    final dosage = _safeString(med['dose']);
+    final time =
+        specificTime.isNotEmpty ? specificTime : _safeString(med['time']);
+    final days = _safeStringOrList(med['days']);
+    final note = _safeString(med['note']);
+    final doctorName = _safeString(
+      med['doctorName'],
+      fallback: 'Not specified',
+    );
 
     final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
     final takenDates = med['takenDates'] as List<dynamic>? ?? [];
+    final missedDates = med['missedDates'] as List<dynamic>? ?? [];
 
     // Adherence logic: It's taken if the specific `${dateStr}_$timeIndex` is there, or legacy `dateStr`.
     // We check against `_selectedDate` (formatted dateStr) strictly, not `DateTime.now()` directly.
-    final legacyTaken = (timeIndex == 0) && (takenDates.contains(dateStr) || (med['takenToday'] == true && dateStr == DateFormat('yyyy-MM-dd').format(DateTime.now())));
-    final takenToday = takenDates.contains('${dateStr}_$timeIndex') || legacyTaken;
+    final legacyTaken =
+        (timeIndex == 0) &&
+        (takenDates.contains(dateStr) ||
+            (med['takenToday'] == true &&
+                dateStr == DateFormat('yyyy-MM-dd').format(DateTime.now())));
+    final takenToday =
+        takenDates.contains('${dateStr}_$timeIndex') || legacyTaken;
+
+    final isMissed = missedDates.contains('${dateStr}_$timeIndex') || missedDates.contains(dateStr);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -552,125 +582,192 @@ class _MedicationListScreenState extends State<MedicationListScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Container(
-              width: 30,
-              height: 30,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: Colors.green.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.green.shade200),
-              ),
-              child: Text(
-                '$number',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.green.shade800,
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(
-                  time,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue.shade800,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 30,
+                  height: 30,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.shade200),
+                  ),
+                  child: Text(
+                    '$number',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green.shade800,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  name,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                if (dosage.isNotEmpty)
-                  Text(
-                    dosage,
-                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        time,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade800,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        name,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (dosage.isNotEmpty)
+                        Text(
+                          dosage,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey.shade600,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
                   ),
-              ]),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: takenToday ? Colors.green.shade100 : Colors.red.shade100,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Text(
-                takenToday ? 'Taken' : 'Pending',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                  color: takenToday ? Colors.green.shade800 : Colors.red.shade800,
                 ),
-              ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: takenToday
+                        ? Colors.green.shade100
+                        : (isMissed ? Colors.red.shade100 : Colors.orange.shade100),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Text(
+                    takenToday ? 'Taken' : (isMissed ? 'Missed' : 'Pending'),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: takenToday
+                          ? Colors.green.shade800
+                          : (isMissed ? Colors.red.shade800 : Colors.orange.shade800),
+                    ),
+                  ),
+                ),
+                if (widget.role == UserRole.caretaker) ...[
+                  IconButton(
+                    icon: Icon(Icons.edit, color: Colors.blue.shade700),
+                    onPressed:
+                        () => _navigateToAdd(existing: med, docId: docId),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.delete, color: Colors.red.shade700),
+                    onPressed: () => _deleteMedication(docId, name),
+                  ),
+                ],
+              ],
             ),
-            if (widget.role == UserRole.caretaker) ...[
-              IconButton(
-                icon: Icon(Icons.edit, color: Colors.blue.shade700),
-                onPressed: () => _navigateToAdd(existing: med, docId: docId),
-              ),
-              IconButton(
-                icon: Icon(Icons.delete, color: Colors.red.shade700),
-                onPressed: () => _deleteMedication(docId, name),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(child: _infoRow(Icons.calendar_today, 'Days:', days)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _infoRow(Icons.local_hospital, 'Doctor:', doctorName),
+                ),
+              ],
+            ),
+            if (note.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              _infoRow(Icons.note, 'Note:', note),
+            ],
+            if (widget.role == UserRole.elderly) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed:
+                          takenToday
+                              ? null
+                              : () => _snoozeMedication(docId, med),
+                      icon: const Icon(Icons.snooze),
+                      label: const Text('Snooze'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.orange.shade800,
+                        side: BorderSide(color: Colors.orange.shade300),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed:
+                          takenToday
+                              ? null
+                              : () => _markAsTaken(docId, name, timeIndex),
+                      icon: const Icon(Icons.check_circle_outline),
+                      label: Text(takenToday ? 'Taken' : 'Take Now'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor:
+                            takenToday
+                                ? Colors.green.shade200
+                                : Colors.green.shade700,
+                        foregroundColor: Colors.white,
+                        disabledBackgroundColor: Colors.green.shade200,
+                        disabledForegroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
-          ]),
-          const SizedBox(height: 10),
-          Row(children: [
-            Expanded(child: _infoRow(Icons.calendar_today, 'Days:', days)),
-            const SizedBox(width: 8),
-            Expanded(child: _infoRow(Icons.local_hospital, 'Doctor:', doctorName)),
-          ]),
-          if (note.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            _infoRow(Icons.note, 'Note:', note),
           ],
-        ]),
+        ),
       ),
     );
   }
 
   Widget _infoRow(IconData icon, String label, String value) {
-    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Icon(icon, size: 18, color: Colors.green.shade700),
-      const SizedBox(width: 6),
-      Expanded(child: RichText(text: TextSpan(
-        style: const TextStyle(fontSize: 13, color: Colors.black87),
-        children: [
-          TextSpan(text: '$label ', style: const TextStyle(fontWeight: FontWeight.bold)),
-          TextSpan(text: value),
-        ],
-      ))),
-    ]);
-  }
-
-  IconData _alertIcon(String type) {
-    switch (type.toLowerCase()) {
-      case 'critical': return Icons.error;
-      case 'info':     return Icons.info_outline;
-      default:         return Icons.warning_amber_rounded;
-    }
-  }
-
-  Color _alertColor(String type) {
-    switch (type.toLowerCase()) {
-      case 'critical': return Colors.red.shade700;
-      case 'info':     return Colors.blue.shade700;
-      default:         return const Color(0xFF5D4037);
-    }
-  }
-
-  Color _alertBgColor(String type) {
-    switch (type.toLowerCase()) {
-      case 'critical': return const Color(0xFFFFEBEE);
-      case 'info':     return const Color(0xFFE3F2FD);
-      default:         return const Color(0xFFFFF4E5);
-    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: Colors.green.shade700),
+        const SizedBox(width: 6),
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              style: const TextStyle(fontSize: 13, color: Colors.black87),
+              children: [
+                TextSpan(
+                  text: '$label ',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                TextSpan(text: value),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   String _safeStringOrList(dynamic value) {
@@ -688,25 +785,28 @@ class _MedicationListScreenState extends State<MedicationListScreen> {
 
   TimeOfDay? _parse12hTime(String timeStr) {
     try {
-      final parts  = timeStr.trim().split(' ');
-      final hm     = parts[0].split(':');
-      int hour     = int.parse(hm[0]);
+      final parts = timeStr.trim().split(' ');
+      final hm = parts[0].split(':');
+      int hour = int.parse(hm[0]);
       final minute = int.parse(hm[1]);
       if (parts.length > 1) {
         if (parts[1].toUpperCase() == 'PM' && hour != 12) hour += 12;
         if (parts[1].toUpperCase() == 'AM' && hour == 12) hour = 0;
       }
       return TimeOfDay(hour: hour, minute: minute);
-    } catch (_) { return null; }
+    } catch (_) {
+      return null;
+    }
   }
 
   List<int> _parseDaysToWeekdays(String daysStr) {
     final out = <int>{};
-    final parts = daysStr
-        .split(RegExp(r'[,\\s]+'))
-        .map((p) => p.trim().toLowerCase())
-        .where((p) => p.isNotEmpty)
-        .toList();
+    final parts =
+        daysStr
+            .split(RegExp(r'[,\\s]+'))
+            .map((p) => p.trim().toLowerCase())
+            .where((p) => p.isNotEmpty)
+            .toList();
 
     for (final p in parts) {
       switch (p) {

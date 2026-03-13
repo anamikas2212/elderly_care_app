@@ -1,9 +1,8 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../services/medicine_search_service.dart';
+import 'dart:async';
 
 final _firestore = FirebaseFirestore.instance;
 final _auth = FirebaseAuth.instance;
@@ -54,13 +53,16 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
   String _selectedFoodTiming = 'Before Food';
   final List<String> _selectedSpecificDays = [];
   final List<String> _weekDays = [
-    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
   ];
 
-  final List<String> _frequencyOptions = [
-    'Daily',
-    'Specific Days',
-  ];
+  final List<String> _frequencyOptions = ['Daily', 'Specific Days'];
 
   final List<String> _foodTimingOptions = [
     'Before Food',
@@ -80,7 +82,7 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
       _dosageController.text = med['dose'] as String? ?? '';
       _doctorController.text = med['doctorName'] as String? ?? '';
       _noteController.text = _stripFoodTiming(med['note'] as String? ?? '');
-      
+
       final daysData = med['days'];
       if (daysData is String) {
         if (daysData == 'Daily') {
@@ -93,9 +95,9 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
         _selectedFrequency = 'Specific Days';
         _selectedSpecificDays.addAll(daysData.map((e) => e.toString()));
       }
-      
+
       _selectedFoodTiming = med['foodTiming'] as String? ?? 'Before Food';
-      
+
       final timesData = med['times'];
       if (timesData is List) {
         for (var t in timesData) {
@@ -509,10 +511,12 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
 
       if (widget.existingDocId != null) {
         // ── Edit mode ──
-        if (widget.existingMedication != null && widget.existingMedication!['createdAt'] != null) {
-            data['createdAt'] = widget.existingMedication!['createdAt'];
+        if (widget.existingMedication != null &&
+            widget.existingMedication!['createdAt'] != null) {
+          data['createdAt'] = widget.existingMedication!['createdAt'];
         } else {
-            data['createdAt'] = FieldValue.serverTimestamp(); // Fallback for old data
+          data['createdAt'] =
+              FieldValue.serverTimestamp(); // Fallback for old data
         }
         await medCollection.doc(widget.existingDocId).update(data);
       } else {
@@ -617,7 +621,10 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
                     ),
                     child: Text(
                       _diagnosticBanner!,
-                      style: const TextStyle(fontSize: 12, color: Colors.black87),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.black87,
+                      ),
                     ),
                   ),
                 ),
@@ -663,40 +670,36 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
               const SizedBox(height: 8),
               _dosageOptions.isNotEmpty
                   ? _dropdownContainer(
-                      child: DropdownButtonFormField<String>(
-                        value: _selectedDosage,
-                        isExpanded: true,
-                        icon: const Icon(
-                          Icons.arrow_drop_down,
-                          color: Colors.teal,
-                        ),
-                        decoration: const InputDecoration.collapsed(
-                          hintText: '',
-                        ),
-                        hint: const Text('Select dosage'),
-                        items:
-                            _dosageOptions
-                                .map(
-                                  (v) => DropdownMenuItem(
-                                    value: v,
-                                    child: Text(v),
-                                  ),
-                                )
-                                .toList(),
-                        onChanged: (v) {
-                          setState(() {
-                            _selectedDosage = v;
-                            _dosageController.text = v ?? '';
-                            _dosageError = null;
-                          });
-                        },
-                        validator:
-                            (v) =>
-                                (v == null || v.trim().isEmpty)
-                                    ? 'Please select dosage'
-                                    : null,
+                    child: DropdownButtonFormField<String>(
+                      value: _selectedDosage,
+                      isExpanded: true,
+                      icon: const Icon(
+                        Icons.arrow_drop_down,
+                        color: Colors.teal,
                       ),
-                    )
+                      decoration: const InputDecoration.collapsed(hintText: ''),
+                      hint: const Text('Select dosage'),
+                      items:
+                          _dosageOptions
+                              .map(
+                                (v) =>
+                                    DropdownMenuItem(value: v, child: Text(v)),
+                              )
+                              .toList(),
+                      onChanged: (v) {
+                        setState(() {
+                          _selectedDosage = v;
+                          _dosageController.text = v ?? '';
+                          _dosageError = null;
+                        });
+                      },
+                      validator:
+                          (v) =>
+                              (v == null || v.trim().isEmpty)
+                                  ? 'Please select dosage'
+                                  : null,
+                    ),
+                  )
                   : TextFormField(
                     controller: _dosageController,
                     decoration: _inputDeco(
@@ -750,7 +753,10 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
                     final t = _selectedTimes[index];
                     return Container(
                       margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.grey.shade50,
                         borderRadius: BorderRadius.circular(12),
@@ -771,7 +777,10 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
+                            icon: const Icon(
+                              Icons.remove_circle_outline,
+                              color: Colors.red,
+                            ),
                             onPressed: () => _removeTime(index),
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(),
@@ -797,7 +806,9 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
                       const Icon(Icons.add_alarm, color: Colors.teal),
                       const SizedBox(width: 12),
                       Text(
-                        _selectedTimes.isEmpty ? 'Add Time' : 'Add Another Time',
+                        _selectedTimes.isEmpty
+                            ? 'Add Time'
+                            : 'Add Another Time',
                         style: const TextStyle(
                           fontSize: 16,
                           color: Colors.teal,
@@ -845,31 +856,38 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
                   ),
                 ),
               ),
-              
+
               if (_selectedFrequency == 'Specific Days') ...[
                 const SizedBox(height: 16),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
-                  children: [
-                    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
-                  ].map((day) {
-                    final isSelected = _selectedSpecificDays.contains(day);
-                    return ChoiceChip(
-                      label: Text(day.substring(0, 3)),
-                      selected: isSelected,
-                      selectedColor: Colors.teal.shade100,
-                      onSelected: (selected) {
-                        setState(() {
-                          if (selected) {
-                            _selectedSpecificDays.add(day);
-                          } else {
-                            _selectedSpecificDays.remove(day);
-                          }
-                        });
-                      },
-                    );
-                  }).toList(),
+                  children:
+                      [
+                        'Monday',
+                        'Tuesday',
+                        'Wednesday',
+                        'Thursday',
+                        'Friday',
+                        'Saturday',
+                        'Sunday',
+                      ].map((day) {
+                        final isSelected = _selectedSpecificDays.contains(day);
+                        return ChoiceChip(
+                          label: Text(day.substring(0, 3)),
+                          selected: isSelected,
+                          selectedColor: Colors.teal.shade100,
+                          onSelected: (selected) {
+                            setState(() {
+                              if (selected) {
+                                _selectedSpecificDays.add(day);
+                              } else {
+                                _selectedSpecificDays.remove(day);
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
                 ),
               ],
 
@@ -992,10 +1010,8 @@ class _AddMedicationScreenState extends State<AddMedicationScreen> {
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         itemCount: _nameSuggestions.length,
-        separatorBuilder: (_, __) => Divider(
-          height: 1,
-          color: Colors.grey.shade200,
-        ),
+        separatorBuilder:
+            (_, __) => Divider(height: 1, color: Colors.grey.shade200),
         itemBuilder: (context, index) {
           final s = _nameSuggestions[index];
           final subtitle =

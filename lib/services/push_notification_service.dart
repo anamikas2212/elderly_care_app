@@ -46,6 +46,10 @@ class PushNotificationService {
     if (kIsWeb) return;
 
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      if (_shouldSuppressForegroundAlert(message)) {
+        return;
+      }
+
       final title =
           message.notification?.title ?? message.data['title'] ?? 'Alert';
       final body =
@@ -59,5 +63,24 @@ class PushNotificationService {
         );
       }
     });
+  }
+
+  bool _shouldSuppressForegroundAlert(RemoteMessage message) {
+    final type = (message.data['type'] ?? '').toString().toLowerCase();
+    final title =
+        (message.notification?.title ?? message.data['title'] ?? '')
+            .toString()
+            .toLowerCase();
+    final body =
+        (message.notification?.body ?? message.data['message'] ?? '')
+            .toString()
+            .toLowerCase();
+    final combined = '$type $title $body';
+
+    return type == 'alert' &&
+        (combined.contains('medication') ||
+            combined.contains('pill') ||
+            combined.contains('overdue') ||
+            combined.contains('missed dose'));
   }
 }

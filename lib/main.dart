@@ -2,29 +2,33 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'screens/auth/login_screen.dart';
 import 'firebase_options.dart';
-import 'screens/auth/elderly_initial_login_screen.dart';
-import 'games/chill_zone/color_tap/color_tap_game.dart';
-import 'screens/elderly/zone_selection_screen.dart';
 import 'package:elderly_care_app/services/report_scheduler_service.dart'; // Added
 import 'package:elderly_care_app/config/app_config.dart';
 import 'package:elderly_care_app/services/notification_service.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'services/push_notification_service.dart';
+import 'package:elderly_care_app/services/medication_notification_service.dart';
+import 'package:elderly_care_app/services/user_id_helper.dart';
+import 'package:elderly_care_app/screens/elderly/medication/medication_list_screen.dart';
+
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   if (!kIsWeb) {
+    NotificationService.instance.setTapHandler(_handleNotificationNavigation);
     await NotificationService.instance.init();
+    PushNotificationService.instance.initializeForegroundHandlers();
+    final userId = await UserIdHelper.getCurrentUserId();
+    if (userId != null && userId.isNotEmpty) {
+      await MedicationNotificationService.instance.start(userId);
+    }
   }
-
 
   // Added: initialize report scheduler
   final scheduler = ReportSchedulerService();
-  scheduler.initializeScheduler(
-    AppConfig.groqApiKey,
-  );
+  scheduler.initializeScheduler(AppConfig.groqApiKey);
 
   runApp(const ElderlyCarApp());
 }
@@ -34,7 +38,12 @@ class ElderlyCarApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      NotificationService.instance.flushLaunchNotification();
+    });
+
     return MaterialApp(
+      navigatorKey: appNavigatorKey,
       title: 'Unified Geriatric Care',
       theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
       home: const LoginScreen(),
@@ -42,6 +51,24 @@ class ElderlyCarApp extends StatelessWidget {
       routes: {},
     );
   }
+}
+
+Future<void> _handleNotificationNavigation(
+  NotificationNavigationRequest request,
+) async {
+  if (!request.isMedicationReminder) return;
+
+  final navigator = appNavigatorKey.currentState;
+  if (navigator == null) return;
+
+  final userId = request.userId ?? await UserIdHelper.getCurrentUserId();
+  if (userId == null || userId.isEmpty) return;
+
+  navigator.push(
+    MaterialPageRoute(
+      builder: (_) => MedicationListScreen(userId: userId, role: UserRole.elderly),
+    ),
+  );
 }
 
 /*
