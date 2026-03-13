@@ -6,6 +6,7 @@ import '../../services/auth_service.dart';
 import '../../services/pairing_service.dart';
 import 'dashboard/caretaker_dashboard.dart';
 import '../auth/login_screen.dart';
+import 'package:flutter/services.dart';
 
 class PatientSelectionScreen extends StatefulWidget {
   const PatientSelectionScreen({Key? key}) : super(key: key);
@@ -57,9 +58,7 @@ class _PatientSelectionScreenState extends State<PatientSelectionScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => AddPatientBottomSheet(
-        onSuccess: _loadPatients,
-      ),
+      builder: (ctx) => AddPatientBottomSheet(onSuccess: _loadPatients),
     );
   }
 
@@ -310,11 +309,22 @@ class _PatientSelectionScreenState extends State<PatientSelectionScreen> {
                 ),
               ),
 
-              // Arrow
-              Icon(
-                Icons.arrow_forward_ios,
-                color: Colors.blue.shade400,
-                size: 20,
+              // Actions
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    color: Colors.red.shade400,
+                    onPressed: () => _removePatient(patient),
+                    tooltip: 'Remove Elderly',
+                  ),
+                  Icon(
+                    Icons.arrow_forward_ios,
+                    color: Colors.blue.shade400,
+                    size: 20,
+                  ),
+                ],
               ),
             ],
           ),
@@ -326,7 +336,8 @@ class _PatientSelectionScreenState extends State<PatientSelectionScreen> {
 
 class AddPatientBottomSheet extends StatefulWidget {
   final VoidCallback onSuccess;
-  const AddPatientBottomSheet({Key? key, required this.onSuccess}) : super(key: key);
+  const AddPatientBottomSheet({Key? key, required this.onSuccess})
+    : super(key: key);
 
   @override
   State<AddPatientBottomSheet> createState() => _AddPatientBottomSheetState();
@@ -336,7 +347,7 @@ class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
   final _pairingService = PairingService();
   bool _isLoading = false;
   bool _isFetchingProfile = false; // spinner while looking up the code
-  bool _profileFetched = false;    // true = name/age/gender locked from Firestore
+  bool _profileFetched = false; // true = name/age/gender locked from Firestore
 
   final _formKey = GlobalKey<FormState>();
   final _codeController = TextEditingController();
@@ -365,9 +376,16 @@ class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
   void dispose() {
     _codeController.removeListener(_onCodeChanged);
     for (final c in [
-      _codeController, _nameController, _ageController, _occupationController,
-      _medicalConditionController, _phoneController, _emgNameController,
-      _emgRelationController, _emgAgeController, _emgOccupationController,
+      _codeController,
+      _nameController,
+      _ageController,
+      _occupationController,
+      _medicalConditionController,
+      _phoneController,
+      _emgNameController,
+      _emgRelationController,
+      _emgAgeController,
+      _emgOccupationController,
       _emgPhoneController,
     ]) {
       c.dispose();
@@ -401,13 +419,13 @@ class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
       if (!mounted) return;
 
       if (profile != null) {
-        final name   = profile['name']   as String? ?? '';
-        final age    = profile['age']    as String? ?? '';
+        final name = profile['name'] as String? ?? '';
+        final age = profile['age'] as String? ?? '';
         final gender = profile['gender'] as String? ?? '';
 
         setState(() {
           _nameController.text = name;
-          _ageController.text  = age;
+          _ageController.text = age;
           if (['Male', 'Female', 'Other'].contains(gender)) {
             _selectedGender = gender;
           } else if (gender.toLowerCase().startsWith('m')) {
@@ -448,6 +466,15 @@ class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
       return;
     }
 
+    final ageStr = _ageController.text.trim();
+    final intAge = int.tryParse(ageStr) ?? 0;
+
+    if (intAge < 18 || intAge > 130) {
+      _showSnack('Elderly patient must be between 18 and 130 years old.',
+          isError: true);
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
@@ -455,19 +482,19 @@ class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
       if (caretakerUid == null) throw Exception('Not logged in.');
 
       final elderlyDetails = {
-        'name':             _nameController.text.trim(),
-        'age':              _ageController.text.trim(),
-        'gender':           _selectedGender,
-        'occupation':       _occupationController.text.trim(),
+        'name': _nameController.text.trim(),
+        'age': _ageController.text.trim(),
+        'gender': _selectedGender,
+        'occupation': _occupationController.text.trim(),
         'medicalCondition': _medicalConditionController.text.trim(),
-        'phone':            _phoneController.text.trim(),
+        'phone': _phoneController.text.trim(),
         'emergencyContact': {
-          'name':       _emgNameController.text.trim(),
-          'relation':   _emgRelationController.text.trim(),
-          'age':        _emgAgeController.text.trim(),
+          'name': _emgNameController.text.trim(),
+          'relation': _emgRelationController.text.trim(),
+          'age': _emgAgeController.text.trim(),
           'occupation': _emgOccupationController.text.trim(),
-          'phone':      _emgPhoneController.text.trim(),
-        }
+          'phone': _emgPhoneController.text.trim(),
+        },
       };
 
       await _pairingService.redeemPairingCode(
@@ -480,7 +507,6 @@ class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
       Navigator.pop(context);
       widget.onSuccess();
       _showSnack('Elderly linked successfully!');
-
     } catch (e) {
       if (!mounted) return;
       _showSnack(e.toString().replaceAll('Exception: ', ''), isError: true);
@@ -489,10 +515,12 @@ class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
   }
 
   void _showSnack(String msg, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: isError ? Colors.red.shade600 : Colors.green.shade600,
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: isError ? Colors.red.shade600 : Colors.green.shade600,
+      ),
+    );
   }
 
   // ── Builders ─────────────────────────────────────────────────────────────
@@ -503,6 +531,8 @@ class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
     bool isNumber = false,
     bool required = false,
     bool readOnly = false,
+    List<TextInputFormatter>? inputFormatters,
+    int? maxLength,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -510,7 +540,17 @@ class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
         controller: ctrl,
         readOnly: readOnly,
         keyboardType: isNumber ? TextInputType.phone : TextInputType.text,
-        validator: required ? (v) => v!.trim().isEmpty ? 'Required' : null : null,
+        inputFormatters: inputFormatters,
+        maxLength: maxLength,
+        validator: (v) {
+          if (required && (v == null || v.trim().isEmpty)) return 'Required';
+          if (isNumber && v != null && v.trim().isNotEmpty) {
+            if (!RegExp(r'^(\+91[\-\s]?)?[0]?[6-9]\d{9}$').hasMatch(v.trim())) {
+              return 'Invalid Indian phone number';
+            }
+          }
+          return null;
+        },
         style: TextStyle(
           color: readOnly ? Colors.grey.shade700 : Colors.black87,
         ),
@@ -520,20 +560,30 @@ class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
           fillColor: readOnly ? Colors.green.shade50 : Colors.grey.shade100,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: readOnly
-                ? BorderSide(color: Colors.green.shade300, width: 1.2)
-                : BorderSide.none,
+            borderSide:
+                readOnly
+                    ? BorderSide(color: Colors.green.shade300, width: 1.2)
+                    : BorderSide.none,
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: readOnly
-                ? BorderSide(color: Colors.green.shade300, width: 1.2)
-                : BorderSide.none,
+            borderSide:
+                readOnly
+                    ? BorderSide(color: Colors.green.shade300, width: 1.2)
+                    : BorderSide.none,
           ),
-          suffixIcon: readOnly
-              ? Icon(Icons.lock_rounded, size: 16, color: Colors.green.shade400)
-              : null,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          suffixIcon:
+              readOnly
+                  ? Icon(
+                    Icons.lock_rounded,
+                    size: 16,
+                    color: Colors.green.shade400,
+                  )
+                  : null,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 14,
+          ),
         ),
       ),
     );
@@ -577,10 +627,14 @@ class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-
                     // ── Care Code ──────────────────────────────────────────
-                    const Text('Care Code',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const Text(
+                      'Care Code',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     Stack(
                       alignment: Alignment.centerRight,
@@ -602,11 +656,16 @@ class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
                             fillColor: Colors.blue.shade50,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(16),
-                              borderSide: BorderSide(color: Colors.blue.shade200),
+                              borderSide: BorderSide(
+                                color: Colors.blue.shade200,
+                              ),
                             ),
                           ),
-                          validator: (v) =>
-                              v!.trim().length != 6 ? 'Enter the 6-digit code' : null,
+                          validator:
+                              (v) =>
+                                  v!.trim().length != 6
+                                      ? 'Enter the 6-digit code'
+                                      : null,
                         ),
                         if (_isFetchingProfile)
                           Positioned(
@@ -623,8 +682,11 @@ class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
                         if (_profileFetched)
                           Positioned(
                             right: 16,
-                            child: Icon(Icons.check_circle_rounded,
-                                color: Colors.green.shade500, size: 24),
+                            child: Icon(
+                              Icons.check_circle_rounded,
+                              color: Colors.green.shade500,
+                              size: 24,
+                            ),
                           ),
                       ],
                     ),
@@ -632,45 +694,71 @@ class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
                     // Hint text beneath code field
                     Padding(
                       padding: const EdgeInsets.only(top: 6, bottom: 16),
-                      child: _profileFetched
-                          ? Row(
-                              children: [
-                                Icon(Icons.auto_fix_high,
-                                    size: 14, color: Colors.green.shade600),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Name, age & gender auto-filled from the elderly\'s profile',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.green.shade700,
-                                    fontStyle: FontStyle.italic,
+                      child:
+                          _profileFetched
+                              ? Row(
+                                children: [
+                                  Icon(
+                                    Icons.auto_fix_high,
+                                    size: 14,
+                                    color: Colors.green.shade600,
                                   ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Name, age & gender auto-filled from the elderly\'s profile',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.green.shade700,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ],
+                              )
+                              : Text(
+                                'Enter code to auto-fill patient info',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade500,
+                                  fontStyle: FontStyle.italic,
                                 ),
-                              ],
-                            )
-                          : Text(
-                              'Enter code to auto-fill patient info',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade500,
-                                fontStyle: FontStyle.italic,
                               ),
-                            ),
                     ),
 
                     // ── Patient Profile ────────────────────────────────────
-                    const Text('Patient Profile',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const Text(
+                      'Patient Profile',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
                     const SizedBox(height: 12),
 
-                    _buildField(_nameController, 'Full Name',
-                        required: true, readOnly: _profileFetched),
+                    _buildField(
+                      _nameController,
+                      'Full Name',
+                      required: true,
+                      readOnly: _profileFetched,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'[a-zA-Z\s]'),
+                        ),
+                      ],
+                    ),
 
                     Row(
                       children: [
                         Expanded(
-                          child: _buildField(_ageController, 'Age / DOB',
-                              required: true, readOnly: _profileFetched),
+                          child: _buildField(
+                            _ageController,
+                            'Age',
+                            required: true,
+                            readOnly: _profileFetched,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
+                            maxLength: 3,
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -678,14 +766,18 @@ class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
                             margin: const EdgeInsets.only(bottom: 12),
                             padding: const EdgeInsets.symmetric(horizontal: 12),
                             decoration: BoxDecoration(
-                              color: _profileFetched
-                                  ? Colors.green.shade50
-                                  : Colors.grey.shade100,
+                              color:
+                                  _profileFetched
+                                      ? Colors.green.shade50
+                                      : Colors.grey.shade100,
                               borderRadius: BorderRadius.circular(12),
-                              border: _profileFetched
-                                  ? Border.all(
-                                      color: Colors.green.shade300, width: 1.2)
-                                  : null,
+                              border:
+                                  _profileFetched
+                                      ? Border.all(
+                                        color: Colors.green.shade300,
+                                        width: 1.2,
+                                      )
+                                      : null,
                             ),
                             child: Row(
                               children: [
@@ -695,21 +787,30 @@ class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
                                       value: _selectedGender,
                                       isExpanded: true,
                                       // Lock the dropdown when profile is fetched
-                                      onChanged: _profileFetched
-                                          ? null
-                                          : (v) => setState(
-                                              () => _selectedGender = v!),
-                                      items: ['Male', 'Female', 'Other']
-                                          .map((s) => DropdownMenuItem(
-                                              value: s, child: Text(s)))
-                                          .toList(),
+                                      onChanged:
+                                          _profileFetched
+                                              ? null
+                                              : (v) => setState(
+                                                () => _selectedGender = v!,
+                                              ),
+                                      items:
+                                          ['Male', 'Female', 'Other']
+                                              .map(
+                                                (s) => DropdownMenuItem(
+                                                  value: s,
+                                                  child: Text(s),
+                                                ),
+                                              )
+                                              .toList(),
                                     ),
                                   ),
                                 ),
                                 if (_profileFetched)
-                                  Icon(Icons.lock_rounded,
-                                      size: 16,
-                                      color: Colors.green.shade400),
+                                  Icon(
+                                    Icons.lock_rounded,
+                                    size: 16,
+                                    color: Colors.green.shade400,
+                                  ),
                               ],
                             ),
                           ),
@@ -717,30 +818,97 @@ class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
                       ],
                     ),
 
-                    _buildField(_occupationController, 'Occupation (Optional)'),
-                    _buildField(_medicalConditionController, 'Medical Condition(s)'),
-                    _buildField(_phoneController, 'Phone Number',
-                        isNumber: true, required: true),
-
-                    // ── Emergency Contact ──────────────────────────────────
-                    const SizedBox(height: 12),
-                    const Text('Emergency Contact',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 12),
-                    _buildField(_emgNameController, 'Name', required: true),
-                    _buildField(_emgRelationController, 'Relation to Patient',
-                        required: true),
-                    Row(
-                      children: [
-                        Expanded(child: _buildField(_emgAgeController, 'Age')),
-                        const SizedBox(width: 12),
-                        Expanded(
-                            child: _buildField(
-                                _emgOccupationController, 'Occupation')),
+                    _buildField(
+                      _occupationController,
+                      'Occupation (Optional)',
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'[a-zA-Z\s]'),
+                        ),
                       ],
                     ),
-                    _buildField(_emgPhoneController, 'Phone Number',
-                        isNumber: true, required: true),
+                    _buildField(
+                      _medicalConditionController,
+                      'Medical Condition(s)',
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'[a-zA-Z\s]'),
+                        ),
+                      ],
+                    ),
+                    _buildField(
+                      _phoneController,
+                      'Phone Number',
+                      isNumber: true,
+                      required: true,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
+                      ],
+                    ), // ── Emergency Contact ──────────────────────────────────
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Emergency Contact',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildField(
+                      _emgNameController,
+                      'Name',
+                      required: true,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'[a-zA-Z\s]'),
+                        ),
+                      ],
+                    ),
+                    _buildField(
+                      _emgRelationController,
+                      'Relation to Patient',
+                      required: true,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'[a-zA-Z\s]'),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildField(
+                            _emgAgeController,
+                            'Age',
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
+                            maxLength: 3,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildField(
+                            _emgOccupationController,
+                            'Occupation',
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'[a-zA-Z\s]'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    _buildField(
+                      _emgPhoneController,
+                      'Phone Number',
+                      isNumber: true,
+                      required: true,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9+]')),
+                      ],
+                    ),
                     const SizedBox(height: 20),
                   ],
                 ),
@@ -758,7 +926,7 @@ class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
                   color: Colors.black.withAlpha(10),
                   blurRadius: 10,
                   offset: const Offset(0, -4),
-                )
+                ),
               ],
             ),
             child: SafeArea(
@@ -766,22 +934,31 @@ class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
                 width: double.infinity,
                 height: 50,
                 child: ElevatedButton(
-                  onPressed: (_isLoading || _isFetchingProfile) ? null : _submit,
+                  onPressed:
+                      (_isLoading || _isFetchingProfile) ? null : _submit,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue.shade600,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child:
-                              CircularProgressIndicator(color: Colors.white))
-                      : const Text('Link & Save Patient',
-                          style: TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.bold)),
+                  child:
+                      _isLoading
+                          ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                            ),
+                          )
+                          : const Text(
+                            'Link & Save Patient',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                 ),
               ),
             ),
@@ -791,6 +968,3 @@ class _AddPatientBottomSheetState extends State<AddPatientBottomSheet> {
     );
   }
 }
-
-
-

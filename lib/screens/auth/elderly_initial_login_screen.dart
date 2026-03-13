@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../elderly/home/elderly_dashboard.dart';
 import '../../services/pairing_service.dart';
+import 'package:flutter/services.dart';
 
 class ElderlyInitialLoginScreen extends StatefulWidget {
   const ElderlyInitialLoginScreen({super.key});
@@ -13,8 +14,7 @@ class ElderlyInitialLoginScreen extends StatefulWidget {
       _ElderlyInitialLoginScreenState();
 }
 
-class _ElderlyInitialLoginScreenState
-    extends State<ElderlyInitialLoginScreen> {
+class _ElderlyInitialLoginScreenState extends State<ElderlyInitialLoginScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _ageController = TextEditingController();
   final TextEditingController _genderController = TextEditingController();
@@ -30,12 +30,25 @@ class _ElderlyInitialLoginScreenState
   }
 
   void _login() async {
+    final ageStr = _ageController.text.trim();
+    final intAge = int.tryParse(ageStr) ?? 0;
+
     if (_nameController.text.trim().isEmpty ||
-        _ageController.text.trim().isEmpty ||
+        ageStr.isEmpty ||
         _genderController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please fill in all fields (Name, Age, Gender)'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    if (intAge < 18 || intAge > 130) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Elderly user must be between 18 and 130 years old.'),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -85,16 +98,13 @@ class _ElderlyInitialLoginScreenState
     // Update Firestore profile (merge so we never clobber caretakerId which
     // is set exclusively by PairingService.redeemPairingCode).
     try {
-      await FirebaseFirestore.instance.collection('users').doc(uid).set(
-        {
-          'name': _nameController.text.trim(),
-          'age': _ageController.text.trim(),
-          'gender': _genderController.text.trim(),
-          'role': 'elderly',
-          'lastActive': FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
-      );
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'name': _nameController.text.trim(),
+        'age': _ageController.text.trim(),
+        'gender': _genderController.text.trim(),
+        'role': 'elderly',
+        'lastActive': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
       print('✅ Elderly profile saved/updated (uid: $uid)');
 
       // Reuse the locally-saved care code if it exists.  Only call
@@ -121,9 +131,9 @@ class _ElderlyInitialLoginScreenState
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (context) => ElderlyDashboard(
-            currentUserId: _nameController.text.trim(),
-          ),
+          builder:
+              (context) =>
+                  ElderlyDashboard(currentUserId: _nameController.text.trim()),
         ),
       );
     }
@@ -147,6 +157,17 @@ class _ElderlyInitialLoginScreenState
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+                  // Back button
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.arrow_back_ios, size: 28),
+                      color: Colors.purple.shade800,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
                   // ── Logo ──────────────────────────────────────────────────
                   Container(
                     padding: const EdgeInsets.all(24),
@@ -191,34 +212,96 @@ class _ElderlyInitialLoginScreenState
                   const SizedBox(height: 40),
 
                   // ── Form fields ───────────────────────────────────────────
-                  _buildInput(controller: _nameController, hint: 'Your Name'),
+                  _buildInput(
+                    controller: _nameController,
+                    hint: 'Your Name',
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]')),
+                    ],
+                  ),
                   const SizedBox(height: 20),
                   _buildInput(
                     controller: _ageController,
                     hint: 'Age (e.g. 78)',
                     keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    maxLength: 3,
                   ),
                   const SizedBox(height: 20),
-                  _buildInput(
-                    controller: _genderController,
-                    hint: 'Gender (e.g. Female)',
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 5,
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value:
+                            _genderController.text.isEmpty
+                                ? 'Female'
+                                : _genderController.text,
+                        isExpanded: true,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          color: Colors.black87,
+                        ),
+                        icon: Icon(
+                          Icons.keyboard_arrow_down,
+                          color: Colors.purple.shade400,
+                        ),
+                        items:
+                            ['Female', 'Male', 'Others'].map((String value) {
+                              return DropdownMenuItem<String>(
+                                value: value,
+                                child: Center(
+                                  child: Text(
+                                    value,
+                                    style: const TextStyle(fontSize: 20),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                        onChanged: (newValue) {
+                          if (newValue != null) {
+                            setState(() => _genderController.text = newValue);
+                          }
+                        },
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 24),
 
                   // ── Care Code info card ───────────────────────────────────
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 14),
+                      horizontal: 20,
+                      vertical: 14,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.purple.shade50,
                       borderRadius: BorderRadius.circular(16),
-                      border:
-                          Border.all(color: Colors.purple.shade200, width: 1.5),
+                      border: Border.all(
+                        color: Colors.purple.shade200,
+                        width: 1.5,
+                      ),
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.link_rounded,
-                            color: Colors.purple.shade400, size: 28),
+                        Icon(
+                          Icons.link_rounded,
+                          color: Colors.purple.shade400,
+                          size: 28,
+                        ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
@@ -302,6 +385,8 @@ class _ElderlyInitialLoginScreenState
     required TextEditingController controller,
     required String hint,
     TextInputType keyboardType = TextInputType.text,
+    List<TextInputFormatter>? inputFormatters,
+    int? maxLength,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -319,18 +404,20 @@ class _ElderlyInitialLoginScreenState
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
+        maxLength: maxLength,
         style: const TextStyle(fontSize: 20),
         textAlign: TextAlign.center,
         decoration: InputDecoration(
           border: InputBorder.none,
           hintText: hint,
+          counterText: '',
           hintStyle: const TextStyle(color: Colors.black26),
         ),
       ),
     );
   }
 }
-
 
 /*import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';

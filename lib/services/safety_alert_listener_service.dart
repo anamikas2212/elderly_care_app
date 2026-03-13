@@ -25,11 +25,18 @@ class SafetyAlertListenerService {
     _sosSub = FirebaseFirestore.instance
         .collection('sos_alerts')
         .where('elderlyUserId', isEqualTo: elderlyId)
-        .orderBy('triggeredAt', descending: true)
         .snapshots()
         .listen((snapshot) async {
+      final docs = snapshot.docs.toList();
+      docs.sort((a, b) {
+        final tsA = a.data()['triggeredAt'] as Timestamp?;
+        final tsB = b.data()['triggeredAt'] as Timestamp?;
+        if (tsA == null) return 1;
+        if (tsB == null) return -1;
+        return tsB.compareTo(tsA);
+      });
       DateTime newest = lastSosTime;
-      for (final doc in snapshot.docs) {
+      for (final doc in docs) {
         final data = doc.data();
         final ts = data['triggeredAt'] as Timestamp?;
         if (ts == null) continue;
@@ -50,11 +57,18 @@ class SafetyAlertListenerService {
         .collection('safezone_logs')
         .doc(elderlyId)
         .collection('logs')
-        .orderBy('triggeredAt', descending: true)
         .snapshots()
         .listen((snapshot) async {
+      final docs = snapshot.docs.toList();
+      docs.sort((a, b) {
+        final tsA = a.data()['triggeredAt'] as Timestamp?;
+        final tsB = b.data()['triggeredAt'] as Timestamp?;
+        if (tsA == null) return 1;
+        if (tsB == null) return -1;
+        return tsB.compareTo(tsA);
+      });
       DateTime newest = lastSafeTime;
-      for (final doc in snapshot.docs) {
+      for (final doc in docs) {
         final data = doc.data() as Map<String, dynamic>;
         final action = data['action'] as String? ?? '';
         if (action != 'outside_safezone') continue;

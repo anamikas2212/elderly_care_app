@@ -391,11 +391,11 @@ Extract important memories with emphasis on emotional state and any concerning p
         severity = 'urgent';
       }
 
-      // Save notification to caretaker's notifications collection
+      // Save notification to elderly profile's buddy_notifications collection (for persistence)
       await _firestore
           .collection('users')
-          .doc(caretakerId)
-          .collection('notifications')
+          .doc(elderlyId)
+          .collection('buddy_notifications')
           .add({
             'type': notificationType,
             'title': title,
@@ -410,6 +410,22 @@ Extract important memories with emphasis on emotional state and any concerning p
             'specificDetails': memory['specificDetails'],
             'isRead': false,
             'isResolved': false,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+
+      // Also save to caretaker's notifications collection for the main dashboard alert
+      await _firestore
+          .collection('users')
+          .doc(caretakerId)
+          .collection('notifications')
+          .add({
+            'type': 'buddy_alert',
+            'title': title,
+            'message': message,
+            'severity': severity,
+            'elderlyId': elderlyId,
+            'elderlyName': elderlyName,
+            'isRead': false,
             'createdAt': FieldValue.serverTimestamp(),
           });
 
@@ -484,13 +500,12 @@ Extract important memories with emphasis on emotional state and any concerning p
         sentimentData: sentimentData,
       );
 
-      // Check for existing weekly report
+      // Check for existing weekly report in the elderly profile
       String? existingWeeklyDocId;
       final existingWeeklySnapshot = await _firestore
           .collection('users')
-          .doc(caretakerId)
-          .collection('weekly_reports')
-          .where('elderlyId', isEqualTo: elderlyId)
+          .doc(elderlyId)
+          .collection('buddy_weekly_reports')
           .orderBy('createdAt', descending: true)
           .limit(10)
           .get();
@@ -518,19 +533,19 @@ Extract important memories with emphasis on emotional state and any concerning p
         'isRead': false,
       };
 
-      // Save report
+      // Save report to elderly profile
       if (existingWeeklyDocId != null) {
           await _firestore
               .collection('users')
-              .doc(caretakerId)
-              .collection('weekly_reports')
+              .doc(elderlyId)
+              .collection('buddy_weekly_reports')
               .doc(existingWeeklyDocId)
               .set(reportData, SetOptions(merge: true));
       } else {
           await _firestore
               .collection('users')
-              .doc(caretakerId)
-              .collection('weekly_reports')
+              .doc(elderlyId)
+              .collection('buddy_weekly_reports')
               .add(reportData);
       }
 
@@ -611,11 +626,18 @@ Extract important memories with emphasis on emotional state and any concerning p
           .doc(caretakerId)
           .collection('weekly_reports')
           .where('elderlyId', isEqualTo: elderlyId)
-          .orderBy('createdAt', descending: true)
-          .limit(10)
           .get();
 
-      for (final doc in existingWeeklySnapshot.docs) {
+      final existingDocs = existingWeeklySnapshot.docs.toList();
+      existingDocs.sort((a, b) {
+        final tsA = a.data()['createdAt'] as Timestamp?;
+        final tsB = b.data()['createdAt'] as Timestamp?;
+        if (tsA == null) return 1;
+        if (tsB == null) return -1;
+        return tsB.compareTo(tsA);
+      });
+
+      for (final doc in existingDocs) {
           final data = doc.data();
           final ts = data['createdAt'] as Timestamp?;
           if (ts != null && ts.toDate().year == periodEnd.year && ts.toDate().month == periodEnd.month && (ts.toDate().day - periodEnd.day).abs() <= 3) {
@@ -627,15 +649,15 @@ Extract important memories with emphasis on emotional state and any concerning p
       if (existingWeeklyDocId != null) {
           await _firestore
               .collection('users')
-              .doc(caretakerId)
-              .collection('weekly_reports')
+              .doc(elderlyId)
+              .collection('buddy_weekly_reports')
               .doc(existingWeeklyDocId)
               .set(reportData, SetOptions(merge: true));
       } else {
           await _firestore
               .collection('users')
-              .doc(caretakerId)
-              .collection('weekly_reports')
+              .doc(elderlyId)
+              .collection('buddy_weekly_reports')
               .add(reportData);
       }
 

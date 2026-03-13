@@ -79,12 +79,35 @@ class CaretakerNotificationService {
         .update({'isRead': true});
   }
 
+  // Mark buddy notification as read
+  Future<void> markBuddyNotificationAsRead(String elderlyId, String notificationId) async {
+    await _firestore
+        .collection('users')
+        .doc(elderlyId)
+        .collection('buddy_notifications')
+        .doc(notificationId)
+        .update({'isRead': true});
+  }
+
   // Mark notification as resolved
   Future<void> markAsResolved(String caretakerId, String notificationId) async {
     await _firestore
         .collection('users')
         .doc(caretakerId)
         .collection('notifications')
+        .doc(notificationId)
+        .update({
+          'isResolved': true,
+          'resolvedAt': FieldValue.serverTimestamp(),
+        });
+  }
+
+  // Mark buddy notification as resolved
+  Future<void> markBuddyNotificationAsResolved(String elderlyId, String notificationId) async {
+    await _firestore
+        .collection('users')
+        .doc(elderlyId)
+        .collection('buddy_notifications')
         .doc(notificationId)
         .update({
           'isResolved': true,
@@ -103,25 +126,49 @@ class CaretakerNotificationService {
         .snapshots();
   }
 
-  // Get weekly reports
-  Stream<QuerySnapshot> getWeeklyReportsStream(String caretakerId) {
+  // Get weekly reports for a specific elderly user
+  Stream<QuerySnapshot> getWeeklyReportsStream(
+    String caretakerId,
+    String elderlyId,
+  ) {
     return _firestore
         .collection('users')
-        .doc(caretakerId)
-        .collection('weekly_reports')
+        .doc(elderlyId)
+        .collection('buddy_weekly_reports')
         .orderBy('createdAt', descending: true)
         .limit(10)
         .snapshots();
   }
 
-  // Mark weekly report as read
-  Future<void> markReportAsRead(String caretakerId, String reportId) async {
+  // Get notifications for a specific elderly user (for the enhanced buddy screen)
+  Stream<QuerySnapshot> getNotificationsForElderlyStream(String elderlyId) {
+    return _firestore
+        .collection('users')
+        .doc(elderlyId)
+        .collection('buddy_notifications')
+        .orderBy('createdAt', descending: true)
+        .limit(50)
+        .snapshots();
+  }
+
+  // Mark buddy weekly report as read
+  Future<void> markBuddyReportAsRead(String elderlyId, String reportId) async {
     await _firestore
         .collection('users')
-        .doc(caretakerId)
-        .collection('weekly_reports')
+        .doc(elderlyId)
+        .collection('buddy_weekly_reports')
         .doc(reportId)
         .update({'isRead': true});
+  }
+
+  // Delete buddy weekly report
+  Future<void> deleteBuddyReport(String elderlyId, String reportId) async {
+    await _firestore
+        .collection('users')
+        .doc(elderlyId)
+        .collection('buddy_weekly_reports')
+        .doc(reportId)
+        .delete();
   }
 
   // Delete notification
@@ -133,6 +180,15 @@ class CaretakerNotificationService {
         .collection('users')
         .doc(caretakerId)
         .collection('notifications')
+        .doc(notificationId)
+        .delete();
+  }
+
+  Future<void> deleteBuddyNotification(String elderlyId, String notificationId) async {
+    await _firestore
+        .collection('users')
+        .doc(elderlyId)
+        .collection('buddy_notifications')
         .doc(notificationId)
         .delete();
   }

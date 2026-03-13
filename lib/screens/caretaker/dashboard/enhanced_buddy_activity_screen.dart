@@ -34,9 +34,7 @@ class _EnhancedBuddyActivityScreenState
   void initState() {
     super.initState();
     _notificationService = CaretakerNotificationService();
-    _memoryService = EnhancedMemoryService(
-      groqApiKey: AppConfig.groqApiKey,
-    );
+    _memoryService = EnhancedMemoryService(groqApiKey: AppConfig.groqApiKey);
     _tabController = TabController(length: 3, vsync: this);
 
     // Initialize notifications
@@ -54,6 +52,10 @@ class _EnhancedBuddyActivityScreenState
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
         title: Text(
           '${widget.elderlyName}\'s Buddy Activity',
           style: const TextStyle(fontWeight: FontWeight.bold),
@@ -119,7 +121,7 @@ class _EnhancedBuddyActivityScreenState
   // Alerts Tab
   Widget _buildAlertsTab() {
     return StreamBuilder<QuerySnapshot>(
-      stream: _notificationService.getNotificationsStream(widget.caretakerId),
+      stream: _notificationService.getNotificationsForElderlyStream(widget.elderlyId),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -195,7 +197,7 @@ class _EnhancedBuddyActivityScreenState
         onTap: () {
           _showNotificationDetails(notification, notificationId);
           if (!isRead) {
-            _notificationService.markAsRead(widget.caretakerId, notificationId);
+            _notificationService.markBuddyNotificationAsRead(widget.elderlyId, notificationId);
           }
         },
         borderRadius: BorderRadius.circular(12),
@@ -288,8 +290,8 @@ class _EnhancedBuddyActivityScreenState
                       icon: Icons.check_circle,
                       color: Colors.green,
                       onTap: () {
-                        _notificationService.markAsResolved(
-                          widget.caretakerId,
+                        _notificationService.markBuddyNotificationAsResolved(
+                          widget.elderlyId,
                           notificationId,
                         );
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -348,7 +350,10 @@ class _EnhancedBuddyActivityScreenState
     return Stack(
       children: [
         StreamBuilder<QuerySnapshot>(
-          stream: _notificationService.getWeeklyReportsStream(widget.caretakerId),
+          stream: _notificationService.getWeeklyReportsStream(
+            widget.caretakerId,
+            widget.elderlyId,
+          ),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
@@ -358,7 +363,8 @@ class _EnhancedBuddyActivityScreenState
               return _buildEmptyState(
                 icon: Icons.analytics,
                 title: 'No reports yet',
-                subtitle: 'Tap the button below to generate reports from past conversations',
+                subtitle:
+                    'Tap the button below to generate reports from past conversations',
               );
             }
 
@@ -380,14 +386,15 @@ class _EnhancedBuddyActivityScreenState
         Positioned(
           bottom: 24,
           right: 24,
-          child: _isGenerating
-              ? const CircularProgressIndicator()
-              : FloatingActionButton.extended(
-                  onPressed: _generateReportsNow,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Generate Reports'),
-                  backgroundColor: Colors.blue[700],
-                ),
+          child:
+              _isGenerating
+                  ? const CircularProgressIndicator()
+                  : FloatingActionButton.extended(
+                    onPressed: _generateReportsNow,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Generate Reports'),
+                    backgroundColor: Colors.blue[700],
+                  ),
         ),
       ],
     );
@@ -396,19 +403,26 @@ class _EnhancedBuddyActivityScreenState
   Future<void> _generateReportsNow() async {
     setState(() => _isGenerating = true);
     try {
-      final memoryService = EnhancedMemoryService(groqApiKey: AppConfig.groqApiKey);
+      final memoryService = EnhancedMemoryService(
+        groqApiKey: AppConfig.groqApiKey,
+      );
 
       // Get current week boundaries
       final now = DateTime.now();
       final daysSinceSunday = now.weekday % 7;
-      final thisWeekStart = DateTime(now.year, now.month, now.day - daysSinceSunday);
+      final thisWeekStart = DateTime(
+        now.year,
+        now.month,
+        now.day - daysSinceSunday,
+      );
 
       // Try generating for the last 8 weeks
       int generated = 0;
       for (int w = 8; w >= 0; w--) {
         final weekStart = thisWeekStart.subtract(Duration(days: 7 * w));
         final weekEnd = weekStart.add(const Duration(days: 7));
-        if (weekEnd.isAfter(DateTime.now().add(const Duration(days: 1)))) continue;
+        if (weekEnd.isAfter(DateTime.now().add(const Duration(days: 1))))
+          continue;
 
         try {
           await memoryService.generateWeeklySentimentReportForPeriod(
@@ -425,9 +439,11 @@ class _EnhancedBuddyActivityScreenState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(generated > 0
-                ? '✅ Generated $generated reports from past conversations!'
-                : 'No new conversations found to generate reports from.'),
+            content: Text(
+              generated > 0
+                  ? '✅ Generated $generated reports from past conversations!'
+                  : 'No new conversations found to generate reports from.',
+            ),
             backgroundColor: generated > 0 ? Colors.green : Colors.orange,
             duration: const Duration(seconds: 4),
           ),
@@ -454,7 +470,8 @@ class _EnhancedBuddyActivityScreenState
     final sentimentData =
         report['sentimentData'] as Map<String, dynamic>? ?? {};
     final reportPeriod = report['reportPeriod'] as Map<String, dynamic>?;
-    final wellnessScore = (sentimentData['emotionalWellnessScore'] as num?)?.toDouble() ?? 50.0;
+    final wellnessScore =
+        (sentimentData['emotionalWellnessScore'] as num?)?.toDouble() ?? 50.0;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -464,7 +481,7 @@ class _EnhancedBuddyActivityScreenState
         onTap: () {
           _showReportDetails(report, reportId);
           if (!isRead) {
-            _notificationService.markReportAsRead(widget.caretakerId, reportId);
+            _notificationService.markBuddyReportAsRead(widget.elderlyId, reportId);
           }
         },
         borderRadius: BorderRadius.circular(12),
@@ -982,8 +999,8 @@ class _EnhancedBuddyActivityScreenState
               if (notification['severity'] == 'urgent')
                 ElevatedButton(
                   onPressed: () {
-                    _notificationService.markAsResolved(
-                      widget.caretakerId,
+                    _notificationService.markBuddyNotificationAsResolved(
+                      widget.elderlyId,
                       notificationId,
                     );
                     Navigator.pop(context);
@@ -1015,7 +1032,9 @@ class _EnhancedBuddyActivityScreenState
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _buildWellnessScoreBar(
-                    (sentimentData['emotionalWellnessScore'] as num?)?.toDouble() ?? 50.0,
+                    (sentimentData['emotionalWellnessScore'] as num?)
+                            ?.toDouble() ??
+                        50.0,
                   ),
                   const SizedBox(height: 20),
                   const Text(
@@ -1064,8 +1083,8 @@ class _EnhancedBuddyActivityScreenState
               TextButton(
                 onPressed: () {
                   if (!(report['isRead'] ?? false)) {
-                    _notificationService.markReportAsRead(
-                      widget.caretakerId,
+                    _notificationService.markBuddyReportAsRead(
+                      widget.elderlyId,
                       reportId,
                     );
                   }

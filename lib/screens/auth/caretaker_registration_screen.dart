@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
 import '../caretaker/patient_selection_screen.dart';
+import 'package:flutter/services.dart';
 
 class CaretakerRegistrationScreen extends StatefulWidget {
   const CaretakerRegistrationScreen({Key? key}) : super(key: key);
@@ -44,8 +45,16 @@ class _CaretakerRegistrationScreenState
       _showError('Please fill in all required fields.');
       return;
     }
-    if (intAge < 18) {
-      _showError('Caretaker must be at least 18 years old.');
+
+    // Stricter Email Validation
+    final emailRegex = RegExp(r'^[a-zA-Z0-9.]+@[a-zA-Z0-9]+\.[a-zA-Z]+');
+    if (!emailRegex.hasMatch(email)) {
+      _showError('Please enter a valid email address (e.g., name@gmail.com).');
+      return;
+    }
+
+    if (intAge < 18 || intAge > 130) {
+      _showError('Caretaker must be between 18 and 130 years old.');
       return;
     }
     if (password.length < 6) {
@@ -172,6 +181,9 @@ class _CaretakerRegistrationScreenState
                     controller: _nameController,
                     hint: 'Full Name *',
                     icon: Icons.person_outline,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]')),
+                    ],
                   ),
                   const SizedBox(height: 14),
 
@@ -184,13 +196,14 @@ class _CaretakerRegistrationScreenState
                           hint: 'Age *',
                           icon: Icons.cake_outlined,
                           keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          maxLength: 3,
                         ),
                       ),
                       const SizedBox(width: 14),
-                      Expanded(
-                        flex: 2,
-                        child: _buildDropdown(),
-                      ),
+                      Expanded(flex: 2, child: _buildDropdown()),
                     ],
                   ),
                   const SizedBox(height: 14),
@@ -199,6 +212,9 @@ class _CaretakerRegistrationScreenState
                     controller: _roleController,
                     hint: 'Family Role (e.g. Son, Nurse) *',
                     icon: Icons.family_restroom,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]')),
+                    ],
                   ),
                   const SizedBox(height: 14),
 
@@ -206,6 +222,9 @@ class _CaretakerRegistrationScreenState
                     controller: _occupationController,
                     hint: 'Occupation (Optional)',
                     icon: Icons.work_outline,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]')),
+                    ],
                   ),
                   const SizedBox(height: 14),
 
@@ -326,6 +345,8 @@ class _CaretakerRegistrationScreenState
     TextInputType keyboardType = TextInputType.text,
     bool obscure = false,
     Widget? suffixIcon,
+    List<TextInputFormatter>? inputFormatters,
+    int? maxLength,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -343,9 +364,12 @@ class _CaretakerRegistrationScreenState
         controller: controller,
         obscureText: obscure,
         keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
+        maxLength: maxLength,
         style: const TextStyle(fontSize: 16),
         decoration: InputDecoration(
           hintText: hint,
+          counterText: '',
           hintStyle: TextStyle(color: Colors.grey.shade400),
           prefixIcon: Icon(icon, color: Colors.blue.shade400),
           suffixIcon: suffixIcon,
@@ -378,12 +402,13 @@ class _CaretakerRegistrationScreenState
           value: _selectedGender,
           isExpanded: true,
           icon: Icon(Icons.keyboard_arrow_down, color: Colors.blue.shade400),
-          items: ['Male', 'Female', 'Other'].map((String value) {
-            return DropdownMenuItem<String>(
-              value: value,
-              child: Text(value, style: const TextStyle(fontSize: 16)),
-            );
-          }).toList(),
+          items:
+              ['Female', 'Male', 'Others'].map((String value) {
+                return DropdownMenuItem<String>(
+                  value: value,
+                  child: Text(value, style: const TextStyle(fontSize: 16)),
+                );
+              }).toList(),
           onChanged: (newValue) {
             if (newValue != null) {
               setState(() => _selectedGender = newValue);

@@ -22,12 +22,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
     Future.delayed(const Duration(milliseconds: 300), () {
       if (role == 'elderly') {
-        Navigator.pushReplacement(
+        Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const ElderlyInitialLoginScreen()),
         );
       } else {
-        Navigator.pushReplacement(
+        Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const CaretakerLoginScreen()),
         );
@@ -128,10 +128,14 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: const [
-                              Icon(Icons.elderly, size: 50, color: Colors.white),
+                              Icon(
+                                Icons.elderly,
+                                size: 50,
+                                color: Colors.white,
+                              ),
                               SizedBox(width: 20),
                               Text(
-                                'I am Elderly',
+                                'Elderly',
                                 style: TextStyle(
                                   fontSize: 28,
                                   fontWeight: FontWeight.bold,
@@ -182,7 +186,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               Icon(Icons.people, size: 50, color: Colors.white),
                               SizedBox(width: 20),
                               Text(
-                                'I am Caregiver',
+                                'Caregiver',
                                 style: TextStyle(
                                   fontSize: 28,
                                   fontWeight: FontWeight.bold,

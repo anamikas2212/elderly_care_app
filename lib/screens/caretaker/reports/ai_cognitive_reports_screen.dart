@@ -20,7 +20,8 @@ class AiCognitiveReportsScreen extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  _AiCognitiveReportsScreenState createState() => _AiCognitiveReportsScreenState();
+  _AiCognitiveReportsScreenState createState() =>
+      _AiCognitiveReportsScreenState();
 }
 
 class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
@@ -58,26 +59,33 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
         backgroundColor: CaretakerColors.cardWhite,
         elevation: 0,
         title: const Text(
-          "AI Cognitive Reports",
+          "Cognitive Health Reports",
           style: CaretakerTextStyles.header,
         ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: CaretakerColors.primaryGreen),
+          icon: const Icon(
+            Icons.arrow_back,
+            color: CaretakerColors.primaryGreen,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
           IconButton(
             icon: Icon(
               Icons.auto_awesome,
-              color: _isGenerating
-                  ? CaretakerColors.primaryGreen.withOpacity(0.5)
-                  : CaretakerColors.primaryGreen,
+              color:
+                  _isGenerating
+                      ? CaretakerColors.primaryGreen.withOpacity(0.5)
+                      : CaretakerColors.primaryGreen,
             ),
             onPressed: _isGenerating ? null : _generateReportNow,
             tooltip: "Generate report",
           ),
           IconButton(
-            icon: const Icon(Icons.info_outline, color: CaretakerColors.primaryGreen),
+            icon: const Icon(
+              Icons.info_outline,
+              color: CaretakerColors.primaryGreen,
+            ),
             onPressed: () => _showInfoDialog(),
           ),
         ],
@@ -92,7 +100,10 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
                 unselectedLabelColor: Colors.grey,
                 indicatorColor: CaretakerColors.primaryGreen,
                 indicatorWeight: 3,
-                labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                labelStyle: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
                 tabs: _tabLabels.map((l) => Tab(text: l)).toList(),
               ),
             ],
@@ -109,9 +120,9 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
   // ─── Calendar Header ───────────────────────────────────────────
 
   Widget _buildCalendarHeader() {
-    final monthName = DateFormat('MMMM yyyy').format(
-      DateTime(_selectedYear, _selectedMonth),
-    );
+    final monthName = DateFormat(
+      'MMMM yyyy',
+    ).format(DateTime(_selectedYear, _selectedMonth));
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -119,7 +130,10 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           IconButton(
-            icon: const Icon(Icons.chevron_left, color: CaretakerColors.primaryGreen),
+            icon: const Icon(
+              Icons.chevron_left,
+              color: CaretakerColors.primaryGreen,
+            ),
             onPressed: _previousMonth,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
@@ -156,7 +170,10 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
           ),
           const SizedBox(width: 8),
           IconButton(
-            icon: const Icon(Icons.chevron_right, color: CaretakerColors.primaryGreen),
+            icon: const Icon(
+              Icons.chevron_right,
+              color: CaretakerColors.primaryGreen,
+            ),
             onPressed: _nextMonth,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
@@ -228,12 +245,13 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
                     GridView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
-                        childAspectRatio: 2.0,
-                        mainAxisSpacing: 8,
-                        crossAxisSpacing: 8,
-                      ),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 3,
+                            childAspectRatio: 2.0,
+                            mainAxisSpacing: 8,
+                            crossAxisSpacing: 8,
+                          ),
                       itemCount: 12,
                       itemBuilder: (context, index) {
                         final month = index + 1;
@@ -242,17 +260,22 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
                           onTap: () => setDialogState(() => tempMonth = month),
                           child: Container(
                             decoration: BoxDecoration(
-                              color: isSelected
-                                  ? CaretakerColors.primaryGreen
-                                  : Colors.grey.shade100,
+                              color:
+                                  isSelected
+                                      ? CaretakerColors.primaryGreen
+                                      : Colors.grey.shade100,
                               borderRadius: BorderRadius.circular(8),
                             ),
                             alignment: Alignment.center,
                             child: Text(
                               DateFormat('MMM').format(DateTime(2000, month)),
                               style: TextStyle(
-                                color: isSelected ? Colors.white : Colors.black87,
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                color:
+                                    isSelected ? Colors.white : Colors.black87,
+                                fontWeight:
+                                    isSelected
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
                               ),
                             ),
                           ),
@@ -278,7 +301,10 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
                     });
                     Navigator.pop(context);
                   },
-                  child: const Text("Select", style: TextStyle(color: Colors.white)),
+                  child: const Text(
+                    "Select",
+                    style: TextStyle(color: Colors.white),
+                  ),
                 ),
               ],
             );
@@ -307,13 +333,10 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
       children: [
         StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance
-              .collection('users')
-              .doc(widget.caretakerId)
-              .collection('cognitive_reports')
-              .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(rangeStart))
-              .where('date', isLessThan: Timestamp.fromDate(rangeEnd))
-              .orderBy('date', descending: true)
-              .snapshots(),
+                  .collection('users')
+                  .doc(widget.elderlyId)
+                  .collection('cognitive_reports')
+                  .snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
@@ -327,18 +350,37 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
               return _buildEmptyTabState(type);
             }
 
-            // Filter by elderlyId and type
+            // Filter by elderlyId, type, and date range, then sort
             final filtered = snapshot.data!.docs.where((doc) {
               final data = doc.data() as Map<String, dynamic>;
               final id = data['elderlyId']?.toString();
               final name = data['elderlyName']?.toString();
               final reportType = data['type']?.toString() ?? 'daily';
               final matchId = id == widget.elderlyId;
-              final matchName = widget.elderlyName != null && name == widget.elderlyName;
-              final matchIdToName = widget.elderlyName != null && id == widget.elderlyName;
+              final matchName =
+                  widget.elderlyName != null && name == widget.elderlyName;
+              final matchIdToName =
+                  widget.elderlyName != null && id == widget.elderlyName;
               final matchType = reportType == type;
-              return (matchId || matchName || matchIdToName) && matchType;
+
+              // Date range filter
+              final ts = data['date'] as Timestamp?;
+              if (ts == null) return false;
+              final reportDate = ts.toDate();
+              final inRange = !reportDate.isBefore(rangeStart) && reportDate.isBefore(rangeEnd);
+
+              return (matchId || matchName || matchIdToName) && matchType && inRange;
             }).toList();
+
+            // Sort by date descending
+            filtered.sort((a, b) {
+              final aTs = (a.data() as Map<String, dynamic>)['date'] as Timestamp?;
+              final bTs = (b.data() as Map<String, dynamic>)['date'] as Timestamp?;
+              if (aTs == null && bTs == null) return 0;
+              if (aTs == null) return 1;
+              if (bTs == null) return -1;
+              return bTs.compareTo(aTs);
+            });
 
             if (filtered.isEmpty) {
               return _buildEmptyTabState(type);
@@ -348,8 +390,12 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
               padding: const EdgeInsets.all(16),
               itemCount: filtered.length,
               itemBuilder: (context, index) {
-                final reportData = filtered[index].data() as Map<String, dynamic>;
-                final report = CognitiveReport.fromMap(reportData, filtered[index].id);
+                final reportData =
+                    filtered[index].data() as Map<String, dynamic>;
+                final report = CognitiveReport.fromMap(
+                  reportData,
+                  filtered[index].id,
+                );
                 return _buildReportCard(report);
               },
             );
@@ -362,29 +408,33 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
             bottom: 16,
             child: FloatingActionButton.extended(
               heroTag: 'generate_$type',
-              backgroundColor: _isGenerating
-                  ? Colors.grey
-                  : type == 'weekly'
+              backgroundColor:
+                  _isGenerating
+                      ? Colors.grey
+                      : type == 'weekly'
                       ? CaretakerColors.primaryGreen
                       : type == 'monthly'
-                          ? Colors.deepPurple
-                          : Colors.indigo,
-              onPressed: _isGenerating
-                  ? null
-                  : () => _generateReportForType(type),
-              icon: _isGenerating
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : const Icon(Icons.auto_awesome, color: Colors.white),
+                      ? Colors.deepPurple
+                      : Colors.indigo,
+              onPressed:
+                  _isGenerating ? null : () => _generateReportForType(type),
+              icon:
+                  _isGenerating
+                      ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                      : const Icon(Icons.auto_awesome, color: Colors.white),
               label: Text(
                 'Generate ${type[0].toUpperCase()}${type.substring(1)}',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ),
@@ -396,19 +446,27 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
     final typeLabel = type[0].toUpperCase() + type.substring(1);
     String hint;
     if (type == 'daily') {
-      hint = 'Play games to generate daily reports, or tap the ✨ button to generate now.';
+      hint =
+          'Play games to generate daily reports, or tap the ✨ button to generate now.';
     } else if (type == 'weekly') {
-      hint = 'Tap the Generate Weekly button below to create a combined report from this week\'s daily reports.';
+      hint =
+          'Tap the Generate Weekly button below to create a combined report from this week\'s daily reports.';
     } else if (type == 'monthly') {
-      hint = 'Tap the Generate Monthly button below to create a summary from this month\'s daily reports.';
+      hint =
+          'Tap the Generate Monthly button below to create a summary from this month\'s daily reports.';
     } else {
-      hint = 'Tap the Generate Yearly button below to create a summary from this year\'s daily reports.';
+      hint =
+          'Tap the Generate Yearly button below to create a summary from this year\'s daily reports.';
     }
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.description_outlined, size: 80, color: Colors.grey.shade300),
+          Icon(
+            Icons.description_outlined,
+            size: 80,
+            color: Colors.grey.shade300,
+          ),
           const SizedBox(height: 16),
           Text(
             "No $typeLabel reports for this period.",
@@ -479,10 +537,11 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => AiReportDetailScreen(
-                  report: report,
-                  caretakerId: widget.caretakerId,
-                ),
+                builder:
+                    (_) => AiReportDetailScreen(
+                      report: report,
+                      caretakerId: widget.caretakerId,
+                    ),
               ),
             );
           },
@@ -508,7 +567,10 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
                       Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: color.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(4),
@@ -526,7 +588,10 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
                           const Spacer(),
                           if (!report.isRead)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.red,
                                 borderRadius: BorderRadius.circular(10),
@@ -566,7 +631,10 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: _getScoreColor(report.overallScore).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
@@ -605,7 +673,9 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
       _isGenerating = true;
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Generating report... this may take a moment.')),
+      const SnackBar(
+        content: Text('Generating report... this may take a moment.'),
+      ),
     );
 
     try {
@@ -635,14 +705,14 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
         default:
           message = 'Failed to generate report.';
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to generate report: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to generate report: $e')));
     } finally {
       if (!mounted) return;
       setState(() {
@@ -658,7 +728,9 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
       _isGenerating = true;
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Generating ${type} report... this may take a moment.')),
+      SnackBar(
+        content: Text('Generating ${type} report... this may take a moment.'),
+      ),
     );
 
     try {
@@ -690,7 +762,11 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${type[0].toUpperCase()}${type.substring(1)} report generated!')),
+        SnackBar(
+          content: Text(
+            '${type[0].toUpperCase()}${type.substring(1)} report generated!',
+          ),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -710,27 +786,31 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
   Future<void> _confirmDelete(CognitiveReport report) async {
     final result = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Delete report?"),
-        content: const Text("This will permanently delete the report."),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text("Cancel"),
+      builder:
+          (context) => AlertDialog(
+            title: const Text("Delete report?"),
+            content: const Text("This will permanently delete the report."),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text("Cancel"),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text(
+                  "Delete",
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text("Delete", style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
     );
 
     if (result != true) return;
 
     await FirebaseFirestore.instance
         .collection('users')
-        .doc(widget.caretakerId)
+        .doc(widget.elderlyId)
         .collection('cognitive_reports')
         .doc(report.id)
         .delete();
@@ -741,24 +821,25 @@ class _AiCognitiveReportsScreenState extends State<AiCognitiveReportsScreen>
   void _showInfoDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("About AI Reports"),
-        content: const Text(
-          "These reports are generated using advanced AI (Groq/Llama-3) that analyzes "
-          "daily game performance. It looks at reaction times, accuracy, and efficiency "
-          "across multiple cognitive domains to provide actionable insights for caregivers.\n\n"
-          "• Daily reports are generated from game sessions\n"
-          "• Weekly reports combine all daily reports (auto-generated on Sundays)\n"
-          "• Monthly reports summarize the entire month\n"
-          "• Yearly reports provide long-term cognitive health trends",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Understood"),
+      builder:
+          (context) => AlertDialog(
+            title: const Text("About Cognitive Health Reports"),
+            content: const Text(
+              "These reports are generated using advanced AI (Groq/Llama-3) that analyzes "
+              "daily game performance. It looks at reaction times, accuracy, and efficiency "
+              "across multiple cognitive domains to provide actionable insights for caregivers.\n\n"
+              "• Daily reports are generated from game sessions\n"
+              "• Weekly reports combine all daily reports (auto-generated on Sundays)\n"
+              "• Monthly reports summarize the entire month\n"
+              "• Yearly reports provide long-term cognitive health trends",
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Understood"),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 }

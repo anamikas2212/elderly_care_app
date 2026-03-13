@@ -231,6 +231,10 @@ class _SafetyMonitorScreenState extends State<SafetyMonitorScreen> with WidgetsB
       appBar: AppBar(
         backgroundColor: CaretakerColors.background,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
         title: const Text(
           'Safety Monitor',
           style: TextStyle(color: CaretakerColors.textPrimary),

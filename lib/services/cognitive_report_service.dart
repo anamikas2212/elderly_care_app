@@ -23,6 +23,31 @@ class CognitiveReportService {
     'Monument Recall': ['Memory', 'Language'],
   };
 
+  // ─── Helper method to avoid composite index errors ───────────────
+  Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>> _getSortedReportsByType(
+    String caretakerId,
+    String elderlyId,
+    String type,
+  ) async {
+    final snapshot = await _firestore
+        .collection('users')
+        .doc(elderlyId)
+        .collection('cognitive_reports')
+        .where('type', isEqualTo: type)
+        .get();
+
+    final docs = snapshot.docs;
+    docs.sort((a, b) {
+      final tsA = a.data()['date'] as Timestamp?;
+      final tsB = b.data()['date'] as Timestamp?;
+      if (tsA == null && tsB == null) return 0;
+      if (tsA == null) return 1;
+      if (tsB == null) return -1;
+      return tsB.compareTo(tsA); // descending
+    });
+    return docs;
+  }
+
   // ─── Daily Report ───────────────────────────────────────────────
 
   Future<void> generateDailyCognitiveReport(
@@ -97,7 +122,7 @@ class CognitiveReportService {
 
       await _firestore
           .collection('users')
-          .doc(caretakerId)
+          .doc(elderlyId)
           .collection('cognitive_reports')
           .add(report.toMap());
 
@@ -127,7 +152,7 @@ class CognitiveReportService {
       final todayStart = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
       final recentSnapshot = await _firestore
           .collection('users')
-          .doc(caretakerId)
+          .doc(elderlyId)
           .collection('cognitive_reports')
           .orderBy('date', descending: true)
           .limit(25)
@@ -206,26 +231,23 @@ class CognitiveReportService {
       if (existingDailyDocId != null) {
         await _firestore
             .collection('users')
-            .doc(caretakerId)
+            .doc(elderlyId)
             .collection('cognitive_reports')
             .doc(existingDailyDocId)
             .set(reportMap, SetOptions(merge: true));
       } else {
         await _firestore
             .collection('users')
-            .doc(caretakerId)
+            .doc(elderlyId)
             .collection('cognitive_reports')
             .add(reportMap);
       }
 
-      if (existingDailyDocId == null) {
-        await _firestore.collection('cognitive_reports').add(reportMap);
-      }
-
-      // If today is Sunday, also generate a weekly combined report
-      if (DateTime.now().weekday == DateTime.sunday) {
-        await generateWeeklyCognitiveReport(elderlyId);
-      }
+      // Trigger comprehensive reports (weekly, monthly, yearly) every time a daily one is updated
+      // so the dashboard always has the latest trend data.
+      await generateWeeklyCognitiveReport(elderlyId);
+      await generateMonthlyCognitiveReport(elderlyId);
+      // await generateYearlyCognitiveReport(elderlyId); // If/when implemented
 
       return existingDailyDocId != null ? 'updated' : 'generated';
     } catch (e) {
@@ -251,7 +273,7 @@ class CognitiveReportService {
 
       final allReportsSnapshot = await _firestore
           .collection('users')
-          .doc(caretakerId)
+          .doc(elderlyId)
           .collection('cognitive_reports')
           .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(effectiveStart))
           .where('date', isLessThan: Timestamp.fromDate(queryEnd))
@@ -266,17 +288,9 @@ class CognitiveReportService {
           .toList();
           
       String? existingWeeklyDocId;
-      final existingWeeklySnapshot = await _firestore
-          .collection('users')
-          .doc(caretakerId)
-          .collection('cognitive_reports')
-          .where('elderlyId', isEqualTo: elderlyId)
-          .where('type', isEqualTo: 'weekly')
-          .orderBy('date', descending: true)
-          .limit(10)
-          .get();
+      final existingWeeklyDocs = await _getSortedReportsByType(caretakerId, elderlyId, 'weekly');
           
-      for (final doc in existingWeeklySnapshot.docs) {
+      for (final doc in existingWeeklyDocs) {
           final data = doc.data();
           final ts = data['date'] as Timestamp?;
           if (ts != null && ts.toDate().year == effectiveEnd.year && ts.toDate().month == effectiveEnd.month && (ts.toDate().day - effectiveEnd.day).abs() <= 3) {
@@ -318,14 +332,14 @@ class CognitiveReportService {
         if (existingWeeklyDocId != null) {
             await _firestore
                 .collection('users')
-                .doc(caretakerId)
+                .doc(elderlyId)
                 .collection('cognitive_reports')
                 .doc(existingWeeklyDocId)
                 .set(reportMap, SetOptions(merge: true));
         } else {
             await _firestore
                 .collection('users')
-                .doc(caretakerId)
+                .doc(elderlyId)
                 .collection('cognitive_reports')
                 .add(reportMap);
         }
@@ -387,18 +401,18 @@ class CognitiveReportService {
       if (existingWeeklyDocId != null) {
           await _firestore
               .collection('users')
-              .doc(caretakerId)
+              .doc(elderlyId)
               .collection('cognitive_reports')
               .doc(existingWeeklyDocId)
               .set(reportMap, SetOptions(merge: true));
       } else {
           await _firestore
               .collection('users')
-              .doc(caretakerId)
+              .doc(elderlyId)
               .collection('cognitive_reports')
               .add(reportMap);
       }
-
+      
       print('✅ Weekly cognitive trend report updated/generated for $userName ($effectiveStart)');
     } catch (e) {
       print('❌ Error generating weekly cognitive report: $e');
@@ -420,19 +434,15 @@ class CognitiveReportService {
       final monthStart = DateTime(targetYear, targetMonth, 1);
       final monthEnd = DateTime(targetMonth == 12 ? targetYear + 1 : targetYear, targetMonth == 12 ? 1 : targetMonth + 1, 1);
 
-      final allReportsSnapshot = await _firestore
-          .collection('users')
-          .doc(caretakerId)
-          .collection('cognitive_reports')
-          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(monthStart))
-          .where('date', isLessThan: Timestamp.fromDate(monthEnd))
-          .get();
+      final allReportsDocs = await _getSortedReportsByType(caretakerId, elderlyId, 'daily');
+      final allReportsSnapshot = allReportsDocs.where((doc) {
+        final ts = doc.data()['date'] as Timestamp?;
+        if (ts == null) return false;
+        final date = ts.toDate();
+        return !date.isBefore(monthStart) && date.isBefore(monthEnd);
+      }).toList();
 
-      final dailyReports = allReportsSnapshot.docs
-          .where((doc) {
-            final data = doc.data();
-            return data['elderlyId'] == elderlyId && data['type'] == 'daily';
-          })
+      final dailyReports = allReportsSnapshot
           .map((doc) => doc.data())
           .toList();
 
@@ -468,7 +478,7 @@ class CognitiveReportService {
         reportMap['caretakerId'] = caretakerId;
         await _firestore
             .collection('users')
-            .doc(caretakerId)
+            .doc(elderlyId)
             .collection('cognitive_reports')
             .add(reportMap);
 
@@ -522,7 +532,7 @@ class CognitiveReportService {
 
       await _firestore
           .collection('users')
-          .doc(caretakerId)
+          .doc(elderlyId)
           .collection('cognitive_reports')
           .add(reportMap);
 
@@ -545,19 +555,15 @@ class CognitiveReportService {
       final yearStart = DateTime(targetYear, 1, 1);
       final yearEnd = DateTime(targetYear + 1, 1, 1);
 
-      final allReportsSnapshot = await _firestore
-          .collection('users')
-          .doc(caretakerId)
-          .collection('cognitive_reports')
-          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(yearStart))
-          .where('date', isLessThan: Timestamp.fromDate(yearEnd))
-          .get();
+      final allReportsDocs = await _getSortedReportsByType(caretakerId, elderlyId, 'daily');
+      final allReportsSnapshot = allReportsDocs.where((doc) {
+        final ts = doc.data()['date'] as Timestamp?;
+        if (ts == null) return false;
+        final date = ts.toDate();
+        return !date.isBefore(yearStart) && date.isBefore(yearEnd);
+      }).toList();
 
-      final dailyReports = allReportsSnapshot.docs
-          .where((doc) {
-            final data = doc.data();
-            return data['elderlyId'] == elderlyId && data['type'] == 'daily';
-          })
+      final dailyReports = allReportsSnapshot
           .map((doc) => doc.data())
           .toList();
 
@@ -592,7 +598,7 @@ class CognitiveReportService {
         reportMap['caretakerId'] = caretakerId;
         await _firestore
             .collection('users')
-            .doc(caretakerId)
+            .doc(elderlyId)
             .collection('cognitive_reports')
             .add(reportMap);
 
@@ -639,7 +645,7 @@ class CognitiveReportService {
 
       await _firestore
           .collection('users')
-          .doc(caretakerId)
+          .doc(elderlyId)
           .collection('cognitive_reports')
           .add(reportMap);
 
@@ -753,7 +759,7 @@ class CognitiveReportService {
       final todayStart = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
       final recentSnapshot = await _firestore
           .collection('users')
-          .doc(caretakerId)
+          .doc(elderlyId)
           .collection('cognitive_reports')
           .orderBy('date', descending: true)
           .limit(25)
@@ -1043,7 +1049,7 @@ class CognitiveReportService {
       final oneHourAgo = DateTime.now().subtract(const Duration(hours: 1));
       final allReportsSnap = await _firestore
           .collection('users')
-          .doc(caretakerId)
+          .doc(elderlyId)
           .collection('cognitive_reports')
           .where('date', isGreaterThan: Timestamp.fromDate(oneHourAgo))
           .get();
@@ -1096,7 +1102,7 @@ class CognitiveReportService {
 
       await _firestore
           .collection('users')
-          .doc(caretakerId)
+          .doc(elderlyId)
           .collection('cognitive_reports')
           .add(reportMap);
     } catch (e) {
@@ -1164,7 +1170,7 @@ class CognitiveReportService {
 
       await _firestore
           .collection('users')
-          .doc(caretakerId)
+          .doc(elderlyId)
           .collection('cognitive_reports')
           .add(reportMap);
     } catch (e) {

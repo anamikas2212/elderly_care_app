@@ -58,6 +58,10 @@ class _DailyEngagementScreenState extends State<DailyEngagementScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
         title: const Text('Daily Engagement'),
         backgroundColor: Colors.orange,
         elevation: 0,

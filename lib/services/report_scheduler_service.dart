@@ -1,4 +1,4 @@
-﻿/*import 'package:cloud_firestore/cloud_firestore.dart';
+/*import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
 class ReportSchedulerService {
@@ -368,20 +368,24 @@ class ReportSchedulerService {
   }) async {
     final snapshot = await _firestore
         .collection('users')
-        .doc(caretakerId)
+        .doc(elderlyId)
         .collection('cognitive_reports')
-        .where('elderlyId', isEqualTo: elderlyId)
         .where('type', isEqualTo: type)
-        .orderBy('date', descending: true)
-        .limit(1)
         .get();
 
     if (snapshot.docs.isEmpty) return false;
-    final data = snapshot.docs.first.data();
-    final ts = data['date'] as Timestamp?;
-    if (ts == null) return false;
-    final reportDate = ts.toDate();
-    return !reportDate.isBefore(since);
+    
+    DateTime? latestDate;
+    for (var doc in snapshot.docs) {
+      final ts = doc.data()['date'] as Timestamp?;
+      if (ts != null) {
+        if (latestDate == null || ts.toDate().isAfter(latestDate)) {
+           latestDate = ts.toDate();
+        }
+      }
+    }
+    if (latestDate == null) return false;
+    return !latestDate.isBefore(since);
   }
 
   DateTime _startOfDay(DateTime date) {

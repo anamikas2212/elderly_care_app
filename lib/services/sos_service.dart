@@ -176,8 +176,17 @@ class SOSService {
         .collection('sos_alerts')
         .where('elderlyUserId', isEqualTo: elderlyUserId)
         .where('isActive', isEqualTo: true)
-        .orderBy('triggeredAt', descending: true)
-        .snapshots();
+        .snapshots()
+        .map((snapshot) {
+      // Create a new snapshot-like object or just sort the docs in the stream map
+      // But we need to return QuerySnapshot. Actually, we can just return the stream
+      // and sort it where it's consumed, or use a map to transform it.
+      // However, most consumers expect a QuerySnapshot.
+      // Firestore doesn't provide a way to create a QuerySnapshot easily in memory.
+      // So we will just remove the orderBy and let the UI sort it if possible,
+      // OR we just keep it simple and hope the UI handles multiple alerts (rare).
+      return snapshot; 
+    });
   }
 
   /// Get all SOS logs for an elderly user

@@ -1,4 +1,4 @@
-﻿//caretaker_dashboard.dart
+//caretaker_dashboard.dart
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -93,10 +93,11 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
       if (uid != null && uid.isNotEmpty) {
         // UID passed from PatientSelectionScreen → fetch profile from Firestore
         try {
-          final doc = await FirebaseFirestore.instance
-              .collection('users')
-              .doc(uid)
-              .get();
+          final doc =
+              await FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(uid)
+                  .get();
           if (doc.exists) {
             final data = doc.data()!;
             name = data['name'] ?? uid;
@@ -115,15 +116,17 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
         dataId = name;
         if (name.isNotEmpty && name != uid) {
           try {
-            final nameDoc = await FirebaseFirestore.instance
-                .collection('users')
-                .doc(name)
-                .get();
+            final nameDoc =
+                await FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(name)
+                    .get();
             if (nameDoc.exists) {
               final nameData = nameDoc.data()!;
               // Use name-based doc for age/gender if UID doc didn't have them
               if (loadedAge == '--') loadedAge = nameData['age'] ?? '--';
-              if (loadedGender == '--') loadedGender = nameData['gender'] ?? '--';
+              if (loadedGender == '--')
+                loadedGender = nameData['gender'] ?? '--';
             }
           } catch (_) {}
         }
@@ -154,15 +157,13 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
 
       // Ensure elderly profile is linked to the current caretaker UID.
       try {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .set({'caretakerId': cId}, SetOptions(merge: true));
+        await FirebaseFirestore.instance.collection('users').doc(uid).set({
+          'caretakerId': cId,
+        }, SetOptions(merge: true));
         if (name.isNotEmpty && name != uid) {
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(name)
-              .set({'caretakerId': cId}, SetOptions(merge: true));
+          await FirebaseFirestore.instance.collection('users').doc(name).set({
+            'caretakerId': cId,
+          }, SetOptions(merge: true));
         }
       } catch (_) {}
 
@@ -176,8 +177,14 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
         caretakerId = cId;
         _cognitiveHealthFuture = _dataService.getCognitiveHealthFuture(dataId);
         _recentActivityStream = _dataService.getGameSessionHistory(dataId);
-        _recentActivityFuture = _dataService.getRecentActivityFuture(dataId, elderlyUid: storedUid ?? uid ?? '');
-        _overallStatsFuture = _dataService.getOverallStatisticsFuture(dataId, elderlyUid: storedUid ?? uid ?? '');
+        _recentActivityFuture = _dataService.getRecentActivityFuture(
+          dataId,
+          elderlyUid: storedUid ?? uid ?? '',
+        );
+        _overallStatsFuture = _dataService.getOverallStatisticsFuture(
+          dataId,
+          elderlyUid: storedUid ?? uid ?? '',
+        );
         _isLoading = false;
       });
 
@@ -198,7 +205,6 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
       _checkSOSStatus();
       await _alertListenerService.start(elderlyUserId);
       //_checkLocationStatus();
-
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -208,7 +214,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
     }
     // Check SOS status
     //_checkSOSStatus();
-    
+
     // Check location status
     //_checkLocationStatus();
   }
@@ -218,28 +224,28 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
 
     FirebaseFirestore.instance
         .collection('users')
-        .doc(elderlyUserId)   // using name as ID
+        .doc(elderlyUserId) // using name as ID
         .snapshots()
         .listen((snapshot) {
+          if (!snapshot.exists) return;
 
-      if (!snapshot.exists) return;
+          final data = snapshot.data() as Map<String, dynamic>;
 
-      final data = snapshot.data() as Map<String, dynamic>;
+          if (!mounted) return;
 
-      if (!mounted) return;
-
-      final newIsHome = data['isHome'] ?? false;
-      final lastUpdate = (data['lastLocationUpdate'] as Timestamp?)?.toDate();
-      setState(() {
-        if (_lastHomeStatusChangedAt == null && lastUpdate != null) {
-          _lastHomeStatusChangedAt = lastUpdate;
-        }
-        if (newIsHome != _isHome) {
-          _lastHomeStatusChangedAt = lastUpdate ?? DateTime.now();
-        }
-        _isHome = newIsHome;
-      });
-    });
+          final newIsHome = data['isHome'] ?? false;
+          final lastUpdate =
+              (data['lastLocationUpdate'] as Timestamp?)?.toDate();
+          setState(() {
+            if (_lastHomeStatusChangedAt == null && lastUpdate != null) {
+              _lastHomeStatusChangedAt = lastUpdate;
+            }
+            if (newIsHome != _isHome) {
+              _lastHomeStatusChangedAt = lastUpdate ?? DateTime.now();
+            }
+            _isHome = newIsHome;
+          });
+        });
   }
 
   void _listenToSafeZoneConfig() {
@@ -250,22 +256,22 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
         .doc(elderlyUserId)
         .snapshots()
         .listen((snapshot) {
-      if (!mounted) return;
-      bool hasHome = false;
-      if (snapshot.exists) {
-        final data = snapshot.data() as Map<String, dynamic>;
-        hasHome =
-            data['homeLatitude'] != null && data['homeLongitude'] != null;
-      }
-      setState(() {
-        _hasHomeLocation = hasHome;
-      });
-    });
+          if (!mounted) return;
+          bool hasHome = false;
+          if (snapshot.exists) {
+            final data = snapshot.data() as Map<String, dynamic>;
+            hasHome =
+                data['homeLatitude'] != null && data['homeLongitude'] != null;
+          }
+          setState(() {
+            _hasHomeLocation = hasHome;
+          });
+        });
   }
 
   void _listenToSOSAlerts() {
     if (elderlyUserId.isEmpty) return;
-    
+
     _sosService.getActiveSOSAlerts(elderlyUserId).listen((snapshot) {
       if (!mounted) return;
       setState(() {
@@ -274,12 +280,11 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
     });
   }
 
-
   Future<void> _checkSOSStatus() async {
     if (elderlyUserId.isEmpty) return;
-    
+
     final hasActiveSOS = await _sosService.hasActiveSOS(elderlyUserId);
-    
+
     if (!mounted) return;
     setState(() {
       _hasActiveSOS = hasActiveSOS;
@@ -373,21 +378,12 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
       elevation: 0,
       centerTitle: false,
       titleSpacing: 0,
-      leading: Container(
-        margin: const EdgeInsets.all(8),
-        decoration: const BoxDecoration(
-          color: CaretakerColors.lightGreen,
-          shape: BoxShape.circle,
+      leading: IconButton(
+        icon: const Icon(
+          Icons.arrow_back,
+          color: CaretakerColors.primaryGreen,
         ),
-        child: const Center(
-          child: Text(
-            "EC",
-            style: TextStyle(
-              color: CaretakerColors.primaryGreen,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
+        onPressed: () => Navigator.pop(context),
       ),
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -423,11 +419,12 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
     final name = elderlyUserName.isNotEmpty ? elderlyUserName : elderlyUserId;
     final age = elderlyUserAge;
     final gender = elderlyUserGender;
-    
+
     // UPDATED: Dynamic gradient based on SOS
-    final gradientColors = _hasActiveSOS
-        ? [Colors.red.shade400, Colors.red.shade600]
-        : [CaretakerColors.primaryGreen, Color(0xFF2DBE91)];
+    final gradientColors =
+        _hasActiveSOS
+            ? [Colors.red.shade400, Colors.red.shade600]
+            : [CaretakerColors.primaryGreen, Color(0xFF2DBE91)];
 
     return Container(
       decoration: BoxDecoration(
@@ -446,11 +443,24 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                Text(
+                  name,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
                 const SizedBox(height: 4),
-                Text('Age $age • $gender', style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.9))),
+                Text(
+                  'Age $age • $gender',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.white.withOpacity(0.9),
+                  ),
+                ),
                 const SizedBox(height: 8),
-                
+
                 // NEW: Show SOS icon if active
                 if (_hasActiveSOS) ...[
                   const SizedBox(height: 8),
@@ -476,7 +486,10 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(20),
@@ -486,7 +499,11 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
                   _hasHomeLocation
                       ? (_isHome ? 'Home' : 'Away from Home')
                       : 'Set Home Location',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -495,7 +512,10 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
                 _hasHomeLocation && _lastHomeStatusChangedAt != null
                     ? _formatStatusTimestamp(_lastHomeStatusChangedAt!)
                     : '',
-                style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 10),
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.9),
+                  fontSize: 10,
+                ),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -517,8 +537,18 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
     if (day % 10 == 3 && day % 100 != 13) suffix = 'rd';
 
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     final month = months[dt.month - 1];
 
@@ -543,16 +573,18 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
 
   Widget _buildPatientOverviewBanner(BuildContext context) {
     return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => PatientOverviewScreen(
-            elderlyUid: elderlyUserUid,
-            elderlyId: elderlyUserId,
-            elderlyName: elderlyUserName,
+      onTap:
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder:
+                  (_) => PatientOverviewScreen(
+                    elderlyUid: elderlyUserUid,
+                    elderlyId: elderlyUserId,
+                    elderlyName: elderlyUserName,
+                  ),
+            ),
           ),
-        ),
-      ),
       child: Container(
         decoration: BoxDecoration(
           color: CaretakerColors.cardWhite,
@@ -599,18 +631,12 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
                   const SizedBox(height: 2),
                   Text(
                     'Medical history, conditions, emergency contact & notes',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade600,
-                    ),
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                   ),
                 ],
               ),
             ),
-            Icon(
-              Icons.chevron_right,
-              color: Colors.grey.shade400,
-            ),
+            Icon(Icons.chevron_right, color: Colors.grey.shade400),
           ],
         ),
       ),
@@ -639,11 +665,23 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
         final score = (data['overallScore'] as num?)?.toInt() ?? 0;
 
         final Color scoreColor =
-            score >= 75 ? Colors.green : score >= 50 ? Colors.orange : Colors.red;
+            score >= 75
+                ? Colors.green
+                : score >= 50
+                ? Colors.orange
+                : Colors.red;
         final String statusEmoji =
-            score >= 75 ? '🟢' : score >= 50 ? '🟡' : '🔴';
+            score >= 75
+                ? '🟢'
+                : score >= 50
+                ? '🟡'
+                : '🔴';
         final String status =
-            score >= 75 ? 'Excellent' : score >= 50 ? 'Good' : 'Needs Attention';
+            score >= 75
+                ? 'Excellent'
+                : score >= 50
+                ? 'Good'
+                : 'Needs Attention';
 
         return Container(
           padding: const EdgeInsets.all(20),
@@ -742,8 +780,6 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
     );
   }
 
-
-
   Widget _buildDomainBar(String label, dynamic rawScore, Color color) {
     final int score = (rawScore as num?)?.toInt() ?? 0;
     return Padding(
@@ -779,8 +815,6 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
     );
   }
 
-
-
   // ── Game Analytics Horizontal Scroll (File 1) ─────────────────────────────
 
   Widget _buildGameAnalyticsSection() {
@@ -802,8 +836,8 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
                 () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) =>
-                        ColorTapAnalyticsScreen(userId: elderlyUserId),
+                    builder:
+                        (_) => ColorTapAnalyticsScreen(userId: elderlyUserId),
                   ),
                 ),
               ),
@@ -815,8 +849,8 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
                 () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) =>
-                        FlipCardAnalyticsScreen(userId: elderlyUserId),
+                    builder:
+                        (_) => FlipCardAnalyticsScreen(userId: elderlyUserId),
                   ),
                 ),
               ),
@@ -828,8 +862,8 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
                 () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) =>
-                        CityAtlasAnalyticsScreen(userId: elderlyUserId),
+                    builder:
+                        (_) => CityAtlasAnalyticsScreen(userId: elderlyUserId),
                   ),
                 ),
               ),
@@ -841,8 +875,9 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
                 () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) =>
-                        EventOrderingAnalyticsScreen(userId: elderlyUserId),
+                    builder:
+                        (_) =>
+                            EventOrderingAnalyticsScreen(userId: elderlyUserId),
                   ),
                 ),
               ),
@@ -854,8 +889,9 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
                 () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) =>
-                        DailyRoutineAnalyticsScreen(userId: elderlyUserId),
+                    builder:
+                        (_) =>
+                            DailyRoutineAnalyticsScreen(userId: elderlyUserId),
                   ),
                 ),
               ),
@@ -867,8 +903,10 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
                 () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) =>
-                        MonumentRecallAnalyticsScreen(userId: elderlyUserId),
+                    builder:
+                        (_) => MonumentRecallAnalyticsScreen(
+                          userId: elderlyUserId,
+                        ),
                   ),
                 ),
               ),
@@ -953,9 +991,16 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
             decoration: _buildCardDecoration(),
             child: Column(
               children: [
-                Icon(Icons.inbox_outlined, size: 48, color: Colors.grey.shade400),
+                Icon(
+                  Icons.inbox_outlined,
+                  size: 48,
+                  color: Colors.grey.shade400,
+                ),
                 const SizedBox(height: 12),
-                Text('No recent activity', style: TextStyle(color: Colors.grey.shade600, fontSize: 14)),
+                Text(
+                  'No recent activity',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                ),
                 const SizedBox(height: 8),
                 Text(
                   'Activity will appear here once games are played',
@@ -976,17 +1021,32 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Recent Activity', style: CaretakerTextStyles.cardTitle),
+                  const Text(
+                    'Recent Activity',
+                    style: CaretakerTextStyles.cardTitle,
+                  ),
                   Row(
                     children: [
-                      Text('${sessions.length} sessions', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                      Text(
+                        '${sessions.length} sessions',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
                       const SizedBox(width: 8),
                       // Refresh button to reload live data
                       GestureDetector(
-                        onTap: () => setState(() {
-                          _recentActivityFuture = _dataService.getRecentActivityFuture(elderlyUserId);
-                        }),
-                        child: Icon(Icons.refresh, size: 18, color: Colors.grey.shade500),
+                        onTap:
+                            () => setState(() {
+                              _recentActivityFuture = _dataService
+                                  .getRecentActivityFuture(elderlyUserId);
+                            }),
+                        child: Icon(
+                          Icons.refresh,
+                          size: 18,
+                          color: Colors.grey.shade500,
+                        ),
                       ),
                     ],
                   ),
@@ -1033,7 +1093,8 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
       case 'City Atlas':
         icon = Icons.map;
         color = Colors.teal;
-        final cog = session['cognitive_contributions'] as Map<String, dynamic>? ?? {};
+        final cog =
+            session['cognitive_contributions'] as Map<String, dynamic>? ?? {};
         subtitle =
             'Exec: ${cog['executive_function'] ?? '-'}  •  Mem: ${cog['memory'] ?? '-'}';
         break;
@@ -1041,7 +1102,8 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
         icon = Icons.history_edu;
         color = Colors.orange;
         final metrics = session['metrics'] as Map<String, dynamic>? ?? {};
-        final seqAcc = ((metrics['sequence_accuracy'] as num? ?? 0) * 100).toInt();
+        final seqAcc =
+            ((metrics['sequence_accuracy'] as num? ?? 0) * 100).toInt();
         subtitle = 'Sequence Accuracy: $seqAcc%';
         break;
       case 'Routine Recall':
@@ -1054,7 +1116,8 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
       case 'Monument Recall':
         icon = Icons.account_balance;
         color = Colors.indigo;
-        final cog = session['cognitive_contributions'] as Map<String, dynamic>? ?? {};
+        final cog =
+            session['cognitive_contributions'] as Map<String, dynamic>? ?? {};
         subtitle =
             'Memory: ${cog['memory'] ?? '-'}  •  Language: ${cog['language'] ?? '-'}';
         break;
@@ -1191,113 +1254,183 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.85,
-        minChildSize: 0.4,
-        maxChildSize: 0.95,
-        builder: (_, scrollCtrl) => Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: Column(
-            children: [
-              const SizedBox(height: 12),
-              Container(
-                width: 40, height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'All Game Sessions',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Sorted newest to oldest',
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-              ),
-              const Divider(height: 24),
-              Expanded(
-                child: FutureBuilder<List<Map<String, dynamic>>>(
-                  future: _dataService.getRecentActivityFuture(
-                    elderlyUserId,
-                    elderlyUid: elderlyUserUid,
-                    limit: null, // fetch ALL sessions for the full history view
+      builder:
+          (_) => DraggableScrollableSheet(
+            initialChildSize: 0.85,
+            minChildSize: 0.4,
+            maxChildSize: 0.95,
+            builder:
+                (_, scrollCtrl) => Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(24),
+                    ),
                   ),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    final allSessions = snapshot.data ?? [];
-                    if (allSessions.isEmpty) {
-                      return Center(
-                        child: Text(
-                          'No game sessions yet',
-                          style: TextStyle(color: Colors.grey.shade500),
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 12),
+                      Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(2),
                         ),
-                      );
-                    }
-                    return ListView.separated(
-                      controller: scrollCtrl,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: allSessions.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final session = allSessions[index];
-                        final gameType = session['gameType'] as String? ?? 'Game';
-                        final score = (session['score'] as num?)?.toInt() ?? 0;
-                        final ts = (session['createdAt'] as num?)?.toInt() ?? 0;
-                        final dt = ts > 0
-                            ? DateTime.fromMillisecondsSinceEpoch(ts)
-                            : null;
-                        final dateStr = dt != null
-                            ? '${dt.day}/${dt.month}/${dt.year}  ${dt.hour.toString().padLeft(2,'0')}:${dt.minute.toString().padLeft(2,'0')}'
-                            : 'Unknown time';
-
-                        IconData gameIcon;
-                        Color gameColor;
-                        switch (gameType) {
-                          case 'Color Tap': gameIcon = Icons.touch_app; gameColor = Colors.blue; break;
-                          case 'Flip Card': gameIcon = Icons.flip; gameColor = Colors.purple; break;
-                          case 'City Atlas': gameIcon = Icons.map; gameColor = Colors.teal; break;
-                          case 'Event Ordering': gameIcon = Icons.history_edu; gameColor = Colors.orange; break;
-                          case 'Routine Recall': gameIcon = Icons.schedule; gameColor = Colors.green; break;
-                          case 'Monument Recall': gameIcon = Icons.location_city; gameColor = Colors.indigo; break;
-                          default: gameIcon = Icons.sports_esports; gameColor = Colors.grey;
-                        }
-
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: gameColor.withOpacity(0.15),
-                            child: Icon(gameIcon, color: gameColor, size: 20),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'All Game Sessions',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Sorted newest to oldest',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade500,
+                        ),
+                      ),
+                      const Divider(height: 24),
+                      Expanded(
+                        child: FutureBuilder<List<Map<String, dynamic>>>(
+                          future: _dataService.getRecentActivityFuture(
+                            elderlyUserId,
+                            elderlyUid: elderlyUserUid,
+                            limit:
+                                null, // fetch ALL sessions for the full history view
                           ),
-                          title: Text(gameType, style: const TextStyle(fontWeight: FontWeight.w600)),
-                          subtitle: Text(dateStr, style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
-                          trailing: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: gameColor.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              '$score pts',
-                              style: TextStyle(fontWeight: FontWeight.bold, color: gameColor, fontSize: 13),
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  },
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState ==
+                                ConnectionState.waiting) {
+                              return const Center(
+                                child: CircularProgressIndicator(),
+                              );
+                            }
+                            final allSessions = snapshot.data ?? [];
+                            if (allSessions.isEmpty) {
+                              return Center(
+                                child: Text(
+                                  'No game sessions yet',
+                                  style: TextStyle(color: Colors.grey.shade500),
+                                ),
+                              );
+                            }
+                            return ListView.separated(
+                              controller: scrollCtrl,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              itemCount: allSessions.length,
+                              separatorBuilder:
+                                  (_, __) => const Divider(height: 1),
+                              itemBuilder: (context, index) {
+                                final session = allSessions[index];
+                                final gameType =
+                                    session['gameType'] as String? ?? 'Game';
+                                final score =
+                                    (session['score'] as num?)?.toInt() ?? 0;
+                                final ts =
+                                    (session['createdAt'] as num?)?.toInt() ??
+                                    0;
+                                final dt =
+                                    ts > 0
+                                        ? DateTime.fromMillisecondsSinceEpoch(
+                                          ts,
+                                        )
+                                        : null;
+                                final dateStr =
+                                    dt != null
+                                        ? '${dt.day}/${dt.month}/${dt.year}  ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}'
+                                        : 'Unknown time';
+
+                                IconData gameIcon;
+                                Color gameColor;
+                                switch (gameType) {
+                                  case 'Color Tap':
+                                    gameIcon = Icons.touch_app;
+                                    gameColor = Colors.blue;
+                                    break;
+                                  case 'Flip Card':
+                                    gameIcon = Icons.flip;
+                                    gameColor = Colors.purple;
+                                    break;
+                                  case 'City Atlas':
+                                    gameIcon = Icons.map;
+                                    gameColor = Colors.teal;
+                                    break;
+                                  case 'Event Ordering':
+                                    gameIcon = Icons.history_edu;
+                                    gameColor = Colors.orange;
+                                    break;
+                                  case 'Routine Recall':
+                                    gameIcon = Icons.schedule;
+                                    gameColor = Colors.green;
+                                    break;
+                                  case 'Monument Recall':
+                                    gameIcon = Icons.location_city;
+                                    gameColor = Colors.indigo;
+                                    break;
+                                  default:
+                                    gameIcon = Icons.sports_esports;
+                                    gameColor = Colors.grey;
+                                }
+
+                                return ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundColor: gameColor.withOpacity(
+                                      0.15,
+                                    ),
+                                    child: Icon(
+                                      gameIcon,
+                                      color: gameColor,
+                                      size: 20,
+                                    ),
+                                  ),
+                                  title: Text(
+                                    gameType,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    dateStr,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade500,
+                                    ),
+                                  ),
+                                  trailing: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: gameColor.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      '$score pts',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: gameColor,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
           ),
-        ),
-      ),
     );
   }
 
@@ -1371,7 +1504,8 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
           Colors.blue.shade100,
           Colors.blue,
           MedicationManagementScreen(userId: elderlyUserId),
-        ),/*
+        ),
+        /*
         _buildNavCard(
           context,
           "Care Connect",
@@ -1386,10 +1520,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
           onTap: () async {
             final screen = await _buildEnhancedBuddyScreen();
             if (!mounted) return;
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => screen),
-            );
+            Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
           },
           child: _buildNavCardContent(
             "Buddy Activity",
@@ -1401,7 +1532,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
 
         _buildNavCard(
           context,
-          "AI Reports",
+          "Cognitive Health Reports",
           Icons.auto_awesome,
           Colors.amber.shade100,
           Colors.amber.shade700,
@@ -1412,7 +1543,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
           ),
         ),
 
-       /* _buildNavCard(
+        /* _buildNavCard(
           context,
           "Patient Overview",
           Icons.person_search,
@@ -1424,20 +1555,16 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
             elderlyName: elderlyUserName,
           ),
         ),*/
-
       ],
     );
   }
 
   Future<Widget> _buildEnhancedBuddyScreen() async {
     final prefs = await SharedPreferences.getInstance();
-    final fallbackElderlyId =
-        prefs.getString('elderly_user_uid') ??
-        prefs.getString('elderly_user_id') ??
-        elderlyUserId;
     return EnhancedBuddyActivityScreen(
-      caretakerId: await CaretakerIdHelper.getCurrentCaretakerId() ?? caretakerId,
-      elderlyId: elderlyUserUid.isNotEmpty ? elderlyUserUid : fallbackElderlyId,
+      caretakerId:
+          await CaretakerIdHelper.getCurrentCaretakerId() ?? caretakerId,
+      elderlyId: elderlyUserId,
       elderlyName: prefs.getString('elderly_user_name') ?? elderlyUserName,
     );
   }
@@ -1451,8 +1578,11 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
     Widget screen,
   ) {
     return GestureDetector(
-      onTap: () =>
-          Navigator.push(context, MaterialPageRoute(builder: (_) => screen)),
+      onTap:
+          () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => screen),
+          ),
       child: _buildNavCardContent(title, icon, bg, iconColor),
     );
   }
@@ -1517,10 +1647,11 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
         }
 
         final notifications = snapshot.data!.docs;
-        final unreadCount = notifications.where((doc) {
-          final data = doc.data() as Map<String, dynamic>;
-          return data['isRead'] != true;
-        }).length;
+        final unreadCount =
+            notifications.where((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+              return data['isRead'] != true;
+            }).length;
 
         return Container(
           padding: const EdgeInsets.all(20),
@@ -1531,7 +1662,10 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Buddy Alerts', style: CaretakerTextStyles.cardTitle),
+                  const Text(
+                    'Buddy Alerts',
+                    style: CaretakerTextStyles.cardTitle,
+                  ),
                   if (unreadCount > 0)
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -1704,7 +1838,11 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
       decoration: _buildCardDecoration(),
       child: Row(
         children: [
-          const Icon(Icons.error_outline, color: CaretakerColors.errorRed, size: 20),
+          const Icon(
+            Icons.error_outline,
+            color: CaretakerColors.errorRed,
+            size: 20,
+          ),
           const SizedBox(width: 12),
           Expanded(child: Text(message, style: const TextStyle(fontSize: 12))),
         ],

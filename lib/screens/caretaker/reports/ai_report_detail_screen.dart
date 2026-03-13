@@ -28,14 +28,12 @@ class _AiReportDetailScreenState extends State<AiReportDetailScreen> {
   void initState() {
     super.initState();
     // Mark as read
-    if (widget.caretakerId.isNotEmpty) {
-      FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.caretakerId)
-          .collection('cognitive_reports')
-          .doc(report.id)
-          .update({'isRead': true}).catchError((_) {});
-    }
+    FirebaseFirestore.instance
+        .collection('users')
+        .doc(report.elderlyId)
+        .collection('cognitive_reports')
+        .doc(report.id)
+        .update({'isRead': true}).catchError((_) {});
   }
 
   @override
@@ -366,9 +364,10 @@ class _AiReportDetailScreenState extends State<AiReportDetailScreen> {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 48, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           // Overall change summary
           Row(
             children: [
@@ -486,8 +485,9 @@ class _AiReportDetailScreenState extends State<AiReportDetailScreen> {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildStatusChip(String label, Color color, IconData icon) {
     return Container(

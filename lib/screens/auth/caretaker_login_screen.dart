@@ -55,6 +55,12 @@ class _CaretakerLoginScreenState extends State<CaretakerLoginScreen> {
       return;
     }
 
+    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+    if (!emailRegex.hasMatch(email)) {
+      _showError('Please enter a valid email address.');
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
