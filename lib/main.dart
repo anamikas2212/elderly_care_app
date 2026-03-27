@@ -1,12 +1,123 @@
-// main.dart
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'screens/auth/login_screen.dart';
+import 'firebase_options.dart';
+import 'package:elderly_care_app/services/report_scheduler_service.dart'; // Added
+import 'package:elderly_care_app/config/app_config.dart';
+import 'package:elderly_care_app/services/notification_service.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'services/push_notification_service.dart';
+import 'package:elderly_care_app/services/medication_notification_service.dart';
+import 'package:elderly_care_app/services/user_id_helper.dart';
+import 'package:elderly_care_app/screens/elderly/medication/medication_list_screen.dart';
+
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  if (!kIsWeb) {
+    NotificationService.instance.setTapHandler(_handleNotificationNavigation);
+    await NotificationService.instance.init();
+    PushNotificationService.instance.initializeForegroundHandlers();
+    final userId = await UserIdHelper.getCurrentUserId();
+    if (userId != null && userId.isNotEmpty) {
+      await MedicationNotificationService.instance.start(userId);
+    }
+  }
+
+  // Added: initialize report scheduler
+  final scheduler = ReportSchedulerService();
+  scheduler.initializeScheduler(AppConfig.groqApiKey);
+
+  runApp(const ElderlyCarApp());
+}
+
+class ElderlyCarApp extends StatelessWidget {
+  const ElderlyCarApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      NotificationService.instance.flushLaunchNotification();
+    });
+
+    return MaterialApp(
+      navigatorKey: appNavigatorKey,
+      title: 'Unified Geriatric Care',
+      theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
+      home: const LoginScreen(),
+      debugShowCheckedModeBanner: false,
+      routes: {},
+    );
+  }
+}
+
+Future<void> _handleNotificationNavigation(
+  NotificationNavigationRequest request,
+) async {
+  if (!request.isMedicationReminder) return;
+
+  final navigator = appNavigatorKey.currentState;
+  if (navigator == null) return;
+
+  final userId = request.userId ?? await UserIdHelper.getCurrentUserId();
+  if (userId == null || userId.isEmpty) return;
+
+  navigator.push(
+    MaterialPageRoute(
+      builder: (_) => MedicationListScreen(userId: userId, role: UserRole.elderly),
+    ),
+  );
+}
+
+/*
+
+import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'screens/auth/login_screen.dart';
+import 'firebase_options.dart';
+import 'screens/auth/elderly_initial_login_screen.dart';
+import 'games/chill_zone/color_tap/color_tap_game.dart';
+import 'screens/elderly/zone_selection_screen.dart';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  runApp(const ElderlyCarApp());
+}
+
+class ElderlyCarApp extends StatelessWidget {
+  const ElderlyCarApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Unified Geriatric Care',
+      theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
+      home: const LoginScreen(),
+      debugShowCheckedModeBanner: false,
+
+      // NEW: Add routes
+      routes: {},
+    );
+  }
+}
+
+
+*/
+
+// main.dart
+/*import 'package:flutter/material.dart';
 
 void main() {
   runApp(const ElderlyCarApp());
 }
 
 class ElderlyCarApp extends StatelessWidget {
-  const ElderlyCarApp({Key? key}) : super(key: key);
+  const ElderlyCarApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -23,7 +134,7 @@ class ElderlyCarApp extends StatelessWidget {
 // LOGIN SCREEN
 // ============================================
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({Key? key}) : super(key: key);
+  const LoginScreen({super.key});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -42,7 +153,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (role == 'elderly') {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const ElderlyDashboard()),
+          MaterialPageRoute(builder: (_) => const ElderlyInitialLoginScreen()),
         );
       } else {
         Navigator.pushReplacement(
@@ -269,7 +380,8 @@ class _LoginScreenState extends State<LoginScreen> {
 // ELDERLY DASHBOARD
 // ============================================
 class ElderlyDashboard extends StatefulWidget {
-  const ElderlyDashboard({Key? key}) : super(key: key);
+  final String currentUserId;
+  const ElderlyDashboard({super.key, this.currentUserId = 'Elderly User'});
 
   @override
   State<ElderlyDashboard> createState() => _ElderlyDashboardState();
@@ -1192,7 +1304,9 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) => const GamesScreen(),
+                                    builder: (_) => ZoneSelectionScreen(
+                                      userId: widget.currentUserId,
+                                    ),
                                   ),
                                 );
                               },
@@ -1391,7 +1505,7 @@ class _ElderlyDashboardState extends State<ElderlyDashboard> {
 // PILL REMINDER SCREEN
 // ============================================
 class PillReminderScreen extends StatelessWidget {
-  const PillReminderScreen({Key? key}) : super(key: key);
+  const PillReminderScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -1540,12 +1654,12 @@ class PillReminderScreen extends StatelessWidget {
     );
   }
 }
-
+/*
 // ============================================
 // LOCATION SCREEN
 // ============================================
 class LocationScreen extends StatelessWidget {
-  const LocationScreen({Key? key}) : super(key: key);
+  const LocationScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -1658,12 +1772,12 @@ class LocationScreen extends StatelessWidget {
     );
   }
 }
-
+*/
 // ============================================
 // GAMES SCREEN
 // ============================================
 class GamesScreen extends StatelessWidget {
-  const GamesScreen({Key? key}) : super(key: key);
+  const GamesScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -1760,7 +1874,7 @@ class GamesScreen extends StatelessWidget {
 // CARETAKER DASHBOARD
 // ============================================
 class CaretakerDashboard extends StatefulWidget {
-  const CaretakerDashboard({Key? key}) : super(key: key);
+  const CaretakerDashboard({super.key});
 
   @override
   State<CaretakerDashboard> createState() => _CaretakerDashboardState();
@@ -2059,7 +2173,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
               ),
             ),
             const SizedBox(height: 15),
-
+          /*
             // Vitality Score Card
             Container(
               decoration: BoxDecoration(
@@ -2137,7 +2251,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
                 ],
               ),
             ),
-            const SizedBox(height: 25),
+            const SizedBox(height: 25),   */
 
             // Quick Actions
             const Text(
@@ -2378,7 +2492,7 @@ class _CaretakerDashboardState extends State<CaretakerDashboard> {
 // DETAILED REPORTS SCREEN
 // ============================================
 class DetailedReportsScreen extends StatelessWidget {
-  const DetailedReportsScreen({Key? key}) : super(key: key);
+  const DetailedReportsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -2654,3 +2768,4 @@ class DetailedReportsScreen extends StatelessWidget {
     );
   }
 }
+ */

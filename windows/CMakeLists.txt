@@ -6,6 +6,10 @@ project(elderly_care_app LANGUAGES CXX)
 # the on-disk name of your application.
 set(BINARY_NAME "elderly_care_app")
 
+# Allow older subprojects (e.g., firebase_cpp_sdk) to configure with newer CMake.
+# This mirrors passing -DCMAKE_POLICY_VERSION_MINIMUM=3.5.
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
 cmake_policy(VERSION 3.14...3.25)
@@ -65,9 +69,8 @@ include(flutter/generated_plugins.cmake)
 set(BUILD_BUNDLE_DIR "$<TARGET_FILE_DIR:${BINARY_NAME}>")
 # Make the "install" step default, as it's required to run.
 set(CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD 1)
-if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-  set(CMAKE_INSTALL_PREFIX "${BUILD_BUNDLE_DIR}" CACHE PATH "..." FORCE)
-endif()
+# Force install prefix to the build bundle directory to avoid Program Files writes.
+set(CMAKE_INSTALL_PREFIX "${BUILD_BUNDLE_DIR}" CACHE PATH "..." FORCE)
 
 set(INSTALL_BUNDLE_DATA_DIR "${CMAKE_INSTALL_PREFIX}/data")
 set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}")
